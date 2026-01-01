@@ -25,32 +25,7 @@ const curatedRecommendations = [
   },
 ]
 
-const initialTracker = [
-  {
-    title: 'The Wild Silence',
-    author: 'Alessandro Dos',
-    status: 'Reading',
-    progress: 42,
-    mood: 'Calm tension',
-    rating: 4.5,
-  },
-  {
-    title: 'Tomorrow is a Quiet Place',
-    author: 'Harper Le',
-    status: 'Want to Read',
-    progress: 0,
-    mood: 'Late-night iridescence',
-    rating: 0,
-  },
-  {
-    title: 'Orchid Library',
-    author: 'Lena Carr',
-    status: 'Read',
-    progress: 100,
-    mood: 'Verdant poems',
-    rating: 4.2,
-  },
-]
+const initialTracker = []
 
 const statusOptions = ['Reading', 'Want to Read', 'Read']
 
