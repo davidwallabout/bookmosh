@@ -424,7 +424,7 @@ function App() {
     setIsSearching(true)
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,key,isbn,publisher,language,place,person`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit}&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,key,isbn,publisher,language,place,person`,
       )
       const data = await response.json()
       const mapped = data.docs.map((doc) => ({
