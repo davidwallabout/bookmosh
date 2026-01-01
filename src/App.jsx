@@ -563,6 +563,10 @@ function App() {
     }
   }
 
+  const handleDeleteBook = (title) => {
+    setTracker(prev => prev.filter(book => book.title !== title))
+  }
+
   const closeModal = () => {
     setSelectedBook(null)
   }
@@ -824,11 +828,11 @@ function App() {
             </div>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-white">Reading tracker</h2>
+                <h2 className="text-2xl font-semibold text-white">Currently Reading</h2>
                 <p className="text-sm text-white/50">Updated moments ago</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                {tracker.map((book) => (
+                {tracker.filter(book => book.status === 'Reading').map((book) => (
                   <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
                     <div className="flex items-center justify-between">
                       <div>
@@ -845,6 +849,54 @@ function App() {
                       />
                     </div>
                     <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => openModal(book)}
+                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Details
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBook(book.title)}
+                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold text-white">Read</h2>
+                <p className="text-sm text-white/50">{tracker.filter(book => book.status === 'Read').length} books completed</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {tracker.filter(book => book.status === 'Read').map((book) => (
+                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white">{book.title}</p>
+                        <p className="text-sm text-white/60">{book.author}</p>
+                      </div>
+                      <span className="text-xs text-white/50">{book.mood}</span>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => openModal(book)}
+                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Details
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBook(book.title)}
+                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
