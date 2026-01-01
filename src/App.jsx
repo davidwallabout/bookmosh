@@ -244,32 +244,53 @@ const parseGoodreadsCSV = (text) => {
   }, [])
 }
 
+const parseStoryGraphCSV = (text) => {
+  const lines = text.split('\n').filter((line) => line.trim())
+  if (lines.length < 2) return []
+  
+  // Find header line
+  const headerLine = lines[0]
+  const headers = headerLine.split(',').map(h => h.trim().replace(/"/g, ''))
+  
+  // Find data rows
+  const dataRows = lines.slice(1)
+  
+  return dataRows
+    .map((line) => {
+      const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+      if (values.length < headers.length) return null
+      
+      const obj = {}
+      headers.forEach((header, index) => {
+        obj[header] = values[index] || ''
+      })
+      
+      return obj
+    })
+    .filter(Boolean)
+    .map((item) => ({
+      title: item.Title || item.title || '',
+      author: item.Author || item.author || '',
+      status: item['Read Status'] || item.readStatus || 'Want to Read',
+      rating: parseInt(item['My Rating'] || item.rating) || 0,
+      progress: item['Read Progress'] || item.progress || 0,
+      mood: item['Mood'] || item.mood || '',
+    }))
+}
+
 const parseStoryGraphJSON = (text) => {
   try {
-    const parsed = JSON.parse(text)
-    const entries =
-      Array.isArray(parsed) &&
-      parsed.length &&
-      typeof parsed[0] === 'object'
-        ? parsed
-        : parsed?.library ??
-          parsed?.books ??
-          parsed?.userBooks ??
-          parsed?.myBooks ??
-          parsed
-    if (!Array.isArray(entries)) return []
-    return entries.map((entry) =>
-      buildBookEntry({
-        title: entry.title ?? entry.bookTitle ?? entry.name,
-        author: entry.author ?? entry.authors?.[0],
-        status: entry.status ?? entry.readingStatus ?? entry.shelf,
-        progress: entry.percentComplete ?? entry.progress ?? entry.percent,
-        mood: entry.notes ?? entry.mood,
-        rating: entry.rating ?? entry.score,
-      }),
-    )
+    const data = JSON.parse(text)
+    return data.map((item) => ({
+      title: item.title || '',
+      author: item.author || '',
+      status: item.readStatus || 'Want to Read',
+      rating: item.rating || 0,
+      progress: item.progress || 0,
+      mood: item.mood || '',
+    }))
   } catch (error) {
-    console.error('StoryGraph parse failed', error)
+    console.error('Failed to parse StoryGraph JSON:', error)
     return []
   }
 }
@@ -865,8 +886,19 @@ function App() {
       let imported = []
       if (importFileType === 'goodreads') {
         imported = parseGoodreadsCSV(text)
-      } else {
-        imported = parseStoryGraphJSON(text)
+      } else if (importFileType === 'storygraph') {
+        // Try JSON first, then CSV for StoryGraph
+        try {
+          imported = parseStoryGraphJSON(text)
+        } catch (error) {
+          // If JSON fails, try CSV
+          try {
+            imported = parseStoryGraphCSV(text)
+          } catch (csvError) {
+            setImportMessage('Unable to parse StoryGraph file. Please ensure it\'s a valid JSON or CSV export.')
+            return
+          }
+        }
       }
       if (!imported.length) {
         setImportMessage('No readable entries were found in that file.')
@@ -1679,11 +1711,11 @@ function App() {
               </p>
               <label className="block">
                 <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
-                  {importFileType === 'goodreads' ? 'CSV file' : 'JSON file'}
+                  {importFileType === 'goodreads' ? 'CSV file' : 'CSV or JSON file'}
                 </span>
                 <input
                   type="file"
-                  accept={importFileType === 'goodreads' ? '.csv' : '.json'}
+                  accept={importFileType === 'goodreads' ? '.csv' : '.csv,.json'}
                   onChange={importHandler}
                   className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
