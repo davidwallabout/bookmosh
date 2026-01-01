@@ -320,6 +320,8 @@ function App() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
   const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [isPrivate, setIsPrivate] = useState(false)
+  const [selectedFriend, setSelectedFriend] = useState(null)
+  const [moshes, setMoshes] = useState([]) // Track book chats
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
   const [isUpdatingUser, setIsUpdatingUser] = useState(false)
