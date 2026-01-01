@@ -804,28 +804,32 @@ function App() {
 
         {currentUser && (
           <>
-        <section className="grid gap-6 rounded-3xl bg-white/5 p-6 backdrop-blur-lg md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3">
           {['Reading', 'Want to Read', 'Read'].map((status) => (
-            <div
+            <section
               key={status}
               onClick={() => setSelectedStatusFilter(selectedStatusFilter === status ? null : status)}
-              className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 duration-200 hover:border-white/40 cursor-pointer transition-all"
+              className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg cursor-pointer transition-all hover:border-white/40"
             >
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">
-                {status}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">
+                    {status}
+                  </p>
+                  <h3 className="text-2xl font-semibold text-white">
+                    {statusSummary[status]}
+                  </h3>
+                </div>
+                <div className="text-xs text-white/60">
+                  {status === 'Read' ? 'Total books' : 'Active'}
+                </div>
+              </div>
+              <p className="text-xs text-white/50">
+                {selectedStatusFilter === status ? 'Click to close' : 'Click to view'}
               </p>
-              <p className="text-3xl font-semibold text-white">
-                {statusSummary[status]}
-              </p>
-              <p className="text-xs text-white/60">
-                {status === 'Read' ? 'Total books completed' : 'Currently active'}
-              </p>
-              {selectedStatusFilter === status && (
-                <p className="text-xs text-white/40 mt-2">Click to close</p>
-              )}
-            </div>
+            </section>
           ))}
-        </section>
+        </div>
         
         {selectedStatusFilter && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
