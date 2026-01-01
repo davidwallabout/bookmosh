@@ -602,7 +602,7 @@ function App() {
     setIsSearching(true)
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=20&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=100&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
       const mapped = data.docs.map((doc) => ({
@@ -623,6 +623,7 @@ function App() {
       setSearchResults(mapped)
       setHasSearched(true)
       setSelectedAuthor(authorName)
+      setShowAllResults(true) // Show all results by default for author searches
     } catch (err) {
       console.error('Author search failed', err)
     } finally {
@@ -1198,7 +1199,7 @@ function App() {
           {hasSearched && searchResults.length > 0 && (
             <div className="mt-6">
               <div className="grid gap-4 md:grid-cols-2">
-                {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                {(selectedAuthor || showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
                   <div
                     key={book.key}
                     className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40 cursor-pointer"
@@ -1278,7 +1279,8 @@ function App() {
                   </div>
                 ))}
               </div>
-              {searchResults.length > 6 && (
+              {/* Only show "Show more" button for regular searches, not author searches */}
+              {!selectedAuthor && searchResults.length > 6 && (
                 <div className="mt-4 flex justify-center">
                   <button
                     onClick={() => setShowAllResults(!showAllResults)}
