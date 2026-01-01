@@ -237,6 +237,7 @@ function App() {
   const [modalMood, setModalMood] = useState('')
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
   const [selectedAuthor, setSelectedAuthor] = useState(null)
+  const [isPrivate, setIsPrivate] = useState(false)
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
@@ -569,49 +570,43 @@ function App() {
 
   const handleAddFriend = () => {
     if (!currentUser) {
-      setFriendMessage('Log in to add friends.')
+      setFriendMessage('Log in to search for friends.')
       return
     }
     const query = friendQuery.trim()
     if (!query) {
-      setFriendMessage('Enter a username or email.')
+      setFriendMessage('Enter a username or email to search.')
       return
     }
-    const target = users.find((user) => matchesIdentifier(user, query))
-    if (!target) {
-      setFriendMessage('No matching profile found.')
-      return
-    }
-    if (target.username === currentUser.username) {
-      setFriendMessage('Add someone besides yourself.')
-      return
-    }
-    if (currentUser.friends.includes(target.username)) {
-      setFriendMessage('You are already connected.')
-      return
-    }
-    const updatedUsers = users.map((user) => {
-      if (user.username === currentUser.username) {
-        return {
-          ...user,
-          friends: Array.from(new Set([...user.friends, target.username])),
-        }
-      }
-      if (user.username === target.username) {
-        return {
-          ...user,
-          friends: Array.from(new Set([...user.friends, currentUser.username])),
-        }
-      }
-      return user
-    })
-    setUsers(updatedUsers)
-    const refreshedCurrent = updatedUsers.find(
-      (user) => user.username === currentUser.username,
+    
+    // Search for matching users
+    const matches = users.filter((user) => 
+      user.username.toLowerCase().includes(query.toLowerCase()) ||
+      user.email.toLowerCase().includes(query.toLowerCase())
     )
-    setCurrentUser(refreshedCurrent)
-    setFriendMessage(`Connected with ${target.username}!`)
-    setFriendQuery('')
+    
+    if (matches.length === 0) {
+      setFriendMessage('No users found matching your search.')
+      return
+    }
+    
+    // Filter out current user and existing friends
+    const availableMatches = matches.filter(user => 
+      user.username !== currentUser.username && 
+      !currentUser.friends.includes(user.username)
+    )
+    
+    if (availableMatches.length === 0) {
+      if (matches.some(user => user.username === currentUser.username)) {
+        setFriendMessage('You cannot add yourself as a friend.')
+      } else {
+        setFriendMessage('Already connected with all matching users.')
+      }
+      return
+    }
+    
+    // Show search results
+    setFriendMessage(`Found ${availableMatches.length} user(s): ${availableMatches.map(u => u.username).join(', ')}`)
   }
 
   const openModal = (book) => {
@@ -702,7 +697,7 @@ function App() {
                 A modern book tracker.
               </h2>
               <p className="max-w-2xl text-base text-white/70">
-                Track what you read, discover new books, and connect with friends. Your private shelf syncs with Supabase and works the way you do.
+                Track what you read, discover new books, and connect with friends. Your shelf syncs automatically and works the way you do.
               </p>
               <div className="flex flex-wrap gap-3">
                 <button
@@ -719,8 +714,7 @@ function App() {
                 </button>
               </div>
               <p className="text-xs text-white/60">
-                Your vault is private, synced with Supabase, and ready for whatever you
-                breathe in next.
+                Ready for whatever you breathe in next.
               </p>
             </div>
           </div>
@@ -951,7 +945,7 @@ function App() {
                 <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
                   <p className="text-lg font-semibold text-white">Start typing to search</p>
                   <p className="mt-2 text-white/60">
-                    Search results will appear automatically as you type. Powered by Open Library's extensive catalog.
+                    Search results will appear automatically as you type. Powered by an extensive book catalog.
                   </p>
                 </div>
               ) : searchResults.length ? (
@@ -1029,14 +1023,14 @@ function App() {
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
                   <p className="text-lg font-semibold text-white">No results</p>
-                  <p className="mt-2 text-white/60">The Open Library came up empty. Try another phrase or a different vibe.</p>
+                  <p className="mt-2 text-white/60">No books found. Try another search term.</p>
                 </div>
               )}
             </div>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-semibold text-white">Currently Reading</h2>
-                <p className="text-sm text-white/50">Updated moments ago</p>
+                <p className="text-sm text-white/60">Instant results</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {tracker.filter(book => book.status === 'Reading').map((book) => (
@@ -1200,6 +1194,25 @@ function App() {
               )}
               <p className="text-xs text-rose-300">{authMessage}</p>
               <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
+                    <p className="text-sm text-white/60">
+                      {isPrivate ? 'Private profile' : 'Public profile'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsPrivate(!isPrivate)}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                  >
+                    {isPrivate ? 'Make Public' : 'Make Private'}
+                  </button>
+                </div>
+                <p className="text-xs text-white/50">
+                  {isPrivate ? 'Only friends can see your reading activity' : 'Anyone can discover your reading profile'}
+                </p>
+              </div>
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
                 <div className="flex flex-wrap items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
@@ -1229,14 +1242,14 @@ function App() {
                     type="text"
                     value={friendQuery}
                     onChange={(e) => setFriendQuery(e.target.value)}
-                    placeholder="Add by username or email"
+                    placeholder="Search by username or email"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                   />
                   <button
                     onClick={handleAddFriend}
                     className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                   >
-                    Send invite
+                    Search users
                   </button>
                   <p className="text-xs text-white/60">{friendMessage}</p>
                 </div>
