@@ -478,13 +478,13 @@ function App() {
             .then(({ data: profile, error }) => {
               if (mounted && profile && !error) {
                 setCurrentUser(profile)
-              } else if (error && error.code !== 'PGRST116') {
-                console.error('Profile lookup failed:', error)
               }
             })
             .catch(() => {
               // Silently fail if user profile doesn't exist yet
             })
+        } else if (mounted) {
+          setCurrentUser(null)
         }
       }).catch(() => {
         // Silently fail if auth check fails
@@ -493,9 +493,6 @@ function App() {
       // Listen for auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!mounted || isUpdatingUser) return
-        
-        // Don't logout on token refresh events
-        if (event === 'TOKEN_REFRESHED') return
         
         if (session?.user) {
           try {
@@ -508,19 +505,20 @@ function App() {
             
             if (profile && !error) {
               setCurrentUser(profile)
-            } else if (error && error.code !== 'PGRST116') {
-              console.error('Profile lookup failed:', error)
-              // Don't logout on profile errors, just log it
             }
           } catch (error) {
-            // Silently fail if user profile lookup fails
-            console.error('Auth state change error:', error)
+            console.error('Profile lookup failed:', error)
+            // Still set user even if profile lookup fails
+            setCurrentUser({
+              id: session.user.id,
+              username: session.user.email?.split('@')[0] || 'user',
+              email: session.user.email || '',
+              friends: [],
+              is_private: false,
+            })
           }
         } else {
-          // Only logout if it's a genuine sign out, not a session error
-          if (event === 'SIGNED_OUT') {
-            setCurrentUser(null)
-          }
+          setCurrentUser(null)
         }
       })
 
