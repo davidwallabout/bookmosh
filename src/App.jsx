@@ -612,7 +612,7 @@ function App() {
               Mesh what you read, what you feel, and who you read with into one living shelf that updates
               along with you.
             </p>
-          </section>
+          </div>
           <div className="flex items-center gap-4">
             <button className="rounded-full border border-white/30 px-5 py-2 text-sm uppercase tracking-wider text-white/80 transition hover:border-white/70 hover:text-white">
               Sync Shelf
@@ -661,7 +661,7 @@ function App() {
               breathe in next.
             </p>
           </div>
-        </div>
+        </section>
 
         <section className="grid gap-6 rounded-3xl bg-white/5 p-6 backdrop-blur-lg md:grid-cols-3">
           {['Reading', 'Want to Read', 'Read'].map((status) => (
