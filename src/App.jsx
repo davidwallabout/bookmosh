@@ -398,39 +398,6 @@ function App() {
   }, [currentUser])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const stored = window.localStorage.getItem(AUTH_STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        const persistedUsers = parsed.users ?? defaultUsers
-        setUsers(persistedUsers)
-        if (parsed.currentUser) {
-          const match = persistedUsers.find(
-            (user) => user.username === parsed.currentUser,
-          )
-          if (match) {
-            setCurrentUser(match)
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse auth storage', error)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(
-      AUTH_STORAGE_KEY,
-      JSON.stringify({
-        users,
-        currentUser: currentUser?.username ?? null,
-      }),
-    )
-  }, [users, currentUser])
-
-  useEffect(() => {
     if (!supabase || !currentUser) return
     let canceled = false
     ;(async () => {
