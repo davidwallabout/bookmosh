@@ -8,22 +8,71 @@ const curatedRecommendations = []
 
 const initialTracker = []
 
+// Supabase user management functions
+const fetchUsers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, email, friends, is_private')
+    
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    return []
+  }
+}
+
+const createUser = async (userData) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .insert([userData])
+      .select()
+    
+    if (error) throw error
+    return data[0]
+  } catch (error) {
+    console.error('Error creating user:', error)
+    throw error
+  }
+}
+
+const updateUserFriends = async (userId, friends) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ friends, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select()
+    
+    if (error) throw error
+    return data[0]
+  } catch (error) {
+    console.error('Error updating friends:', error)
+    throw error
+  }
+}
+
+const searchUsers = async (query) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
+      .limit(10)
+    
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error searching users:', error)
+    return []
+  }
+}
+
 const statusOptions = ['Reading', 'Want to Read', 'Read']
 
-const defaultUsers = [
-  {
-    username: 'bookmosh',
-    email: 'hello@bookmosh.com',
-    password: 'booklove',
-    friends: ['atlas'],
-  },
-  {
-    username: 'atlas',
-    email: 'atlas@readlane.io',
-    password: 'pages',
-    friends: ['bookmosh'],
-  },
-]
+const defaultUsers = []
 
 const matchesIdentifier = (user, identifier) => {
   if (!identifier) return false
@@ -297,6 +346,58 @@ function App() {
   }, [currentUser, users])
 
   useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Get user profile from users table
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (profile) {
+          setCurrentUser(profile)
+        }
+      } else {
+        setCurrentUser(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        setTracker(JSON.parse(stored))
+      } catch (error) {
+        console.error('Failed to parse saved tracker', error)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker))
+  }, [tracker])
+
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    let canceled = false
+    ;(async () => {
+      const rows = await loadSupabaseBooks(currentUser.username)
+      if (!canceled && rows.length) {
+        setTracker(rows)
+      }
+    })()
+    return () => {
+      canceled = true
+    }
+  }, [currentUser])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const stored = window.localStorage.getItem(AUTH_STORAGE_KEY)
     if (stored) {
@@ -488,55 +589,80 @@ function App() {
     document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setAuthMessage('')
-    if (!authIdentifier.trim() || !authPassword.trim()) {
-      setAuthMessage('Please enter both identifier and password.')
-      return
+    try {
+      const { data: { user }, error } = await supabase.auth.signInWithPassword({
+        email: authIdentifier,
+        password: authPassword,
+      })
+      
+      if (error) throw error
+      
+      // Get user profile from users table
+      const { data: profiles, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', user.email)
+        .single()
+      
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError
+      }
+      
+      if (!profiles) {
+        setAuthMessage('User profile not found. Please sign up first.')
+        return
+      }
+      
+      setCurrentUser(profiles)
+      setAuthIdentifier('')
+      setAuthPassword('')
+    } catch (error) {
+      setAuthMessage(error.message || 'Login failed')
     }
-    const match = users.find((user) => matchesIdentifier(user, authIdentifier))
-    if (!match || match.password !== authPassword) {
-      setAuthMessage('Credentials did not match any profile.')
-      return
-    }
-    setCurrentUser(match)
-    setAuthIdentifier('')
-    setAuthPassword('')
-    setAuthMessage(`Welcome back, ${match.username}!`)
   }
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     setAuthMessage('')
-    const username = signupData.username.trim()
-    const email = signupData.email.trim()
-    const password = signupData.password.trim()
-    if (!username || !email || !password) {
-      setAuthMessage('Fill out all fields to create an account.')
+    if (!signupData.username || !signupData.email || !signupData.password) {
+      setAuthMessage('Please fill in all fields.')
       return
     }
-    if (users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
-      setAuthMessage('That username is already taken.')
-      return
+    
+    try {
+      // Create auth user
+      const { data: { user }, error: authError } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
+      })
+      
+      if (authError) throw authError
+      
+      // Create user profile
+      const userProfile = await createUser({
+        id: user.id,
+        username: signupData.username,
+        email: signupData.email,
+        password_hash: 'managed_by_supabase_auth',
+        friends: [],
+        is_private: false,
+      })
+      
+      setCurrentUser(userProfile)
+      setSignupData({ username: '', email: '', password: '' })
+    } catch (error) {
+      setAuthMessage(error.message || 'Signup failed')
     }
-    if (users.some((user) => user.email.toLowerCase() === email.toLowerCase())) {
-      setAuthMessage('An account already exists for that email.')
-      return
-    }
-    const newUser = {
-      username,
-      email,
-      password,
-      friends: [],
-    }
-    setUsers((prev) => [...prev, newUser])
-    setCurrentUser(newUser)
-    setSignupData({ username: '', email: '', password: '' })
-    setAuthMessage('Account created. Welcome to BookMosh!')
   }
 
-  const handleLogout = () => {
-    setCurrentUser(null)
-    setAuthMessage('Signed out')
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      setCurrentUser(null)
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
   }
 
   const importHandler = (event) => {
@@ -568,7 +694,7 @@ function App() {
     event.target.value = ''
   }
 
-  const handleAddFriend = () => {
+  const handleAddFriend = async () => {
     if (!currentUser) {
       setFriendMessage('Log in to search for friends.')
       return
@@ -579,34 +705,44 @@ function App() {
       return
     }
     
-    // Search for matching users
-    const matches = users.filter((user) => 
-      user.username.toLowerCase().includes(query.toLowerCase()) ||
-      user.email.toLowerCase().includes(query.toLowerCase())
-    )
-    
-    if (matches.length === 0) {
-      setFriendMessage('No users found matching your search.')
-      return
-    }
-    
-    // Filter out current user and existing friends
-    const availableMatches = matches.filter(user => 
-      user.username !== currentUser.username && 
-      !currentUser.friends.includes(user.username)
-    )
-    
-    if (availableMatches.length === 0) {
-      if (matches.some(user => user.username === currentUser.username)) {
-        setFriendMessage('You cannot add yourself as a friend.')
-      } else {
-        setFriendMessage('Already connected with all matching users.')
+    try {
+      // Search for users
+      const searchResults = await searchUsers(query)
+      
+      if (searchResults.length === 0) {
+        setFriendMessage('No users found matching your search.')
+        return
       }
-      return
+      
+      // Filter out current user and existing friends
+      const availableMatches = searchResults.filter(user => 
+        user.id !== currentUser.id && 
+        !currentUser.friends.includes(user.username)
+      )
+      
+      if (availableMatches.length === 0) {
+        if (searchResults.some(user => user.id === currentUser.id)) {
+          setFriendMessage('You cannot add yourself as a friend.')
+        } else {
+          setFriendMessage('Already connected with all matching users.')
+        }
+        return
+      }
+      
+      // Add first available friend
+      const friendToAdd = availableMatches[0]
+      const updatedFriends = [...currentUser.friends, friendToAdd.username]
+      
+      await updateUserFriends(currentUser.id, updatedFriends)
+      
+      // Update current user state
+      setCurrentUser(prev => prev ? { ...prev, friends: updatedFriends } : null)
+      
+      setFriendMessage(`Connected with ${friendToAdd.username}!`)
+      setFriendQuery('')
+    } catch (error) {
+      setFriendMessage('Failed to add friend. Please try again.')
     }
-    
-    // Show search results
-    setFriendMessage(`Found ${availableMatches.length} user(s): ${availableMatches.map(u => u.username).join(', ')}`)
   }
 
   const openModal = (book) => {
