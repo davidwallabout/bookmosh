@@ -646,6 +646,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
+        {currentUser && (
         <header className="flex justify-start">
           <button
             onClick={() => {
@@ -673,6 +674,7 @@ function App() {
             </div>
           </button>
         </header>
+        )}
 
         {!currentUser && (
         <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-[#030617] via-[#040a1a] to-[#120029] p-8 text-white shadow-[0_30px_120px_rgba(5,2,20,0.65)]">
