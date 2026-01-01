@@ -228,6 +228,8 @@ function App() {
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
+  const [showAllResults, setShowAllResults] = useState(false)
+  const [searchDebounce, setSearchDebounce] = useState(null)
   const [selectedBook, setSelectedBook] = useState(null)
   const [modalRating, setModalRating] = useState(0)
   const [modalProgress, setModalProgress] = useState(0)
@@ -355,17 +357,39 @@ function App() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker))
   }, [tracker])
 
-  const fetchResults = async (term) => {
+  // Debounced search effect
+  useEffect(() => {
+    if (searchDebounce) {
+      clearTimeout(searchDebounce)
+    }
+    
+    if (searchQuery.trim()) {
+      const newDebounce = setTimeout(() => {
+        fetchResults(searchQuery.trim(), showAllResults ? 50 : 6)
+      }, 300)
+      setSearchDebounce(newDebounce)
+    } else {
+      setHasSearched(false)
+      setSearchResults([])
+    }
+    
+    return () => {
+      if (searchDebounce) {
+        clearTimeout(searchDebounce)
+      }
+    }
+  }, [searchQuery, showAllResults])
+
+  const fetchResults = async (term, limit = 6) => {
     if (!term?.trim()) {
       setHasSearched(false)
       setSearchResults([])
       return
     }
-    setHasSearched(true)
     setIsSearching(true)
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=6`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,key,isbn,publisher,language,place,person`,
       )
       const data = await response.json()
       const mapped = data.docs.map((doc) => ({
@@ -376,8 +400,15 @@ function App() {
         cover: doc.cover_i
           ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
           : null,
+        editionCount: doc.edition_count || 0,
+        rating: doc.ratings_average || 0,
+        subjects: doc.subject?.slice(0, 3) || [],
+        isbn: doc.isbn?.[0] || null,
+        publisher: doc.publisher?.[0] || null,
+        language: doc.language?.[0] || null,
       }))
       setSearchResults(mapped)
+      setHasSearched(true)
     } catch (err) {
       console.error('Open Library search failed', err)
     } finally {
@@ -753,72 +784,112 @@ function App() {
                 </div>
                 <p className="text-sm text-white/60">Open Library · instant results</p>
               </div>
-              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
+              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search authors, themes, or moods"
+                  placeholder="Search authors, themes, or moods..."
                   className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
                 />
-                <button
-                  onClick={() => fetchResults(searchQuery)}
-                  className="mt-3 rounded-2xl bg-white px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/80 sm:mt-0 sm:ml-3"
-                >
-                  {isSearching ? 'Scanning…' : 'Search'}
-                </button>
+                {searchQuery && (
+                  <div className="flex items-center justify-between text-xs text-white/60">
+                    <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
+                    {searchResults.length >= 6 && !showAllResults && (
+                      <button
+                        onClick={() => setShowAllResults(true)}
+                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                      >
+                        Show all
+                      </button>
+                    )}
+                    {showAllResults && searchResults.length > 6 && (
+                      <button
+                        onClick={() => setShowAllResults(false)}
+                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-6">
               {!hasSearched ? (
                 <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
-                  <p className="text-lg font-semibold text-white">No search yet.</p>
+                  <p className="text-lg font-semibold text-white">Start typing to search</p>
                   <p className="mt-2 text-white/60">
-                    Start typing to call up manuscripts, memoirs, and mood-heavy adventures from the Open Library. Your shelf stays clean until you decide otherwise.
+                    Search results will appear automatically as you type. Powered by Open Library's extensive catalog.
                   </p>
                 </div>
               ) : searchResults.length ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {searchResults.map((book) => (
-                    <div
-                      key={book.key}
-                      className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
-                    >
-                      <div className="flex items-center gap-4">
-                        {book.cover ? (
-                          <img
-                            src={book.cover}
-                            alt={book.title}
-                            className="h-20 w-16 rounded-xl object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60">
-                            Cover
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                      <div
+                        key={book.key}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                      >
+                        <div className="flex items-start gap-4">
+                          {book.cover ? (
+                            <img
+                              src={book.cover}
+                              alt={book.title}
+                              className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
+                              Cover
+                            </div>
+                          )}
+                          <div className="flex flex-1 flex-col gap-2 min-w-0">
+                            <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                            <p className="text-sm text-white/60">{book.author}</p>
+                            <div className="flex flex-wrap gap-2 text-xs text-white/50">
+                              {book.year && <span>{book.year}</span>}
+                              {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
+                              {book.editionCount > 1 && <span>{book.editionCount} editions</span>}
+                            </div>
+                            {book.subjects.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {book.subjects.slice(0, 2).map((subject, i) => (
+                                  <span key={i} className="text-xs bg-white/10 px-2 py-1 rounded text-white/70">
+                                    {subject}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        <div className="flex flex-1 flex-col gap-1">
-                          <p className="text-base font-semibold">{book.title}</p>
-                          <p className="text-sm text-white/60">{book.author}</p>
-                          <p className="text-xs text-white/40">{book.year ?? 'Year unknown'}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleAddBook(book)}
+                            className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                          >
+                            Track
+                          </button>
+                          <button
+                            onClick={() => openModal(book)}
+                            className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
+                          >
+                            Details
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleAddBook(book)}
-                          className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                        >
-                          Track
-                        </button>
-                        <button
-                          onClick={() => openModal(book)}
-                          className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
-                        >
-                          Details
-                        </button>
-                      </div>
+                    ))}
+                  </div>
+                  {!showAllResults && searchResults.length > 6 && (
+                    <div className="text-center mt-4">
+                      <button
+                        onClick={() => setShowAllResults(true)}
+                        className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Show {searchResults.length - 6} more results
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
                   <p className="text-lg font-semibold text-white">No results</p>
