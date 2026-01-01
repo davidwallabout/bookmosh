@@ -8,7 +8,32 @@ const curatedRecommendations = []
 
 const initialTracker = []
 
-// Supabase user management functions
+// Updated RLS policies for Supabase users table:
+/*
+-- Create users table
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  friends TEXT[] DEFAULT '{}',
+  is_private BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Users can view all users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can update their own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+
+-- Create index for faster searches
+CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+*/
 const fetchUsers = async () => {
   if (!supabase) return []
   
@@ -1049,6 +1074,180 @@ function App() {
             </div>
           </section>
         )}
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.4em] text-white/50">Currently Reading</p>
+                <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Reading').length}</h3>
+              </div>
+              <button
+                onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+              >
+                + Add book
+              </button>
+            </div>
+            <div className="space-y-4">
+              {tracker.filter(book => book.status === 'Reading').length > 0 ? (
+                tracker.filter(book => book.status === 'Reading').map((book) => (
+                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white">{book.title}</p>
+                        <p className="text-sm text-white/60">{book.author}</p>
+                      </div>
+                      <span className="text-xs text-white/50">{book.mood}</span>
+                    </div>
+                    <div className="mt-4 h-2 rounded-full bg-white/10">
+                      <div
+                        style={{ width: `${book.progress}%` }}
+                        className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => openModal(book)}
+                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Details
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBook(book.title)}
+                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-white/60 mb-4">No books currently being read</p>
+                  <button
+                    onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    + Add a book
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.4em] text-white/50">Read</p>
+                <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Read').length}</h3>
+              </div>
+              <button
+                onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+              >
+                + Add book
+              </button>
+            </div>
+            <div className="space-y-4">
+              {tracker.filter(book => book.status === 'Read').length > 0 ? (
+                tracker.filter(book => book.status === 'Read').map((book) => (
+                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white">{book.title}</p>
+                        <p className="text-sm text-white/60">{book.author}</p>
+                      </div>
+                      <span className="text-xs text-white/50">{book.mood}</span>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => openModal(book)}
+                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Details
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBook(book.title)}
+                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-white/60 mb-4">No books completed yet</p>
+                  <button
+                    onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    + Add a book
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want to Read</p>
+              <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Want to Read').length}</h3>
+            </div>
+            <button
+              onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+              className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+            >
+              + Add book
+            </button>
+          </div>
+          <div className="space-y-4">
+            {tracker.filter(book => book.status === 'Want to Read').length > 0 ? (
+              tracker.filter(book => book.status === 'Want to Read').map((book) => (
+                <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                      <p className="text-lg font-semibold text-white">{book.title}</p>
+                      <p className="text-sm text-white/60">{book.author}</p>
+                    </div>
+                    <span className="text-xs text-white/50">{book.mood}</span>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => openModal(book)}
+                      className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                    >
+                      Details
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBook(book.title)}
+                      className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-white/60 mb-4">No books in your reading queue</p>
+                <button
+                  onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  + Add a book
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="grid gap-8 lg:grid-cols-[2fr_1fr]" id="discovery">
           <div className="lg:col-span-2 space-y-6">
