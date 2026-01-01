@@ -648,10 +648,13 @@ function App() {
                 Sign up
               </button>
               <button
-                onClick={scrollToDiscovery}
+                onClick={() => {
+                  handleAuthModeSwitch('login')
+                  scrollToDiscovery()
+                }}
                 className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
               >
-                Learn more
+                Log in
               </button>
             </div>
             <p className="text-xs text-white/60">
