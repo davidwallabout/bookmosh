@@ -4,26 +4,7 @@ import { supabase } from './lib/supabaseClient'
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
 
-const curatedRecommendations = [
-  {
-    title: 'The Quiet Stream',
-    author: 'Mai Nguyen',
-    vibe: 'Slow-burn memoir',
-    gradient: 'from-[#ff9a8b] to-[#ffd6a5]',
-  },
-  {
-    title: 'Atlas of Midnight Cities',
-    author: 'Cal Reyes',
-    vibe: 'Speculative cityscapes',
-    gradient: 'from-[#7ee8fa] to-[#5d26c1]',
-  },
-  {
-    title: 'Saltwater Diaries',
-    author: 'Nora Avery',
-    vibe: 'Oceanic essays',
-    gradient: 'from-[#1d976c] via-[#93f9b9] to-[#1d976c]',
-  },
-]
+const curatedRecommendations = []
 
 const initialTracker = []
 
