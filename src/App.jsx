@@ -103,6 +103,66 @@ const searchUsers = async (query) => {
   }
 }
 
+// Fetch friend's reading data
+const fetchFriendBooks = async (username) => {
+  if (!supabase) return []
+  
+  try {
+    const { data, error } = await supabase
+      .from('bookmosh_books')
+      .select('*')
+      .eq('owner', username)
+    
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching friend books:', error)
+    return []
+  }
+}
+
+// Create mosh (book chat)
+const createMosh = async (bookTitle, participants) => {
+  if (!supabase) throw new Error('Supabase not configured')
+  
+  try {
+    const { data, error } = await supabase
+      .from('moshes')
+      .insert([{
+        book_title: bookTitle,
+        participants: participants,
+        created_by: currentUser.id,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+    
+    if (error) throw error
+    return data[0]
+  } catch (error) {
+    console.error('Error creating mosh:', error)
+    throw error
+  }
+}
+
+// Get mosh messages
+const getMoshMessages = async (moshId) => {
+  if (!supabase) return []
+  
+  try {
+    const { data, error } = await supabase
+      .from('mosh_messages')
+      .select('*')
+      .eq('mosh_id', moshId)
+      .order('created_at')
+    
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching mosh messages:', error)
+    return []
+  }
+}
+
 const statusOptions = ['Reading', 'Want to Read', 'Read']
 
 const defaultUsers = []
@@ -626,6 +686,51 @@ function App() {
     setAuthMessage('')
   }
 
+  const viewFriendProfile = async (friendUsername) => {
+    try {
+      // Get friend's user info
+      const friendData = await searchUsers(friendUsername)
+      const friend = friendData.find(u => u.username === friendUsername)
+      
+      if (!friend) {
+        setFriendMessage('Friend not found')
+        return
+      }
+      
+      // Get friend's books
+      const friendBooks = await fetchFriendBooks(friendUsername)
+      
+      setSelectedFriend({
+        ...friend,
+        books: friendBooks
+      })
+    } catch (error) {
+      console.error('Error loading friend profile:', error)
+      setFriendMessage('Failed to load friend profile')
+    }
+  }
+
+  const startMosh = async (bookTitle, friendUsername = null) => {
+    try {
+      const participants = [currentUser.username]
+      if (friendUsername) {
+        participants.push(friendUsername)
+      }
+      
+      const mosh = await createMosh(bookTitle, participants)
+      
+      // Add to moshes list
+      setMoshes(prev => [...prev, mosh])
+      
+      // Open mosh modal
+      // TODO: Implement mosh modal UI
+      setFriendMessage(`Started mosh for "${bookTitle}"`)
+    } catch (error) {
+      console.error('Error starting mosh:', error)
+      setFriendMessage('Failed to start mosh')
+    }
+  }
+
   const scrollToDiscovery = () => {
     if (typeof window === 'undefined') return
     document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })
@@ -1138,6 +1243,12 @@ function App() {
                         Details
                       </button>
                       <button
+                        onClick={() => startMosh(book.title)}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        Start Mosh
+                      </button>
+                      <button
                         onClick={() => handleDeleteBook(book.title)}
                         className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
                       >
@@ -1191,6 +1302,12 @@ function App() {
                         className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                       >
                         Details
+                      </button>
+                      <button
+                        onClick={() => startMosh(book.title)}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        Start Mosh
                       </button>
                       <button
                         onClick={() => handleDeleteBook(book.title)}
@@ -1451,6 +1568,12 @@ function App() {
                         Details
                       </button>
                       <button
+                        onClick={() => startMosh(book.title)}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        Start Mosh
+                      </button>
+                      <button
                         onClick={() => handleDeleteBook(book.title)}
                         className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
                       >
@@ -1483,6 +1606,12 @@ function App() {
                         className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                       >
                         Details
+                      </button>
+                      <button
+                        onClick={() => startMosh(book.title)}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        Start Mosh
                       </button>
                       <button
                         onClick={() => handleDeleteBook(book.title)}
@@ -1620,10 +1749,23 @@ function App() {
                     activeFriendProfiles.map((friend) => (
                       <div key={friend.username} className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#050914]/70 px-4 py-3">
                         <div>
-                          <p className="text-sm font-semibold text-white">{friend.username}</p>
+                          <button
+                            onClick={() => viewFriendProfile(friend.username)}
+                            className="text-left text-sm font-semibold text-white hover:text-white/80 transition-colors"
+                          >
+                            {friend.username}
+                          </button>
                           <p className="text-xs text-white/60">{friend.email}</p>
                         </div>
-                        <span className="text-xs uppercase tracking-[0.3em] text-white/50">friend</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs uppercase tracking-[0.3em] text-white/50">friend</span>
+                          <button
+                            onClick={() => viewFriendProfile(friend.username)}
+                            className="text-xs text-white/60 hover:text-white transition-colors"
+                          >
+                            View Profile
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -1712,6 +1854,99 @@ function App() {
           </div>
         </section>
           </>
+        )}
+
+        {selectedFriend && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="w-[clamp(280px,70vw,520px)] space-y-5 rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">
+                    {selectedFriend.username}'s Profile
+                  </p>
+                  <h2 className="text-xl font-semibold text-white">
+                    {selectedFriend.username}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedFriend(null)}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Currently Reading ({selectedFriend.books?.filter(b => b.status === 'Reading').length || 0})</p>
+                    <div className="space-y-3">
+                      {selectedFriend.books?.filter(b => b.status === 'Reading').map((book) => (
+                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-white">{book.title}</p>
+                              <p className="text-sm text-white/60">{book.author}</p>
+                            </div>
+                            <button
+                              onClick={() => startMosh(book.title, selectedFriend.username)}
+                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                            >
+                              Mosh
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want to Read ({selectedFriend.books?.filter(b => b.status === 'Want to Read').length || 0})</p>
+                    <div className="space-y-3">
+                      {selectedFriend.books?.filter(b => b.status === 'Want to Read').map((book) => (
+                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-white">{book.title}</p>
+                              <p className="text-sm text-white/60">{book.author}</p>
+                            </div>
+                            <button
+                              onClick={() => startMosh(book.title, selectedFriend.username)}
+                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                            >
+                              Mosh
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Read ({selectedFriend.books?.filter(b => b.status === 'Read').length || 0})</p>
+                    <div className="space-y-3">
+                      {selectedFriend.books?.filter(b => b.status === 'Read').map((book) => (
+                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-white">{book.title}</p>
+                              <p className="text-sm text-white/60">{book.author}</p>
+                            </div>
+                            <button
+                              onClick={() => startMosh(book.title, selectedFriend.username)}
+                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                            >
+                              Mosh
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {selectedBook && (
