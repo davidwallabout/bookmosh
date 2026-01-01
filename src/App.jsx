@@ -652,7 +652,7 @@ function App() {
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
         <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <button
               onClick={() => {
                 setSelectedStatusFilter(null)
@@ -666,23 +666,20 @@ function App() {
               <img
                 src="/bookmosh-logo.png"
                 alt="BookMosh"
-                className="h-10 w-10 rounded-lg"
+                className="h-16 w-auto max-w-32 rounded-lg"
                 onError={(e) => {
                   e.target.style.display = 'none'
                   e.target.nextSibling.style.display = 'block'
                 }}
               />
               <div className="hidden" style={{ display: 'none' }}>
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
-                  <span className="text-lg font-bold text-midnight">B</span>
+                <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
+                  <span className="text-xl font-bold text-midnight">B</span>
                 </div>
               </div>
             </button>
             <div>
-              <p className="text-xs uppercase tracking-[0.5em] text-white/60">
-                BookMosh
-              </p>
-              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+              <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                 A simple book tracker
               </h1>
               <p className="mt-3 max-w-2xl text-lg text-white/70">
