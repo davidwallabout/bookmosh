@@ -680,26 +680,38 @@ function App() {
     }
     
     try {
-      // Create auth user
+      // Create auth user with custom email template
       const { data: { user }, error: authError } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            username: signupData.username,
+          }
+        }
       })
       
       if (authError) throw authError
       
-      // Create user profile
-      const userProfile = await createUser({
-        id: user.id,
-        username: signupData.username,
-        email: signupData.email,
-        password_hash: 'managed_by_supabase_auth',
-        friends: [],
-        is_private: false,
-      })
-      
-      setCurrentUser(userProfile)
+      // Don't auto-logout - let user stay on page to check email
+      setAuthMessage('Success! Please check your email to confirm your account.')
       setSignupData({ username: '', email: '', password: '' })
+      
+      // Create user profile immediately (will be accessible after email confirmation)
+      try {
+        await createUser({
+          id: user.id,
+          username: signupData.username,
+          email: signupData.email,
+          password_hash: 'managed_by_supabase_auth',
+          friends: [],
+          is_private: false,
+        })
+      } catch (profileError) {
+        console.error('Profile creation failed:', profileError)
+        // Don't show error to user since email confirmation is the main concern
+      }
     } catch (error) {
       setAuthMessage(error.message || 'Signup failed')
     }
@@ -788,14 +800,16 @@ function App() {
       const friendToAdd = availableMatches[0]
       const updatedFriends = [...currentUser.friends, friendToAdd.username]
       
-      await updateUserFriends(currentUser.id, updatedFriends)
+      // Update friends in database
+      const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
       
-      // Update current user state
-      setCurrentUser(prev => prev ? { ...prev, friends: updatedFriends } : null)
+      // Update current user state locally without triggering auth change
+      setCurrentUser(updatedUser)
       
       setFriendMessage(`Connected with ${friendToAdd.username}!`)
       setFriendQuery('')
     } catch (error) {
+      console.error('Friend add error:', error)
       setFriendMessage('Failed to add friend. Please try again.')
     }
   }
