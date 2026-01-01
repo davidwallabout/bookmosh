@@ -666,15 +666,15 @@ function App() {
               <img
                 src="/bookmosh-logo.png"
                 alt="BookMosh"
-                className="h-24 w-auto max-w-48 rounded-lg"
+                className="h-48 w-auto max-w-96 rounded-lg"
                 onError={(e) => {
                   e.target.style.display = 'none'
                   e.target.nextSibling.style.display = 'block'
                 }}
               />
               <div className="hidden" style={{ display: 'none' }}>
-                <div className="h-24 w-24 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-midnight">B</span>
+                <div className="h-48 w-48 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
+                  <span className="text-3xl font-bold text-midnight">B</span>
                 </div>
               </div>
             </button>
