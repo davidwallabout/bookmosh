@@ -1469,36 +1469,13 @@ function App() {
               </div>
               <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {!selectedAuthor && (
-                  <>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search authors, themes, or moods..."
-                      className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                    />
-                    {searchQuery && (
-                      <div className="flex items-center justify-between text-xs text-white/60">
-                        <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
-                        {searchResults.length >= 6 && !showAllResults && (
-                          <button
-                            onClick={() => setShowAllResults(true)}
-                            className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                          >
-                            Show all
-                          </button>
-                        )}
-                        {showAllResults && searchResults.length > 6 && (
-                          <button
-                            onClick={() => setShowAllResults(false)}
-                            className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                          >
-                            Show less
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search authors, themes, or moods..."
+                    className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                  />
                 )}
               </div>
             </div>
