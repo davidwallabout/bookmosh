@@ -322,6 +322,7 @@ function App() {
   const [isPrivate, setIsPrivate] = useState(false)
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false)
   const [authMode, setAuthMode] = useState('login')
   const [authIdentifier, setAuthIdentifier] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -376,7 +377,7 @@ function App() {
     return currentUser.friends
       .map((username) => users.find((user) => user.username === username))
       .filter(Boolean)
-  }, [currentUser, users])
+  }, [currentUser, users, isUpdatingUser])
 
   useEffect(() => {
     let mounted = true
@@ -384,7 +385,7 @@ function App() {
     try {
       // Get initial session
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (mounted && session?.user) {
+        if (mounted && session?.user && !isUpdatingUser) {
           // Get user profile from users table
           supabase
             .from('users')
@@ -406,7 +407,7 @@ function App() {
 
       // Listen for auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (!mounted) return
+        if (!mounted || isUpdatingUser) return
 
         if (session?.user) {
           try {
@@ -436,7 +437,7 @@ function App() {
     } catch (error) {
       console.error('Auth setup failed:', error)
     }
-  }, [])
+  }, [isUpdatingUser])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -773,6 +774,9 @@ function App() {
     }
     
     try {
+      // Prevent auth state changes during friend update
+      setIsUpdatingUser(true)
+      
       // Search for users
       const searchResults = await searchUsers(query)
       
@@ -803,7 +807,7 @@ function App() {
       // Update friends in database
       const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
       
-      // Update current user state locally without triggering auth change
+      // Update current user state locally
       setCurrentUser(updatedUser)
       
       setFriendMessage(`Connected with ${friendToAdd.username}!`)
@@ -811,6 +815,8 @@ function App() {
     } catch (error) {
       console.error('Friend add error:', error)
       setFriendMessage('Failed to add friend. Please try again.')
+    } finally {
+      setIsUpdatingUser(false)
     }
   }
 
