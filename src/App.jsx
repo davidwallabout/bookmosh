@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
-const STORAGE_KEY = 'lumen-tracker-storage'
-const AUTH_STORAGE_KEY = 'lumen-auth-store'
+const STORAGE_KEY = 'bookmosh-tracker-storage'
+const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
 
 const curatedRecommendations = [
   {
@@ -55,8 +55,8 @@ const statusOptions = ['Reading', 'Want to Read', 'Read']
 
 const defaultUsers = [
   {
-    username: 'lumen',
-    email: 'hello@lumen.app',
+    username: 'bookmosh',
+    email: 'hello@bookmosh.com',
     password: 'booklove',
     friends: ['atlas'],
   },
@@ -64,7 +64,7 @@ const defaultUsers = [
     username: 'atlas',
     email: 'atlas@readlane.io',
     password: 'pages',
-    friends: ['lumen'],
+    friends: ['bookmosh'],
   },
 ]
 
@@ -398,7 +398,7 @@ function App() {
     setUsers((prev) => [...prev, newUser])
     setCurrentUser(newUser)
     setSignupData({ username: '', email: '', password: '' })
-    setAuthMessage('Account created. Welcome to Lumen!')
+    setAuthMessage('Account created. Welcome to BookMosh!')
   }
 
   const handleLogout = () => {
@@ -518,14 +518,14 @@ function App() {
         <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.5em] text-white/60">
-              Lumen Library
+              BookMosh Library
             </p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Storyline, reimagined
+              Plot journeys at bookmosh.com
             </h1>
             <p className="mt-3 max-w-2xl text-lg text-white/70">
-              Capture what you read, discover new pages, and let the tracker guide
-              your next favorite book without the noise.
+              Mesh what you read, what you feel, and who you read with into one living shelf that updates
+              along with you.
             </p>
           </div>
           <div className="flex items-center gap-4">
