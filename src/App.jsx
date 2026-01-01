@@ -903,22 +903,6 @@ function App() {
             </div>
           </div>
           <div className="space-y-6">
-            <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-6 backdrop-blur-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/50">Story Scores</p>
-                  <h3 className="text-2xl font-semibold text-white">Pulse</h3>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-white">7.8</p>
-                  <p className="text-xs text-white/60">focused stories this week</p>
-                </div>
-              </div>
-              <div className="mt-5 grid gap-3 text-sm">
-                <p className="text-white/70">Balance introspection with a pulse of action: schedule micro-check-ins each evening and note the narrative that carried you today.</p>
-                <p className="text-white/50">Need a mood reset? Tap any rec to drop it into your queue.</p>
-              </div>
-            </div>
             <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-white">Community</h3>
