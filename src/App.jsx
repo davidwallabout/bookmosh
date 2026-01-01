@@ -603,6 +603,7 @@ function App() {
           </div>
         </header>
 
+        {!currentUser && (
         <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-[#030617] via-[#040a1a] to-[#120029] p-8 text-white shadow-[0_30px_120px_rgba(5,2,20,0.65)]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_55%)] opacity-40" />
           <div className="pointer-events-none absolute -right-8 top-1/3 h-52 w-52 rounded-full bg-[#9412ff]/30 blur-3xl" />
@@ -637,6 +638,7 @@ function App() {
             </p>
           </div>
         </section>
+        )}
 
         {!currentUser && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
