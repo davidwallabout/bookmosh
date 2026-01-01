@@ -651,42 +651,35 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
-        <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex items-center justify-center lg:justify-start">
-            <button
-              onClick={() => {
-                setSelectedStatusFilter(null)
-                setSelectedAuthor(null)
-                setSearchQuery('')
-                setSearchResults([])
-                setHasSearched(false)
+        <header className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              setSelectedStatusFilter(null)
+              setSelectedAuthor(null)
+              setSearchQuery('')
+              setSearchResults([])
+              setHasSearched(false)
+            }}
+            className="transition-opacity hover:opacity-80"
+          >
+            <img
+              src="/bookmosh-logo.png"
+              alt="BookMosh"
+              className="h-48 w-auto max-w-96 rounded-lg"
+              onError={(e) => {
+                e.target.style.display = 'none'
+                e.target.nextSibling.style.display = 'block'
               }}
-              className="transition-opacity hover:opacity-80"
-            >
-              <img
-                src="/bookmosh-logo.png"
-                alt="BookMosh"
-                className="h-48 w-auto max-w-96 rounded-lg"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                  e.target.nextSibling.style.display = 'block'
-                }}
-              />
-              <div className="hidden" style={{ display: 'none' }}>
-                <div className="h-48 w-48 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
-                  <span className="text-3xl font-bold text-midnight">B</span>
-                </div>
+            />
+            <div className="hidden" style={{ display: 'none' }}>
+              <div className="h-48 w-48 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
+                <span className="text-3xl font-bold text-midnight">B</span>
               </div>
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="rounded-full border border-white/30 px-5 py-2 text-sm uppercase tracking-wider text-white/80 transition hover:border-white/70 hover:text-white">
-              Sync Shelf
-            </button>
-            <button className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-6 py-2 text-sm font-semibold text-midnight transition hover:from-white/80">
-              + New Log
-            </button>
-          </div>
+            </div>
+          </button>
+          <button className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-6 py-2 text-sm font-semibold text-midnight transition hover:from-white/80">
+            + New Log
+          </button>
         </header>
 
         {!currentUser && (
