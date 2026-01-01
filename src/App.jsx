@@ -235,6 +235,8 @@ function App() {
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalMood, setModalMood] = useState('')
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
+  const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
@@ -379,6 +381,39 @@ function App() {
       }
     }
   }, [searchQuery, showAllResults])
+
+  const fetchAuthorBooks = async (authorName) => {
+    if (!authorName?.trim()) return
+    setIsSearching(true)
+    try {
+      const response = await fetch(
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=20&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+      )
+      const data = await response.json()
+      const mapped = data.docs.map((doc) => ({
+        key: doc.key,
+        title: doc.title,
+        author: doc.author_name?.[0] ?? authorName,
+        year: doc.first_publish_year,
+        cover: doc.cover_i
+          ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+          : null,
+        editionCount: doc.edition_count || 0,
+        rating: doc.ratings_average || 0,
+        subjects: doc.subject?.slice(0, 3) || [],
+        isbn: doc.isbn?.[0] || null,
+        publisher: doc.publisher?.[0] || null,
+        language: doc.language?.[0] || null,
+      }))
+      setSearchResults(mapped)
+      setHasSearched(true)
+      setSelectedAuthor(authorName)
+    } catch (err) {
+      console.error('Author search failed', err)
+    } finally {
+      setIsSearching(false)
+    }
+  }
 
   const fetchResults = async (term, limit = 6) => {
     if (!term?.trim()) {
@@ -760,9 +795,10 @@ function App() {
           {['Reading', 'Want to Read', 'Read'].map((status) => (
             <div
               key={status}
-              className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 duration-200 hover:border-white/40"
+              onClick={() => setSelectedStatusFilter(selectedStatusFilter === status ? null : status)}
+              className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-4 duration-200 hover:border-white/40 cursor-pointer transition-all"
             >
-              <p className="text-sm uppercase tracking-[0.3em] text-white/50">
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">
                 {status}
               </p>
               <p className="text-3xl font-semibold text-white">
@@ -771,47 +807,125 @@ function App() {
               <p className="text-xs text-white/60">
                 {status === 'Read' ? 'Total books completed' : 'Currently active'}
               </p>
+              {selectedStatusFilter === status && (
+                <p className="text-xs text-white/40 mt-2">Click to close</p>
+              )}
             </div>
           ))}
         </section>
+        
+        {selectedStatusFilter && (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-semibold text-white">{selectedStatusFilter} ({tracker.filter(book => book.status === selectedStatusFilter).length})</h2>
+              <button
+                onClick={() => setSelectedStatusFilter(null)}
+                className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {tracker.filter(book => book.status === selectedStatusFilter).map((book) => (
+                <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                      <p className="text-lg font-semibold text-white">{book.title}</p>
+                      <p className="text-sm text-white/60">{book.author}</p>
+                    </div>
+                    <span className="text-xs text-white/50">{book.mood}</span>
+                  </div>
+                  {book.status === 'Reading' && (
+                    <>
+                      <div className="mt-4 h-2 rounded-full bg-white/10">
+                        <div
+                          style={{ width: `${book.progress}%` }}
+                          className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
+                    </>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => openModal(book)}
+                      className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                    >
+                      Details
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBook(book.title)}
+                      className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="grid gap-8 lg:grid-cols-[2fr_1fr]" id="discovery">
           <div className="lg:col-span-2 space-y-6">
             <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
-                  <h2 className="text-2xl font-semibold text-white">Search the open shelves</h2>
+                  <h2 className="text-2xl font-semibold text-white">
+                    {selectedAuthor ? `Books by ${selectedAuthor}` : 'Search the open shelves'}
+                  </h2>
+                  {selectedAuthor && (
+                    <button
+                      onClick={() => {
+                        setSelectedAuthor(null)
+                        setSearchQuery('')
+                        setSearchResults([])
+                        setHasSearched(false)
+                      }}
+                      className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white mt-1"
+                    >
+                      ← Back to search
+                    </button>
+                  )}
                 </div>
-                <p className="text-sm text-white/60">Open Library · instant results</p>
+                <p className="text-sm text-white/60">
+                  {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
+                </p>
               </div>
               <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search authors, themes, or moods..."
-                  className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                />
-                {searchQuery && (
-                  <div className="flex items-center justify-between text-xs text-white/60">
-                    <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
-                    {searchResults.length >= 6 && !showAllResults && (
-                      <button
-                        onClick={() => setShowAllResults(true)}
-                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                      >
-                        Show all
-                      </button>
+                {!selectedAuthor && (
+                  <>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search authors, themes, or moods..."
+                      className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                    />
+                    {searchQuery && (
+                      <div className="flex items-center justify-between text-xs text-white/60">
+                        <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
+                        {searchResults.length >= 6 && !showAllResults && (
+                          <button
+                            onClick={() => setShowAllResults(true)}
+                            className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                          >
+                            Show all
+                          </button>
+                        )}
+                        {showAllResults && searchResults.length > 6 && (
+                          <button
+                            onClick={() => setShowAllResults(false)}
+                            className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                          >
+                            Show less
+                          </button>
+                        )}
+                      </div>
                     )}
-                    {showAllResults && searchResults.length > 6 && (
-                      <button
-                        onClick={() => setShowAllResults(false)}
-                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                      >
-                        Show less
-                      </button>
-                    )}
-                  </div>
+                  </>
                 )}
               </div>
             </div>
@@ -845,7 +959,12 @@ function App() {
                           )}
                           <div className="flex flex-1 flex-col gap-2 min-w-0">
                             <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                            <p className="text-sm text-white/60">{book.author}</p>
+                            <button
+                              onClick={() => fetchAuthorBooks(book.author)}
+                              className="text-sm text-white/60 hover:text-white transition-colors text-left"
+                            >
+                              {book.author}
+                            </button>
                             <div className="flex flex-wrap gap-2 text-xs text-white/50">
                               {book.year && <span>{book.year}</span>}
                               {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
