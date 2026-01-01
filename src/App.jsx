@@ -632,12 +632,10 @@ function App() {
               Bookmosh Codex
             </p>
             <h2 className="text-4xl font-semibold leading-tight text-white sm:text-5xl">
-              A library that listens to the hush between the pages.
+              A modern book tracker.
             </h2>
             <p className="max-w-2xl text-base text-white/70">
-              Slip behind the velvet curtain. BookMosh stitches your moods, friends,
-              and bookmarks into a single illuminated shelf so every decision about
-              what to read next feels intentional.
+              Track what you read, discover new books, and connect with friends. Your private shelf syncs with Supabase and works the way you do.
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -647,13 +645,13 @@ function App() {
                 }}
                 className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
               >
-                Claim your shelf
+                Sign up
               </button>
               <button
                 onClick={scrollToDiscovery}
                 className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
               >
-                Explore the discovery pool
+                Learn more
               </button>
             </div>
             <p className="text-xs text-white/60">
@@ -663,6 +661,8 @@ function App() {
           </div>
         </section>
 
+        {currentUser && (
+          <>
         <section className="grid gap-6 rounded-3xl bg-white/5 p-6 backdrop-blur-lg md:grid-cols-3">
           {['Reading', 'Want to Read', 'Read'].map((status) => (
             <div
@@ -1004,6 +1004,8 @@ function App() {
             </div>
           </div>
         </section>
+          </>
+        )}
 
         {selectedBook && (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
