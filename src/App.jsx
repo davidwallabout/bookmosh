@@ -10,6 +10,8 @@ const initialTracker = []
 
 // Supabase user management functions
 const fetchUsers = async () => {
+  if (!supabase) return []
+  
   try {
     const { data, error } = await supabase
       .from('users')
@@ -24,6 +26,8 @@ const fetchUsers = async () => {
 }
 
 const createUser = async (userData) => {
+  if (!supabase) throw new Error('Supabase not configured')
+  
   try {
     const { data, error } = await supabase
       .from('users')
@@ -39,6 +43,8 @@ const createUser = async (userData) => {
 }
 
 const updateUserFriends = async (userId, friends) => {
+  if (!supabase) throw new Error('Supabase not configured')
+  
   try {
     const { data, error } = await supabase
       .from('users')
@@ -55,6 +61,8 @@ const updateUserFriends = async (userId, friends) => {
 }
 
 const searchUsers = async (query) => {
+  if (!supabase) return []
+  
   try {
     const { data, error } = await supabase
       .from('users')
@@ -597,6 +605,11 @@ function App() {
 
   const handleLogin = async () => {
     setAuthMessage('')
+    if (!supabase) {
+      setAuthMessage('Supabase not configured. Please check environment variables.')
+      return
+    }
+    
     try {
       const { data: { user }, error } = await supabase.auth.signInWithPassword({
         email: authIdentifier,
@@ -631,6 +644,11 @@ function App() {
 
   const handleSignup = async () => {
     setAuthMessage('')
+    if (!supabase) {
+      setAuthMessage('Supabase not configured. Please check environment variables.')
+      return
+    }
+    
     if (!signupData.username || !signupData.email || !signupData.password) {
       setAuthMessage('Please fill in all fields.')
       return
@@ -663,11 +681,17 @@ function App() {
   }
 
   const handleLogout = async () => {
+    if (!supabase) {
+      setCurrentUser(null)
+      return
+    }
+    
     try {
       await supabase.auth.signOut()
       setCurrentUser(null)
     } catch (error) {
       console.error('Logout error:', error)
+      setCurrentUser(null)
     }
   }
 
