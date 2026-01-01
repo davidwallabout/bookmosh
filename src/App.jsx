@@ -612,7 +612,7 @@ function App() {
               Mesh what you read, what you feel, and who you read with into one living shelf that updates
               along with you.
             </p>
-          </div>
+          </section>
           <div className="flex items-center gap-4">
             <button className="rounded-full border border-white/30 px-5 py-2 text-sm uppercase tracking-wider text-white/80 transition hover:border-white/70 hover:text-white">
               Sync Shelf
@@ -661,7 +661,7 @@ function App() {
               breathe in next.
             </p>
           </div>
-        </section>
+        </div>
 
         <section className="grid gap-6 rounded-3xl bg-white/5 p-6 backdrop-blur-lg md:grid-cols-3">
           {['Reading', 'Want to Read', 'Read'].map((status) => (
@@ -681,23 +681,16 @@ function App() {
             </div>
           ))}
         </section>
-
+        <section className="grid gap-8 lg:grid-cols-[2fr_1fr]" id="discovery">
           <div className="lg:col-span-2 space-y-6">
             <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">
-                    Discovery
-                  </p>
-                  <h2 className="text-2xl font-semibold text-white">
-                    Search the open shelves
-                  </h2>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
+                  <h2 className="text-2xl font-semibold text-white">Search the open shelves</h2>
                 </div>
-                <p className="text-sm text-white/60">
-                  Open Library · instant results
-                </p>
+                <p className="text-sm text-white/60">Open Library · instant results</p>
               </div>
-
               <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
                 <input
                   type="text"
@@ -713,93 +706,76 @@ function App() {
                   {isSearching ? 'Scanning…' : 'Search'}
                 </button>
               </div>
-
-              <div className="mt-6">
-                {!hasSearched ? (
-                  <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
-                    <p className="text-lg font-semibold text-white">No search yet.</p>
-                    <p className="mt-2 text-white/60">
-                      Start typing to call up manuscripts, memoirs, and mood-heavy
-                      adventures from the Open Library. Your shelf stays clean until
-                      you choose otherwise.
-                    </p>
-                  </div>
-                ) : searchResults.length ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {searchResults.map((book) => (
-                      <div
-                        key={book.key}
-                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
-                      >
-                        <div className="flex items-center gap-4">
-                          {book.cover ? (
-                            <img
-                              src={book.cover}
-                              alt={book.title}
-                              className="h-20 w-16 rounded-xl object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60">
-                              Cover
-                            </div>
-                          )}
-                          <div className="flex flex-1 flex-col gap-1">
-                            <p className="text-base font-semibold">{book.title}</p>
-                            <p className="text-sm text-white/60">{book.author}</p>
-                            <p className="text-xs text-white/40">
-                              {book.year ?? 'Year unknown'}
-                            </p>
+            </div>
+            <div className="mt-6">
+              {!hasSearched ? (
+                <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
+                  <p className="text-lg font-semibold text-white">No search yet.</p>
+                  <p className="mt-2 text-white/60">
+                    Start typing to call up manuscripts, memoirs, and mood-heavy adventures from the Open Library. Your shelf stays clean until you decide otherwise.
+                  </p>
+                </div>
+              ) : searchResults.length ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {searchResults.map((book) => (
+                    <div
+                      key={book.key}
+                      className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                    >
+                      <div className="flex items-center gap-4">
+                        {book.cover ? (
+                          <img
+                            src={book.cover}
+                            alt={book.title}
+                            className="h-20 w-16 rounded-xl object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60">
+                            Cover
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleAddBook(book)}
-                            className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                          >
-                            Track
-                          </button>
-                          <button
-                            onClick={() => openModal(book)}
-                            className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
-                          >
-                            Details
-                          </button>
+                        )}
+                        <div className="flex flex-1 flex-col gap-1">
+                          <p className="text-base font-semibold">{book.title}</p>
+                          <p className="text-sm text-white/60">{book.author}</p>
+                          <p className="text-xs text-white/40">{book.year ?? 'Year unknown'}</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
-                    <p className="text-lg font-semibold text-white">No results</p>
-                    <p className="mt-2 text-white/60">
-                      The Open Library came up empty. Try another phrase or a different vibe.
-                    </p>
-                  </div>
-                )}
-              </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleAddBook(book)}
+                          className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                        >
+                          Track
+                        </button>
+                        <button
+                          onClick={() => openModal(book)}
+                          className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
+                        >
+                          Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
+                  <p className="text-lg font-semibold text-white">No results</p>
+                  <p className="mt-2 text-white/60">The Open Library came up empty. Try another phrase or a different vibe.</p>
+                </div>
+              )}
             </div>
-
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-white">
-                  Reading tracker
-                </h2>
+                <h2 className="text-2xl font-semibold text-white">Reading tracker</h2>
                 <p className="text-sm text-white/50">Updated moments ago</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {tracker.map((book) => (
-                  <div
-                    key={book.title}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-5"
-                  >
+                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">
-                          {book.status}
-                        </p>
-                        <p className="text-lg font-semibold text-white">
-                          {book.title}
-                        </p>
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white">{book.title}</p>
                         <p className="text-sm text-white/60">{book.author}</p>
                       </div>
                       <span className="text-xs text-white/50">{book.mood}</span>
@@ -810,22 +786,17 @@ function App() {
                         className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
                       />
                     </div>
-                    <p className="mt-2 text-xs text-white/50">
-                      {book.progress}% complete
-                    </p>
+                    <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-
           <div className="space-y-6">
             <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-6 backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/50">
-                    Story Scores
-                  </p>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/50">Story Scores</p>
                   <h3 className="text-2xl font-semibold text-white">Pulse</h3>
                 </div>
                 <div className="text-right">
@@ -834,42 +805,28 @@ function App() {
                 </div>
               </div>
               <div className="mt-5 grid gap-3 text-sm">
-                <p className="text-white/70">
-                  Balance introspection with a pulse of action: schedule
-                  micro-check-ins each evening and note the narrative that
-                  carried you today.
-                </p>
-                <p className="text-white/50">
-                  Need a mood reset? Tap any rec to drop it into your queue.
-                </p>
+                <p className="text-white/70">Balance introspection with a pulse of action: schedule micro-check-ins each evening and note the narrative that carried you today.</p>
+                <p className="text-white/50">Need a mood reset? Tap any rec to drop it into your queue.</p>
               </div>
             </div>
-
             <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">
-                  Community
-                </h3>
+                <h3 className="text-xl font-semibold text-white">Community</h3>
                 <div className="flex gap-2 text-xs uppercase tracking-[0.3em] text-white/60">
                   <button
                     onClick={() => handleAuthModeSwitch('login')}
-                    className={`rounded-full px-3 py-1 transition ${
-                      authMode === 'login' ? 'bg-white/10 text-white' : 'bg-white/0'
-                    }`}
+                    className={`rounded-full px-3 py-1 transition ${authMode === 'login' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
                   >
                     Login
                   </button>
                   <button
                     onClick={() => handleAuthModeSwitch('signup')}
-                    className={`rounded-full px-3 py-1 transition ${
-                      authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0'
-                    }`}
+                    className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
                   >
                     Sign up
                   </button>
                 </div>
               </div>
-
               {!currentUser ? (
                 <div className="space-y-4">
                   {authMode === 'login' ? (
@@ -900,27 +857,21 @@ function App() {
                       <input
                         type="text"
                         value={signupData.username}
-                        onChange={(e) =>
-                          setSignupData((prev) => ({ ...prev, username: e.target.value }))
-                        }
+                        onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
                         placeholder="Choose a username"
                         className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                       />
                       <input
                         type="email"
                         value={signupData.email}
-                        onChange={(e) =>
-                          setSignupData((prev) => ({ ...prev, email: e.target.value }))
-                        }
+                        onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
                         placeholder="Email address"
                         className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                       />
                       <input
                         type="password"
                         value={signupData.password}
-                        onChange={(e) =>
-                          setSignupData((prev) => ({ ...prev, password: e.target.value }))
-                        }
+                        onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
                         placeholder="Password"
                         className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                       />
@@ -935,9 +886,7 @@ function App() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-[#0b1225]/70 p-4 text-sm text-white">
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/60">
-                    Signed in as
-                  </p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/60">Signed in as</p>
                   <p className="text-lg font-semibold">{currentUser.username}</p>
                   <p className="text-xs text-white/60">{currentUser.email}</p>
                   <button
@@ -948,47 +897,30 @@ function App() {
                   </button>
                 </div>
               )}
-
               <p className="text-xs text-rose-300">{authMessage}</p>
-
               <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
                 <div className="flex flex-wrap items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-                      Friends
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
                     <p className="text-sm text-white/60">
-                      {currentUser
-                        ? `${currentUser.friends.length} connections`
-                        : 'Log in to connect'}
+                      {currentUser ? `${currentUser.friends.length} connections` : 'Sign in to connect'}
                     </p>
                   </div>
-                  <div className="text-xs text-white/50">
-                    {activeFriendProfiles.length} online
-                  </div>
+                  <div className="text-xs text-white/50">{activeFriendProfiles.length} online</div>
                 </div>
                 <div className="space-y-2">
                   {activeFriendProfiles.length > 0 ? (
                     activeFriendProfiles.map((friend) => (
-                      <div
-                        key={friend.username}
-                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#050914]/70 px-4 py-3"
-                      >
+                      <div key={friend.username} className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#050914]/70 px-4 py-3">
                         <div>
                           <p className="text-sm font-semibold text-white">{friend.username}</p>
                           <p className="text-xs text-white/60">{friend.email}</p>
                         </div>
-                        <span className="text-xs uppercase tracking-[0.3em] text-white/50">
-                          friend
-                        </span>
+                        <span className="text-xs uppercase tracking-[0.3em] text-white/50">friend</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-white/50">
-                      {currentUser
-                        ? 'No friends yet. Start adding one.'
-                        : 'Sign in to see friends.'}
-                    </p>
+                    <p className="text-xs text-white/50">{currentUser ? 'No friends yet. Start adding one.' : 'Sign in to see friends.'}</p>
                   )}
                 </div>
                 <div className="flex flex-col gap-2">
@@ -1008,71 +940,54 @@ function App() {
                   <p className="text-xs text-white/60">{friendMessage}</p>
                 </div>
               </div>
-
-              <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-xs text-white/70">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
-                    <p className="text-[10px] text-white/60">
-                      Upload a Goodreads CSV or StoryGraph JSON export.
-                    </p>
-                  </div>
-                  <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
-                    <button
-                      onClick={() => {
-                        setImportFileType('goodreads')
-                        setImportMessage('')
-                      }}
-                      className={`rounded-full px-3 py-1 transition ${
-                        importFileType === 'goodreads'
-                          ? 'bg-white/10 text-white'
-                          : 'bg-white/0 text-white/50'
-                      }`}
-                    >
-                      Goodreads
-                    </button>
-                    <button
-                      onClick={() => {
-                        setImportFileType('storygraph')
-                        setImportMessage('')
-                      }}
-                      className={`rounded-full px-3 py-1 transition ${
-                        importFileType === 'storygraph'
-                          ? 'bg-white/10 text-white'
-                          : 'bg-white/0 text-white/50'
-                      }`}
-                    >
-                      StoryGraph
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-white/60">
-                  Export your Goodreads library via My Books → Import/Export → Export Library (CSV) or grab
-                  the StoryGraph JSON from Tools → Export Library, then upload the file here.
-                </p>
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
-                    {importFileType === 'goodreads' ? 'CSV file' : 'JSON file'}
-                  </span>
-                  <input
-                    type="file"
-                    accept={importFileType === 'goodreads' ? '.csv' : '.json'}
-                    onChange={importHandler}
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                </label>
-                <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
-              </div>
             </div>
-
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-xs text-white/70">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
+                  <p className="text-[10px] text-white/60">Upload a Goodreads CSV or StoryGraph JSON export.</p>
+                </div>
+                <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
+                  <button
+                    onClick={() => {
+                      setImportFileType('goodreads')
+                      setImportMessage('')
+                    }}
+                    className={`rounded-full px-3 py-1 transition ${importFileType === 'goodreads' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
+                  >
+                    Goodreads
+                  </button>
+                  <button
+                    onClick={() => {
+                      setImportFileType('storygraph')
+                      setImportMessage('')
+                    }}
+                    className={`rounded-full px-3 py-1 transition ${importFileType === 'storygraph' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
+                  >
+                    StoryGraph
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] text-white/60">
+                Export your Goodreads library via My Books → Import/Export → Export Library (CSV) or grab the StoryGraph JSON from Tools → Export Library, then upload the file here.
+              </p>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
+                  {importFileType === 'goodreads' ? 'CSV file' : 'JSON file'}
+                </span>
+                <input
+                  type="file"
+                  accept={importFileType === 'goodreads' ? '.csv' : '.json'}
+                  onChange={importHandler}
+                  className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+              </label>
+              <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
+            </div>
             <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">
-                  Handpicked reading lane
-                </h3>
-                <button className="text-xs uppercase tracking-[0.4em] text-white/50 transition hover:text-white">
-                  Refresh
-                </button>
+                <h3 className="text-xl font-semibold text-white">Handpicked reading lane</h3>
+                <button className="text-xs uppercase tracking-[0.4em] text-white/50 transition hover:text-white">Refresh</button>
               </div>
               <div className="space-y-4">
                 {curatedRecommendations.map((rec) => (
@@ -1080,9 +995,7 @@ function App() {
                     key={rec.title}
                     className={`rounded-2xl border border-white/15 bg-gradient-to-r ${rec.gradient} px-4 py-5 shadow-xl shadow-black/40`}
                   >
-                    <p className="text-xs uppercase tracking-[0.4em] text-white/80">
-                      {rec.vibe}
-                    </p>
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/80">{rec.vibe}</p>
                     <p className="text-lg font-semibold text-white">{rec.title}</p>
                     <p className="text-sm text-white/70">{rec.author}</p>
                   </div>
