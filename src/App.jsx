@@ -774,23 +774,48 @@ function App() {
       return
     }
     
+    if (!authIdentifier || !authPassword) {
+      setAuthMessage('Please enter email and password.')
+      return
+    }
+    
     try {
       const { data: { user }, error } = await supabase.auth.signInWithPassword({
         email: authIdentifier,
         password: authPassword,
       })
       
-      if (error) throw error
+      if (error) {
+        setAuthMessage(error.message || 'Login failed')
+        return
+      }
       
-      // Get user profile from users table
+      // Get user profile from users table by ID (not email)
       const { data: profiles, error: profileError } = await supabase
         .from('users')
         .select('*')
-        .eq('email', user.email)
+        .eq('id', user.id)
         .single()
       
       if (profileError && profileError.code !== 'PGRST116') {
-        throw profileError
+        console.error('Profile lookup error:', profileError)
+        // Create user profile if it doesn't exist
+        try {
+          const newUser = await createUser({
+            id: user.id,
+            username: authIdentifier.includes('@') ? authIdentifier.split('@')[0] : authIdentifier,
+            email: authIdentifier,
+            password_hash: 'managed_by_supabase_auth',
+            friends: [],
+            is_private: false,
+          })
+          setCurrentUser(newUser)
+          setAuthIdentifier('')
+          setAuthPassword('')
+        } catch (createError) {
+          setAuthMessage('Account created but profile setup failed. Please try again.')
+        }
+        return
       }
       
       if (!profiles) {
@@ -802,6 +827,7 @@ function App() {
       setAuthIdentifier('')
       setAuthPassword('')
     } catch (error) {
+      console.error('Login error:', error)
       setAuthMessage(error.message || 'Login failed')
     }
   }
