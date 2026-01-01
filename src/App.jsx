@@ -243,9 +243,10 @@ const getOwnerId = (user) => user?.id ?? user?.username
 
 function App() {
   const [tracker, setTracker] = useState(initialTracker)
-  const [searchQuery, setSearchQuery] = useState('introspection')
+  const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
   const [selectedBook, setSelectedBook] = useState(null)
   const [modalRating, setModalRating] = useState(0)
   const [modalProgress, setModalProgress] = useState(0)
@@ -374,7 +375,12 @@ function App() {
   }, [tracker])
 
   const fetchResults = async (term) => {
-    if (!term) return
+    if (!term?.trim()) {
+      setHasSearched(false)
+      setSearchResults([])
+      return
+    }
+    setHasSearched(true)
     setIsSearching(true)
     try {
       const response = await fetch(
@@ -397,11 +403,6 @@ function App() {
       setIsSearching(false)
     }
   }
-
-  useEffect(() => {
-    fetchResults(searchQuery)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const updateBook = (title, updates) => {
     setTracker((prev) =>
@@ -432,6 +433,11 @@ function App() {
   const handleAuthModeSwitch = (mode) => {
     setAuthMode(mode)
     setAuthMessage('')
+  }
+
+  const scrollToDiscovery = () => {
+    if (typeof window === 'undefined') return
+    document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const handleLogin = () => {
@@ -617,6 +623,46 @@ function App() {
           </div>
         </header>
 
+        <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-[#030617] via-[#040a1a] to-[#120029] p-8 text-white shadow-[0_30px_120px_rgba(5,2,20,0.65)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_55%)] opacity-40" />
+          <div className="pointer-events-none absolute -right-8 top-1/3 h-52 w-52 rounded-full bg-[#9412ff]/30 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-8 left-4 h-40 w-40 rounded-full bg-[#2ee8d7]/30 blur-3xl" />
+          <div className="relative flex flex-col gap-5">
+            <p className="text-xs uppercase tracking-[0.6em] text-white/70">
+              Bookmosh Codex
+            </p>
+            <h2 className="text-4xl font-semibold leading-tight text-white sm:text-5xl">
+              A library that listens to the hush between the pages.
+            </h2>
+            <p className="max-w-2xl text-base text-white/70">
+              Slip behind the velvet curtain. BookMosh stitches your moods, friends,
+              and bookmarks into a single illuminated shelf so every decision about
+              what to read next feels intentional.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => {
+                  handleAuthModeSwitch('signup')
+                  scrollToDiscovery()
+                }}
+                className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
+              >
+                Claim your shelf
+              </button>
+              <button
+                onClick={scrollToDiscovery}
+                className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
+              >
+                Explore the discovery pool
+              </button>
+            </div>
+            <p className="text-xs text-white/60">
+              Your vault is private, synced with Supabase, and ready for whatever you
+              breathe in next.
+            </p>
+          </div>
+        </section>
+
         <section className="grid gap-6 rounded-3xl bg-white/5 p-6 backdrop-blur-lg md:grid-cols-3">
           {['Reading', 'Want to Read', 'Read'].map((status) => (
             <div
@@ -636,7 +682,6 @@ function App() {
           ))}
         </section>
 
-        <section className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -669,48 +714,68 @@ function App() {
                 </button>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {searchResults.map((book) => (
-                  <div
-                    key={book.key}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
-                  >
-                    <div className="flex items-center gap-4">
-                      {book.cover ? (
-                        <img
-                          src={book.cover}
-                          alt={book.title}
-                          className="h-20 w-16 rounded-xl object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60">
-                          Cover
-                        </div>
-                      )}
-                      <div className="flex flex-1 flex-col gap-1">
-                        <p className="text-base font-semibold">{book.title}</p>
-                        <p className="text-sm text-white/60">{book.author}</p>
-                        <p className="text-xs text-white/40">
-                          {book.year ?? 'Year unknown'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleAddBook(book)}
-                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Track
-                      </button>
-                      <button
-                        onClick={() => openModal(book)}
-                        className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
-                      >
-                        Details
-                      </button>
-                    </div>
+              <div className="mt-6">
+                {!hasSearched ? (
+                  <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
+                    <p className="text-lg font-semibold text-white">No search yet.</p>
+                    <p className="mt-2 text-white/60">
+                      Start typing to call up manuscripts, memoirs, and mood-heavy
+                      adventures from the Open Library. Your shelf stays clean until
+                      you choose otherwise.
+                    </p>
                   </div>
-                ))}
+                ) : searchResults.length ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {searchResults.map((book) => (
+                      <div
+                        key={book.key}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                      >
+                        <div className="flex items-center gap-4">
+                          {book.cover ? (
+                            <img
+                              src={book.cover}
+                              alt={book.title}
+                              className="h-20 w-16 rounded-xl object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60">
+                              Cover
+                            </div>
+                          )}
+                          <div className="flex flex-1 flex-col gap-1">
+                            <p className="text-base font-semibold">{book.title}</p>
+                            <p className="text-sm text-white/60">{book.author}</p>
+                            <p className="text-xs text-white/40">
+                              {book.year ?? 'Year unknown'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleAddBook(book)}
+                            className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                          >
+                            Track
+                          </button>
+                          <button
+                            onClick={() => openModal(book)}
+                            className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
+                          >
+                            Details
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
+                    <p className="text-lg font-semibold text-white">No results</p>
+                    <p className="mt-2 text-white/60">
+                      The Open Library came up empty. Try another phrase or a different vibe.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -782,7 +847,9 @@ function App() {
 
             <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">Community</h3>
+                <h3 className="text-xl font-semibold text-white">
+                  Community
+                </h3>
                 <div className="flex gap-2 text-xs uppercase tracking-[0.3em] text-white/60">
                   <button
                     onClick={() => handleAuthModeSwitch('login')}
