@@ -1182,6 +1182,76 @@ function App() {
               </>
             )}
           </div>
+
+          {/* Search Results - Now directly below search bar */}
+          {hasSearched && searchResults.length > 0 && (
+            <div className="mt-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                  <div
+                    key={book.key}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                  >
+                    <div className="flex items-start gap-4">
+                      {book.cover ? (
+                        <img
+                          src={book.cover}
+                          alt={book.title}
+                          className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
+                          Cover
+                        </div>
+                      )}
+                      <div className="flex flex-1 flex-col gap-2 min-w-0">
+                        <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                        <button
+                          onClick={() => fetchAuthorBooks(book.author)}
+                          className="text-sm text-white/60 hover:text-white transition-colors text-left"
+                        >
+                          {book.author}
+                        </button>
+                        <div className="flex items-center gap-4 text-xs text-white/50">
+                          {book.year && <span>{book.year}</span>}
+                          {book.editionCount > 0 && <span>{book.editionCount} editions</span>}
+                          {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
+                        </div>
+                        {book.subjects.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {book.subjects.slice(0, 3).map((subject, idx) => (
+                              <span
+                                key={idx}
+                                className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70"
+                              >
+                                {subject}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleAddBook(book)}
+                      className="w-full rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                    >
+                      + Add to tracker
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {searchResults.length > 6 && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={() => setShowAllResults(!showAllResults)}
+                    className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                  >
+                    {showAllResults ? `Show first 6` : `Show ${searchResults.length - 6} more results`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -1369,76 +1439,6 @@ function App() {
             )}
           </div>
         </section>
-
-        {/* Search Results */}
-        {hasSearched && searchResults.length > 0 && (
-          <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-            <div className="grid gap-4 md:grid-cols-2">
-              {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
-                <div
-                  key={book.key}
-                  className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
-                >
-                  <div className="flex items-start gap-4">
-                    {book.cover ? (
-                      <img
-                        src={book.cover}
-                        alt={book.title}
-                        className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
-                        Cover
-                      </div>
-                    )}
-                    <div className="flex flex-1 flex-col gap-2 min-w-0">
-                      <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                      <button
-                        onClick={() => fetchAuthorBooks(book.author)}
-                        className="text-sm text-white/60 hover:text-white transition-colors text-left"
-                      >
-                        {book.author}
-                      </button>
-                      <div className="flex items-center gap-4 text-xs text-white/50">
-                        {book.year && <span>{book.year}</span>}
-                        {book.editionCount > 0 && <span>{book.editionCount} editions</span>}
-                        {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
-                      </div>
-                      {book.subjects.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {book.subjects.slice(0, 3).map((subject, idx) => (
-                            <span
-                              key={idx}
-                              className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70"
-                            >
-                              {subject}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleAddBook(book)}
-                    className="w-full rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                  >
-                    + Add to tracker
-                  </button>
-                </div>
-              ))}
-            </div>
-            {searchResults.length > 6 && (
-              <div className="mt-4 flex justify-center">
-                <button
-                  onClick={() => setShowAllResults(!showAllResults)}
-                  className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                >
-                  {showAllResults ? `Show first 6` : `Show ${searchResults.length - 6} more results`}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
           <div className="lg:col-span-2 space-y-6">
