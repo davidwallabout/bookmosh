@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { supabase } from './lib/supabaseClient'
 
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
@@ -201,6 +202,70 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
   })
 }
 
+const SUPABASE_TABLE = 'bookmosh_books'
+
+const mapSupabaseRow = (row) => ({
+  title: row.title ?? 'Untitled',
+  author: row.author ?? 'Unknown author',
+  status: row.status ?? 'Want to Read',
+  progress: Number(row.progress ?? 0) || 0,
+  mood: row.mood ?? 'Supabase sync',
+  rating: Number(row.rating ?? 0) || 0,
+})
+
+const buildSupabasePayload = (book, owner) => ({
+  owner,
+  title: book.title,
+  author: book.author,
+  status: book.status,
+  progress: book.progress,
+  mood: book.mood,
+  rating: book.rating,
+})
+
+const loadSupabaseBooks = async (owner) => {
+  if (!supabase || !owner) return []
+  try {
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE)
+      .select('*')
+      .eq('owner', owner)
+      .order('updated_at', { ascending: false })
+    if (error) {
+      console.error('Supabase fetch failed', error)
+      return []
+    }
+    return (data ?? []).map(mapSupabaseRow)
+  } catch (error) {
+    console.error('Supabase fetch failed', error)
+    return []
+  }
+}
+
+const persistTrackerToSupabase = async (owner, books) => {
+  if (!supabase || !owner || !books.length) return
+  try {
+    const { error } = await supabase
+      .from(SUPABASE_TABLE)
+      .upsert(books.map((book) => buildSupabasePayload(book, owner)), {
+        onConflict: ['owner', 'title'],
+      })
+    if (error) {
+      console.error('Supabase upsert failed', error)
+    }
+  } catch (error) {
+    console.error('Supabase upsert failed', error)
+  }
+}
+
+const deriveUsernameFromSupabase = (email = '', metadata = {}) => {
+  if (metadata.username) return metadata.username
+  if (!email) return 'reader'
+  return email.split('@')[0]
+}
+
+const getOwnerId = (user) => user?.id ?? user?.username
+
 function App() {
   const [tracker, setTracker] = useState(initialTracker)
   const [searchQuery, setSearchQuery] = useState('introspection')
@@ -222,10 +287,30 @@ function App() {
     password: '',
   })
   const [authMessage, setAuthMessage] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [supabaseUser, setSupabaseUser] = useState(null)
   const [friendQuery, setFriendQuery] = useState('')
   const [friendMessage, setFriendMessage] = useState('')
   const [importFileType, setImportFileType] = useState('goodreads')
   const [importMessage, setImportMessage] = useState('')
+
+  const ensureLocalUserProfile = (username, email) => {
+    setUsers((prev) => {
+      const existing = prev.find((item) => item.username === username)
+      if (existing) {
+        setCurrentUser(existing)
+        return prev
+      }
+      const newProfile = {
+        username,
+        email,
+        password: '',
+        friends: [],
+      }
+      setCurrentUser(newProfile)
+      return [newProfile, ...prev]
+    })
+  }
 
   const statusSummary = useMemo(() => {
     return tracker.reduce(
@@ -236,6 +321,11 @@ function App() {
       { Reading: 0, 'Want to Read': 0, Read: 0 },
     )
   }, [tracker])
+
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    persistTrackerToSupabase(currentUser.username, tracker)
+  }, [tracker, currentUser])
 
   const activeFriendProfiles = useMemo(() => {
     if (!currentUser) return []
@@ -276,6 +366,20 @@ function App() {
       }),
     )
   }, [users, currentUser])
+
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    let canceled = false
+    ;(async () => {
+      const rows = await loadSupabaseBooks(currentUser.username)
+      if (!canceled && rows.length) {
+        setTracker(rows)
+      }
+    })()
+    return () => {
+      canceled = true
+    }
+  }, [currentUser])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
