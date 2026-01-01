@@ -457,6 +457,8 @@ function App() {
             .then(({ data: profile, error }) => {
               if (mounted && profile && !error) {
                 setCurrentUser(profile)
+              } else if (error && error.code !== 'PGRST116') {
+                console.error('Profile lookup failed:', error)
               }
             })
             .catch(() => {
@@ -470,7 +472,10 @@ function App() {
       // Listen for auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!mounted || isUpdatingUser) return
-
+        
+        // Don't logout on token refresh events
+        if (event === 'TOKEN_REFRESHED') return
+        
         if (session?.user) {
           try {
             // Get user profile from users table
@@ -479,16 +484,22 @@ function App() {
               .select('*')
               .eq('id', session.user.id)
               .single()
-
+            
             if (profile && !error) {
               setCurrentUser(profile)
+            } else if (error && error.code !== 'PGRST116') {
+              console.error('Profile lookup failed:', error)
+              // Don't logout on profile errors, just log it
             }
           } catch (error) {
             // Silently fail if user profile lookup fails
-            console.error('Profile lookup failed:', error)
+            console.error('Auth state change error:', error)
           }
         } else {
-          setCurrentUser(null)
+          // Only logout if it's a genuine sign out, not a session error
+          if (event === 'SIGNED_OUT') {
+            setCurrentUser(null)
+          }
         }
       })
 
@@ -664,15 +675,15 @@ function App() {
     )
   }
 
-  const handleAddBook = (book) => {
+  const handleAddBook = (book, status = 'Want to Read') => {
     setTracker((prev) => {
       if (prev.some((item) => item.title === book.title)) return prev
       return [
         {
           title: book.title,
           author: book.author,
-          status: 'Want to Read',
-          progress: 0,
+          status: status,
+          progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
           mood: 'Open shelf',
           rating: 0,
         },
@@ -1190,7 +1201,8 @@ function App() {
                 {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
                   <div
                     key={book.key}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40 cursor-pointer"
+                    onClick={() => openModal(book)}
                   >
                     <div className="flex items-start gap-4">
                       {book.cover ? (
@@ -1207,7 +1219,10 @@ function App() {
                       <div className="flex flex-1 flex-col gap-2 min-w-0">
                         <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
                         <button
-                          onClick={() => fetchAuthorBooks(book.author)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            fetchAuthorBooks(book.author)
+                          }}
                           className="text-sm text-white/60 hover:text-white transition-colors text-left"
                         >
                           {book.author}
@@ -1231,12 +1246,35 @@ function App() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleAddBook(book)}
-                      className="w-full rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                    >
-                      + Add to tracker
-                    </button>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAddBook(book, 'Read')
+                        }}
+                        className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        + Read
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAddBook(book, 'Reading')
+                        }}
+                        className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        + Reading
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAddBook(book, 'Want to Read')
+                        }}
+                        className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        + Want
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1442,45 +1480,6 @@ function App() {
 
         <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
           <div className="lg:col-span-2 space-y-6">
-            <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
-                  <h2 className="text-2xl font-semibold text-white">
-                    {selectedAuthor ? `Books by ${selectedAuthor}` : 'Search the open shelves'}
-                  </h2>
-                  {selectedAuthor && (
-                    <button
-                      onClick={() => {
-                        setSelectedAuthor(null)
-                        setSearchQuery('')
-                        setSearchResults([])
-                        setHasSearched(false)
-                      }}
-                      className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white mt-1"
-                    >
-                      ← Back to search
-                    </button>
-                  )}
-                </div>
-                <p className="text-sm text-white/60">
-                  {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
-                </p>
-              </div>
-              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                {!selectedAuthor && (
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search authors, themes, or moods..."
-                    className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-6">
             <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-white">Community</h3>
@@ -1493,84 +1492,85 @@ function App() {
                   </button>
                   <button
                     onClick={() => handleAuthModeSwitch('signup')}
-                    className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
+                    className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
                   >
-                    Sign up
+                    Signup
                   </button>
                 </div>
               </div>
-              {!currentUser ? (
-                <div className="space-y-4">
-                  {authMode === 'login' ? (
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        value={authIdentifier}
-                        onChange={(e) => setAuthIdentifier(e.target.value)}
-                        placeholder="Username or email"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                      />
-                      <input
-                        type="password"
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        placeholder="Password"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                      />
-                      <button
-                        onClick={handleLogin}
-                        className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Continue
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        value={signupData.username}
-                        onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
-                        placeholder="Choose a username"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                      />
-                      <input
-                        type="email"
-                        value={signupData.email}
-                        onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="Email address"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                      />
-                      <input
-                        type="password"
-                        value={signupData.password}
-                        onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
-                        placeholder="Password"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                      />
-                      <button
-                        onClick={handleSignup}
-                        className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Create account
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-[#0b1225]/70 p-4 text-sm text-white">
+              <div className="space-y-3">
+                {authMode === 'login' ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={authIdentifier}
+                      onChange={(e) => setAuthIdentifier(e.target.value)}
+                      placeholder="Username or email"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="Password"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleLogin}
+                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={signupData.username}
+                      onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
+                      placeholder="Choose a username"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <input
+                      type="email"
+                      value={signupData.email}
+                      onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email address"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <input
+                      type="password"
+                      value={signupData.password}
+                      onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
+                      placeholder="Password"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleSignup}
+                      className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                    >
+                      Create account
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#0b1225]/70 p-4 text-sm text-white">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/60">Signed in as</p>
                   <p className="text-lg font-semibold">{currentUser.username}</p>
                   <p className="text-xs text-white/60">{currentUser.email}</p>
                   <button
                     onClick={handleLogout}
-                    className="mt-3 rounded-full border border-white/20 px-4 py-2 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    className="mt-3 rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
                   >
                     Log out
                   </button>
                 </div>
               )}
-              <p className="text-xs text-rose-300">{authMessage}</p>
-              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
+              <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
+            </div>
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
@@ -1706,8 +1706,6 @@ function App() {
                 ))}
               </div>
             </div>
-          </div>
-        </div>
           </>
         )}
 
