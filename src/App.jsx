@@ -346,24 +346,63 @@ function App() {
   }, [currentUser, users])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        // Get user profile from users table
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        
-        if (profile) {
-          setCurrentUser(profile)
-        }
-      } else {
-        setCurrentUser(null)
-      }
-    })
+    let mounted = true
 
-    return () => subscription.unsubscribe()
+    try {
+      // Get initial session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (mounted && session?.user) {
+          // Get user profile from users table
+          supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data: profile, error }) => {
+              if (mounted && profile && !error) {
+                setCurrentUser(profile)
+              }
+            })
+            .catch(() => {
+              // Silently fail if user profile doesn't exist yet
+            })
+        }
+      }).catch(() => {
+        // Silently fail if auth check fails
+      })
+
+      // Listen for auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted) return
+
+        if (session?.user) {
+          try {
+            // Get user profile from users table
+            const { data: profile, error } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
+
+            if (profile && !error) {
+              setCurrentUser(profile)
+            }
+          } catch (error) {
+            // Silently fail if user profile lookup fails
+            console.error('Profile lookup failed:', error)
+          }
+        } else {
+          setCurrentUser(null)
+        }
+      })
+
+      return () => {
+        mounted = false
+        subscription.unsubscribe()
+      }
+    } catch (error) {
+      console.error('Auth setup failed:', error)
+    }
   }, [])
 
   useEffect(() => {
