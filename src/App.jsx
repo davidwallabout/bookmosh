@@ -1122,85 +1122,67 @@ function App() {
 
         {currentUser && (
           <>
-        <div className="grid gap-6 md:grid-cols-3">
-          {['Reading', 'Want to Read', 'Read'].map((status) => (
-            <section
-              key={status}
-              onClick={() => setSelectedStatusFilter(selectedStatusFilter === status ? null : status)}
-              className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg cursor-pointer transition-all hover:border-white/40"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">
-                    {status}
-                  </p>
-                  <h3 className="text-2xl font-semibold text-white">
-                    {statusSummary[status]}
-                  </h3>
-                </div>
-                <div className="text-xs text-white/60">
-                  {status === 'Read' ? 'Total books' : 'Active'}
-                </div>
-              </div>
-              <p className="text-xs text-white/50">
-                {selectedStatusFilter === status ? 'Click to close' : 'Click to view'}
-              </p>
-            </section>
-          ))}
+        {/* Discovery Search Bar at Top */}
+        <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
+              <h2 className="text-2xl font-semibold text-white">
+                {selectedAuthor ? `Books by ${selectedAuthor}` : 'Search the open shelves'}
+              </h2>
+              {selectedAuthor && (
+                <button
+                  onClick={() => {
+                    setSelectedAuthor(null)
+                    setSearchQuery('')
+                    setSearchResults([])
+                    setHasSearched(false)
+                  }}
+                  className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white mt-1"
+                >
+                  ← Back to search
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-white/60">
+              {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
+            </p>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+            {!selectedAuthor && (
+              <>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search authors, themes, or moods..."
+                  className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                />
+                {searchQuery && (
+                  <div className="flex items-center justify-between text-xs text-white/60">
+                    <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
+                    {searchResults.length >= 6 && !showAllResults && (
+                      <button
+                        onClick={() => setShowAllResults(true)}
+                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                      >
+                        Show all
+                      </button>
+                    )}
+                    {showAllResults && searchResults.length > 6 && (
+                      <button
+                        onClick={() => setShowAllResults(false)}
+                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
-        
-        {selectedStatusFilter && (
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold text-white">{selectedStatusFilter} ({tracker.filter(book => book.status === selectedStatusFilter).length})</h2>
-              <button
-                onClick={() => setSelectedStatusFilter(null)}
-                className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {tracker.filter(book => book.status === selectedStatusFilter).map((book) => (
-                <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                      <p className="text-lg font-semibold text-white">{book.title}</p>
-                      <p className="text-sm text-white/60">{book.author}</p>
-                    </div>
-                    <span className="text-xs text-white/50">{book.mood}</span>
-                  </div>
-                  {book.status === 'Reading' && (
-                    <>
-                      <div className="mt-4 h-2 rounded-full bg-white/10">
-                        <div
-                          style={{ width: `${book.progress}%` }}
-                          className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
-                        />
-                      </div>
-                      <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
-                    </>
-                  )}
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => openModal(book)}
-                      className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                    >
-                      Details
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBook(book.title)}
-                      className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
         <div className="grid gap-6 md:grid-cols-2">
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
@@ -1388,7 +1370,77 @@ function App() {
           </div>
         </section>
 
-        <section className="grid gap-8 lg:grid-cols-[2fr_1fr]" id="discovery">
+        {/* Search Results */}
+        {hasSearched && searchResults.length > 0 && (
+          <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="grid gap-4 md:grid-cols-2">
+              {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                <div
+                  key={book.key}
+                  className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
+                >
+                  <div className="flex items-start gap-4">
+                    {book.cover ? (
+                      <img
+                        src={book.cover}
+                        alt={book.title}
+                        className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
+                        Cover
+                      </div>
+                    )}
+                    <div className="flex flex-1 flex-col gap-2 min-w-0">
+                      <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                      <button
+                        onClick={() => fetchAuthorBooks(book.author)}
+                        className="text-sm text-white/60 hover:text-white transition-colors text-left"
+                      >
+                        {book.author}
+                      </button>
+                      <div className="flex items-center gap-4 text-xs text-white/50">
+                        {book.year && <span>{book.year}</span>}
+                        {book.editionCount > 0 && <span>{book.editionCount} editions</span>}
+                        {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
+                      </div>
+                      {book.subjects.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {book.subjects.slice(0, 3).map((subject, idx) => (
+                            <span
+                              key={idx}
+                              className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70"
+                            >
+                              {subject}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAddBook(book)}
+                    className="w-full rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                  >
+                    + Add to tracker
+                  </button>
+                </div>
+              ))}
+            </div>
+            {searchResults.length > 6 && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={() => setShowAllResults(!showAllResults)}
+                  className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                >
+                  {showAllResults ? `Show first 6` : `Show ${searchResults.length - 6} more results`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
           <div className="lg:col-span-2 space-y-6">
             <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1448,180 +1500,6 @@ function App() {
                     )}
                   </>
                 )}
-              </div>
-            </div>
-            <div className="mt-6">
-              {!hasSearched ? (
-                <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
-                  <p className="text-lg font-semibold text-white">Start typing to search</p>
-                  <p className="mt-2 text-white/60">
-                    Search results will appear automatically as you type. Powered by an extensive book catalog.
-                  </p>
-                </div>
-              ) : searchResults.length ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {(showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
-                      <div
-                        key={book.key}
-                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40"
-                      >
-                        <div className="flex items-start gap-4">
-                          {book.cover ? (
-                            <img
-                              src={book.cover}
-                              alt={book.title}
-                              className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
-                              Cover
-                            </div>
-                          )}
-                          <div className="flex flex-1 flex-col gap-2 min-w-0">
-                            <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                            <button
-                              onClick={() => fetchAuthorBooks(book.author)}
-                              className="text-sm text-white/60 hover:text-white transition-colors text-left"
-                            >
-                              {book.author}
-                            </button>
-                            <div className="flex flex-wrap gap-2 text-xs text-white/50">
-                              {book.year && <span>{book.year}</span>}
-                              {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
-                              {book.editionCount > 1 && <span>{book.editionCount} editions</span>}
-                            </div>
-                            {book.subjects.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {book.subjects.slice(0, 2).map((subject, i) => (
-                                  <span key={i} className="text-xs bg-white/10 px-2 py-1 rounded text-white/70">
-                                    {subject}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleAddBook(book)}
-                            className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                          >
-                            Track
-                          </button>
-                          <button
-                            onClick={() => openModal(book)}
-                            className="rounded-2xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50 transition hover:border-white/40 hover:text-white"
-                          >
-                            Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {!showAllResults && searchResults.length > 6 && (
-                    <div className="text-center mt-4">
-                      <button
-                        onClick={() => setShowAllResults(true)}
-                        className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Show {searchResults.length - 6} more results
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-[#0b0f1f]/70 p-6 text-sm text-white/70">
-                  <p className="text-lg font-semibold text-white">No results</p>
-                  <p className="mt-2 text-white/60">No books found. Try another search term.</p>
-                </div>
-              )}
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-white">Currently Reading</h2>
-                <p className="text-sm text-white/60">Instant results</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {tracker.filter(book => book.status === 'Reading').map((book) => (
-                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white">{book.title}</p>
-                        <p className="text-sm text-white/60">{book.author}</p>
-                      </div>
-                      <span className="text-xs text-white/50">{book.mood}</span>
-                    </div>
-                    <div className="mt-4 h-2 rounded-full bg-white/10">
-                      <div
-                        style={{ width: `${book.progress}%` }}
-                        className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => openModal(book)}
-                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Details
-                      </button>
-                      <button
-                        onClick={() => startMosh(book.title)}
-                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Start Mosh
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBook(book.title)}
-                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-white">Read</h2>
-                <p className="text-sm text-white/50">{tracker.filter(book => book.status === 'Read').length} books completed</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {tracker.filter(book => book.status === 'Read').map((book) => (
-                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white">{book.title}</p>
-                        <p className="text-sm text-white/60">{book.author}</p>
-                      </div>
-                      <span className="text-xs text-white/50">{book.mood}</span>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => openModal(book)}
-                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Details
-                      </button>
-                      <button
-                        onClick={() => startMosh(book.title)}
-                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Start Mosh
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBook(book.title)}
-                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
@@ -1852,7 +1730,7 @@ function App() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
           </>
         )}
 
