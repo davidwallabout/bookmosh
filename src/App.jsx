@@ -603,14 +603,13 @@ function App() {
         <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.5em] text-white/60">
-              BookMosh Library
+              BookMosh
             </p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Plot journeys at bookmosh.com
+              A simple book tracker
             </h1>
             <p className="mt-3 max-w-2xl text-lg text-white/70">
-              Mesh what you read, what you feel, and who you read with into one living shelf that updates
-              along with you.
+              Track what you read, discover new books, and connect with friends.
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -639,19 +638,13 @@ function App() {
             </p>
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => {
-                  handleAuthModeSwitch('signup')
-                  scrollToDiscovery()
-                }}
+                onClick={() => handleAuthModeSwitch('signup')}
                 className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
               >
                 Sign up
               </button>
               <button
-                onClick={() => {
-                  handleAuthModeSwitch('login')
-                  scrollToDiscovery()
-                }}
+                onClick={() => handleAuthModeSwitch('login')}
                 className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
               >
                 Log in
@@ -663,6 +656,85 @@ function App() {
             </p>
           </div>
         </section>
+
+        {!currentUser && (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-white">Get started</h3>
+              <div className="flex gap-2 text-xs uppercase tracking-[0.3em] text-white/60">
+                <button
+                  onClick={() => handleAuthModeSwitch('login')}
+                  className={`rounded-full px-3 py-1 transition ${authMode === 'login' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => handleAuthModeSwitch('signup')}
+                  className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
+                >
+                  Sign up
+                </button>
+              </div>
+            </div>
+            <div className="mt-6 space-y-4">
+              {authMode === 'login' ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={authIdentifier}
+                    onChange={(e) => setAuthIdentifier(e.target.value)}
+                    placeholder="Username or email"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="Password"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleLogin}
+                    className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                  >
+                    Continue
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={signupData.username}
+                    onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
+                    placeholder="Choose a username"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                  <input
+                    type="email"
+                    value={signupData.email}
+                    onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="Email address"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder="Password"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSignup}
+                    className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                  >
+                    Create account
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
+          </section>
+        )}
 
         {currentUser && (
           <>
