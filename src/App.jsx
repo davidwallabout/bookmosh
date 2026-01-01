@@ -684,34 +684,45 @@ function App() {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_55%)] opacity-40" />
           <div className="pointer-events-none absolute -right-8 top-1/3 h-52 w-52 rounded-full bg-[#9412ff]/30 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-8 left-4 h-40 w-40 rounded-full bg-[#2ee8d7]/30 blur-3xl" />
-          <div className="relative flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.6em] text-white/70">
-              Bookmosh Codex
-            </p>
-            <h2 className="text-4xl font-semibold leading-tight text-white sm:text-5xl">
-              A modern book tracker.
-            </h2>
-            <p className="max-w-2xl text-base text-white/70">
-              Track what you read, discover new books, and connect with friends. Your private shelf syncs with Supabase and works the way you do.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => handleAuthModeSwitch('signup')}
-                className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
-              >
-                Sign up
-              </button>
-              <button
-                onClick={() => handleAuthModeSwitch('login')}
-                className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
-              >
-                Log in
-              </button>
+          <div className="relative flex justify-center">
+            <img
+              src="/bookmosh-center.png"
+              alt="BookMosh"
+              className="h-64 w-auto max-w-lg rounded-lg"
+              onError={(e) => {
+                e.target.style.display = 'none'
+                e.target.nextSibling.style.display = 'flex'
+              }}
+            />
+            <div className="hidden flex-col items-center gap-5" style={{ display: 'none' }}>
+              <p className="text-xs uppercase tracking-[0.6em] text-white/70">
+                Bookmosh Codex
+              </p>
+              <h2 className="text-4xl font-semibold leading-tight text-white sm:text-5xl">
+                A modern book tracker.
+              </h2>
+              <p className="max-w-2xl text-base text-white/70">
+                Track what you read, discover new books, and connect with friends. Your private shelf syncs with Supabase and works the way you do.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => handleAuthModeSwitch('signup')}
+                  className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
+                >
+                  Sign up
+                </button>
+                <button
+                  onClick={() => handleAuthModeSwitch('login')}
+                  className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
+                >
+                  Log in
+                </button>
+              </div>
+              <p className="text-xs text-white/60">
+                Your vault is private, synced with Supabase, and ready for whatever you
+                breathe in next.
+              </p>
             </div>
-            <p className="text-xs text-white/60">
-              Your vault is private, synced with Supabase, and ready for whatever you
-              breathe in next.
-            </p>
           </div>
         </section>
         )}
