@@ -651,7 +651,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
-        <header className="flex items-center justify-between">
+        <header className="flex justify-center">
           <button
             onClick={() => {
               setSelectedStatusFilter(null)
@@ -676,9 +676,6 @@ function App() {
                 <span className="text-3xl font-bold text-midnight">B</span>
               </div>
             </div>
-          </button>
-          <button className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-6 py-2 text-sm font-semibold text-midnight transition hover:from-white/80">
-            + New Log
           </button>
         </header>
 
