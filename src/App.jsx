@@ -519,132 +519,17 @@ function App() {
   }, [currentUser, users, isUpdatingUser])
 
   useEffect(() => {
-    let mounted = true
-
-    if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
-      setAuthMode('reset')
-    }
-
-    if (!supabase) {
-      console.error('[AUTH] Supabase client not initialized')
-      return
-    }
-
-    // Manual session restoration from localStorage
-    const restoreSession = async () => {
+    // SIMPLE AUTH: Just restore user from localStorage
+    const storedUser = localStorage.getItem('bookmosh-user')
+    if (storedUser) {
       try {
-        const storedSession = localStorage.getItem('bookmosh-session')
-        console.log('[AUTH] Checking for stored session:', !!storedSession)
-        
-        if (storedSession) {
-          const sessionData = JSON.parse(storedSession)
-          console.log('[AUTH] Found stored session, restoring for user:', sessionData.user?.id)
-          
-          // Manually set the session in Supabase
-          const { data, error } = await supabase.auth.setSession({
-            access_token: sessionData.access_token,
-            refresh_token: sessionData.refresh_token
-          })
-          
-          if (error) {
-            console.error('[AUTH] Session restore failed:', error)
-            localStorage.removeItem('bookmosh-session')
-            return
-          }
-          
-          if (data.user && mounted) {
-            console.log('[AUTH] Session restored, fetching profile')
-            // Get user profile
-            const { data: profile, error: profileError } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', data.user.id)
-              .single()
-            
-            if (profile && !profileError && mounted) {
-              console.log('[AUTH] User restored:', profile.username)
-              setCurrentUser(profile)
-            } else if (mounted) {
-              console.log('[AUTH] Setting fallback user')
-              setCurrentUser({
-                id: data.user.id,
-                username: data.user.email?.split('@')[0] || 'user',
-                email: data.user.email || '',
-                friends: [],
-                is_private: false,
-              })
-            }
-          }
-        } else {
-          console.log('[AUTH] No stored session found')
-        }
+        const user = JSON.parse(storedUser)
+        console.log('[AUTH] Restored user from localStorage:', user.username)
+        setCurrentUser(user)
       } catch (err) {
-        console.error('[AUTH] Session restore error:', err)
-        localStorage.removeItem('bookmosh-session')
+        console.error('[AUTH] Failed to restore user:', err)
+        localStorage.removeItem('bookmosh-user')
       }
-    }
-
-    restoreSession()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AUTH] State change event:', event, { hasSession: !!session, hasUser: !!session?.user })
-      
-      if (!mounted) return
-
-      if (event === 'PASSWORD_RECOVERY') {
-        setAuthMode('reset')
-        setAuthMessage('')
-        setCurrentUser(null)
-        return
-      }
-      
-      if (event === 'SIGNED_OUT') {
-        console.log('[AUTH] User signed out')
-        setCurrentUser(null)
-        return
-      }
-      
-      if (session?.user) {
-        try {
-          console.log('[AUTH] Fetching profile for user:', session.user.id)
-          // Get user profile from users table
-          const { data: profile, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-          
-          if (profile && !error) {
-            console.log('[AUTH] Setting user from profile:', profile.username)
-            setCurrentUser(profile)
-          } else if (error) {
-            console.error('[AUTH] Profile lookup failed:', error)
-            console.log('[AUTH] Setting fallback user')
-            setCurrentUser({
-              id: session.user.id,
-              username: session.user.email?.split('@')[0] || 'user',
-              email: session.user.email || '',
-              friends: [],
-              is_private: false,
-            })
-          }
-        } catch (error) {
-          console.error('[AUTH] Profile lookup failed:', error)
-          setCurrentUser({
-            id: session.user.id,
-            username: session.user.email?.split('@')[0] || 'user',
-            email: session.user.email || '',
-            friends: [],
-            is_private: false,
-          })
-        }
-      }
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
     }
   }, [])
 
@@ -1264,7 +1149,7 @@ function App() {
   const handleLogin = async () => {
     setAuthMessage('')
     if (!supabase) {
-      setAuthMessage('Supabase not configured. Please check environment variables.')
+      setAuthMessage('Supabase not configured.')
       return
     }
     
@@ -1275,129 +1160,49 @@ function App() {
     
     setAuthLoading(true)
     try {
-      // Clear any stale session first
+      // SIMPLE AUTH: Just verify password and get user profile
+      const identifier = authIdentifier.trim().toLowerCase()
+      
+      // Look up user by username or email
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .or(`username.eq.${identifier},email.eq.${identifier}`)
+        .limit(1)
+      
+      if (error || !users || users.length === 0) {
+        setAuthMessage('User not found')
+        return
+      }
+      
+      const user = users[0]
+      
+      // Verify password with Supabase auth (but don't use session)
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: authPassword,
+      })
+      
+      if (authError) {
+        setAuthMessage('Invalid password')
+        // Sign out immediately to not create session
+        await supabase.auth.signOut({ scope: 'local' })
+        return
+      }
+      
+      // Sign out immediately - we don't want Supabase sessions
       await supabase.auth.signOut({ scope: 'local' })
       
-      const withTimeout = async (promise, ms, label) => {
-        return await Promise.race([
-          promise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${label} timed out`)), ms),
-          ),
-        ])
-      }
-
-      let loginEmail = authIdentifier.trim().toLowerCase()
-      if (!loginEmail.includes('@')) {
-        const { data: userLookup, error: usernameError } = await withTimeout(
-          supabase
-            .from('users')
-            .select('email')
-            .eq('username', loginEmail)
-            .single(),
-          30000,
-          'Username lookup',
-        )
-        if (usernameError) {
-          setAuthMessage(usernameError.message || 'Login failed')
-          return
-        }
-        if (!userLookup) {
-          setAuthMessage('User not found')
-          return
-        }
-        loginEmail = userLookup.email
-      }
-
-      const { data: { user }, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: loginEmail,
-          password: authPassword,
-        }),
-        30000,
-        'Sign in',
-      )
+      // Store user profile directly in localStorage
+      console.log('[AUTH] Login successful, storing user:', user.username)
+      localStorage.setItem('bookmosh-user', JSON.stringify(user))
       
-      if (error) {
-        setAuthMessage(error.message || 'Login failed')
-        return
-      }
-      
-      // Get user profile from users table by ID (not email)
-      const { data: profiles, error: profileError } = await withTimeout(
-        supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single(),
-        30000,
-        'Profile lookup',
-      )
-      
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Profile lookup error:', profileError)
-        // Create user profile if it doesn't exist
-        try {
-          const newUser = await createUser({
-            id: user.id,
-            username: authIdentifier.includes('@') ? authIdentifier.split('@')[0] : authIdentifier,
-            email: authIdentifier,
-            password_hash: 'managed_by_supabase_auth',
-            friends: [],
-            is_private: false,
-          })
-          setCurrentUser(newUser)
-          setAuthIdentifier('')
-          setAuthPassword('')
-        } catch (createError) {
-          setAuthMessage('Account created but profile setup failed. Please try again.')
-        }
-        return
-      }
-      
-      if (!profiles) {
-        setAuthMessage('User profile not found. Please sign up first.')
-        return
-      }
-      
-      // Store session manually in localStorage
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        console.log('[AUTH] Storing session in localStorage')
-        localStorage.setItem('bookmosh-session', JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          user: session.user
-        }))
-      }
-      
-      setCurrentUser(profiles)
+      setCurrentUser(user)
       setAuthIdentifier('')
       setAuthPassword('')
     } catch (error) {
-      console.error('Login error:', error)
-      
-      // Clear all auth storage on error to prevent corruption
-      try {
-        await supabase.auth.signOut({ scope: 'local' })
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('bookmosh-auth')
-          // Clear any Supabase auth keys
-          Object.keys(localStorage).forEach(key => {
-            if (key.includes('supabase') || key.includes('sb-')) {
-              localStorage.removeItem(key)
-            }
-          })
-        }
-      } catch (cleanupError) {
-        console.error('Cleanup error:', cleanupError)
-      }
-      
-      if (String(error?.message || '').includes('timed out')) {
-        setAuthMessage('Login timed out. Please try again.')
-      } else {
-        setAuthMessage(error.message || 'Login failed')
-      }
+      console.error('[AUTH] Login error:', error)
+      setAuthMessage('Login failed')
     } finally {
       setAuthLoading(false)
     }
@@ -1454,20 +1259,9 @@ function App() {
   }
 
   const handleLogout = async () => {
-    if (!supabase) {
-      setCurrentUser(null)
-      return
-    }
-    
-    try {
-      await supabase.auth.signOut()
-      localStorage.removeItem('bookmosh-session')
-      setCurrentUser(null)
-    } catch (error) {
-      console.error('Logout error:', error)
-      localStorage.removeItem('bookmosh-session')
-      setCurrentUser(null)
-    }
+    console.log('[AUTH] Logging out')
+    localStorage.removeItem('bookmosh-user')
+    setCurrentUser(null)
   }
 
   const importHandler = (event) => {
