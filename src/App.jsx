@@ -1996,7 +1996,12 @@ function App() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
-                  <h3 className="text-2xl font-semibold text-white">{filteredLibrary.length}</h3>
+                  <h3 className="text-2xl font-semibold text-white">
+                    {libraryFilterTags.length > 0 || librarySearch.trim() 
+                      ? `${filteredLibrary.length}/${tracker.length}`
+                      : filteredLibrary.length
+                    }
+                  </h3>
                 </div>
                 <div className="flex gap-2">
                   <select
