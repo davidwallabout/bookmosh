@@ -825,7 +825,7 @@ function App() {
     return () => {
       subscription?.unsubscribe()
     }
-  }, [])
+  }, [isUpdatingUser])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
