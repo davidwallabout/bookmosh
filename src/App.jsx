@@ -2068,7 +2068,13 @@ function App() {
 
                       <div className="min-w-0 flex-1">
                         <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
+                        <button
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="text-lg font-semibold text-white line-clamp-2 hover:text-white/80 transition text-left"
+                        >
+                          {book.title}
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
