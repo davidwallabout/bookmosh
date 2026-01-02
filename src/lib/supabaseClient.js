@@ -16,11 +16,13 @@ const cookieStorage = {
     if (typeof document === 'undefined') return
     // 30 days
     const maxAge = 60 * 60 * 24 * 30
-    document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure`
+    const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:'
+    document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isHttps ? '; Secure' : ''}`
   },
   removeItem: (key) => {
     if (typeof document === 'undefined') return
-    document.cookie = `${encodeURIComponent(key)}=; Path=/; Max-Age=0; SameSite=Lax; Secure`
+    const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:'
+    document.cookie = `${encodeURIComponent(key)}=; Path=/; Max-Age=0; SameSite=Lax${isHttps ? '; Secure' : ''}`
   },
 }
 
@@ -49,6 +51,7 @@ export const supabase =
         auth: { 
           persistSession: true,
           autoRefreshToken: true,
+          detectSessionInUrl: true,
           storage
         } 
       })

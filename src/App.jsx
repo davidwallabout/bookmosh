@@ -415,6 +415,11 @@ function App() {
   const [activeMosh, setActiveMosh] = useState(null)
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
   const [moshDraft, setMoshDraft] = useState('')
+  const [isMoshInviteOpen, setIsMoshInviteOpen] = useState(false)
+  const [moshInviteBook, setMoshInviteBook] = useState(null)
+  const [moshInviteFriend, setMoshInviteFriend] = useState('')
+  const [moshInviteError, setMoshInviteError] = useState('')
+  const [moshInviteLoading, setMoshInviteLoading] = useState(false)
   const [librarySearch, setLibrarySearch] = useState('')
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
@@ -423,6 +428,8 @@ function App() {
   const [authMode, setAuthMode] = useState('login')
   const [authIdentifier, setAuthIdentifier] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('')
   const [signupData, setSignupData] = useState({
     username: '',
     email: '',
@@ -514,6 +521,10 @@ function App() {
   useEffect(() => {
     let mounted = true
 
+    if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+      setAuthMode('reset')
+    }
+
     try {
       // Get initial session
       supabase.auth.getSession().then(({ data: { session } }) => {
@@ -542,6 +553,13 @@ function App() {
       // Listen for auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!mounted || isUpdatingUser) return
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setAuthMode('reset')
+          setAuthMessage('')
+          setCurrentUser(null)
+          return
+        }
         
         if (session?.user) {
           try {
@@ -969,19 +987,11 @@ function App() {
     }
   }
 
-  const sendMoshInvite = async (book, friendUsername = null) => {
+  const sendMoshInvite = async (book, friendUsername) => {
     if (!supabase || !currentUser) return
-    const ok = window.confirm('Start a mosh?')
-    if (!ok) return
+    if (!friendUsername) return
 
-    let inviteUsername = friendUsername
-    if (!inviteUsername) {
-      const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
-      inviteUsername = window.prompt('Invite which friend (username)?', friends[0] ?? '')
-    }
-    if (!inviteUsername) return
-
-    const friendId = await resolveUserId(inviteUsername)
+    const friendId = await resolveUserId(friendUsername)
     if (!friendId) {
       setFriendMessage('Could not find that friend profile.')
       return
@@ -990,7 +1000,7 @@ function App() {
     try {
       const normalized = normalizeBookTags(book)
       const participantsIds = Array.from(new Set([currentUser.id, friendId]))
-      const participantsUsernames = Array.from(new Set([currentUser.username, inviteUsername]))
+      const participantsUsernames = Array.from(new Set([currentUser.username, friendUsername]))
 
       const { data, error } = await supabase
         .from('moshes')
@@ -1016,7 +1026,7 @@ function App() {
             participantsIds.map((id) => ({
               mosh_id: created.id,
               user_id: id,
-              username: id === currentUser.id ? currentUser.username : inviteUsername,
+              username: id === currentUser.id ? currentUser.username : friendUsername,
               last_read_at: new Date().toISOString(),
             })),
           )
@@ -1026,6 +1036,41 @@ function App() {
     } catch (error) {
       console.error('Create mosh failed', error)
       setFriendMessage('Failed to start mosh.')
+    }
+  }
+
+  const openMoshInvite = (book) => {
+    if (!currentUser) return
+    const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
+    setMoshInviteBook(normalizeBookTags(book))
+    setMoshInviteFriend(friends[0] ?? '')
+    setMoshInviteError('')
+    setIsMoshInviteOpen(true)
+  }
+
+  const closeMoshInvite = () => {
+    setIsMoshInviteOpen(false)
+    setMoshInviteBook(null)
+    setMoshInviteFriend('')
+    setMoshInviteError('')
+    setMoshInviteLoading(false)
+  }
+
+  const confirmMoshInvite = async () => {
+    if (!currentUser || !moshInviteBook) return
+    const inviteUsername = moshInviteFriend.trim()
+    if (!inviteUsername) {
+      setMoshInviteError('Choose a friend to invite.')
+      return
+    }
+    setMoshInviteLoading(true)
+    setMoshInviteError('')
+    try {
+      await sendMoshInvite(moshInviteBook, inviteUsername)
+      closeMoshInvite()
+    } catch {
+      setMoshInviteError('Failed to start mosh.')
+      setMoshInviteLoading(false)
     }
   }
 
@@ -1061,6 +1106,81 @@ function App() {
   const handleAuthModeSwitch = (mode) => {
     setAuthMode(mode)
     setAuthMessage('')
+    if (mode !== 'reset') {
+      setResetPassword('')
+      setResetPasswordConfirm('')
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    setAuthMessage('')
+    if (!supabase) {
+      setAuthMessage('Supabase not configured. Please check environment variables.')
+      return
+    }
+
+    const email = authIdentifier.trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      setAuthMessage('Enter your email above, then click Forgot password.')
+      return
+    }
+
+    setAuthLoading(true)
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      })
+      if (error) {
+        setAuthMessage(error.message || 'Password reset failed')
+        return
+      }
+      setAuthMessage('Check your email for a reset link.')
+    } catch (error) {
+      console.error('Reset password failed', error)
+      setAuthMessage('Password reset failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    setAuthMessage('')
+    if (!supabase) {
+      setAuthMessage('Supabase not configured. Please check environment variables.')
+      return
+    }
+
+    const next = resetPassword.trim()
+    if (!next || next.length < 6) {
+      setAuthMessage('Password must be at least 6 characters.')
+      return
+    }
+    if (next !== resetPasswordConfirm.trim()) {
+      setAuthMessage('Passwords do not match.')
+      return
+    }
+
+    setAuthLoading(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: next })
+      if (error) {
+        setAuthMessage(error.message || 'Password update failed')
+        return
+      }
+      await supabase.auth.signOut()
+      setAuthIdentifier('')
+      setAuthPassword('')
+      setResetPassword('')
+      setResetPasswordConfirm('')
+      setAuthMode('login')
+      setAuthMessage('Password updated. Please sign in.')
+    } catch (error) {
+      console.error('Password update failed', error)
+      setAuthMessage('Password update failed')
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
   const viewFriendProfile = async (friendUsername) => {
@@ -1090,7 +1210,12 @@ function App() {
   const startMosh = async (bookTitle, friendUsername = null) => {
     const fromTracker = tracker.find((b) => b.title === bookTitle)
     const fallback = { title: bookTitle, author: fromTracker?.author ?? 'Unknown author', cover: fromTracker?.cover ?? null, tags: fromTracker?.tags ?? [fromTracker?.status ?? 'to-read'], status: fromTracker?.status ?? 'to-read' }
-    await sendMoshInvite(fromTracker ?? fallback, friendUsername)
+    const book = fromTracker ?? fallback
+    if (friendUsername) {
+      await sendMoshInvite(book, friendUsername)
+      return
+    }
+    openMoshInvite(book)
   }
 
   const scrollToDiscovery = () => {
@@ -1455,11 +1580,11 @@ function App() {
         )}
 
         {!currentUser && (
-          <header className="flex items-center justify-center py-10">
+          <header className="flex items-center justify-center pt-6 pb-2">
             <img
               src="/bookmosh-center.png"
               alt="BookMosh"
-              className="h-32 w-auto sm:h-44 md:h-56"
+              className="h-40 w-auto sm:h-52 md:h-64"
             />
           </header>
         )}
@@ -1719,7 +1844,7 @@ function App() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => sendMoshInvite(book)}
+                            onClick={() => openMoshInvite(book)}
                             className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
                           >
                             Send Mosh invite
@@ -1856,7 +1981,7 @@ function App() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => sendMoshInvite(book)}
+                              onClick={() => openMoshInvite(book)}
                               className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
                             >
                               Send Mosh invite
@@ -1997,7 +2122,7 @@ function App() {
         )}
 
         {!currentUser && (
-          <section className="mx-auto w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+          <section className="mx-auto w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg -mt-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.4em] text-white/50">Welcome</p>
@@ -2053,6 +2178,13 @@ function App() {
                 />
                 <button
                   type="button"
+                  onClick={() => handleAuthModeSwitch('forgot')}
+                  className="text-left text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white"
+                >
+                  Forgot password?
+                </button>
+                <button
+                  type="button"
                   onClick={handleLogin}
                   disabled={authLoading}
                   className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
@@ -2061,7 +2193,7 @@ function App() {
                 </button>
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
               </div>
-            ) : (
+            ) : authMode === 'signup' ? (
               <div className="mt-6 space-y-3">
                 <input
                   type="text"
@@ -2094,8 +2226,136 @@ function App() {
                 </button>
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
               </div>
+            ) : authMode === 'forgot' ? (
+              <div className="mt-6 space-y-3">
+                <input
+                  type="email"
+                  value={authIdentifier}
+                  onChange={(e) => setAuthIdentifier(e.target.value)}
+                  placeholder="Email"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={authLoading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {authLoading ? 'Sending…' : 'Send reset link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAuthModeSwitch('login')}
+                  className="text-left text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white"
+                >
+                  ← Back to login
+                </button>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                <input
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="New password"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={authLoading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {authLoading ? 'Updating…' : 'Update password'}
+                </button>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
+              </div>
             )}
           </section>
+        )}
+
+        {currentUser && isMoshInviteOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                closeMoshInvite()
+              }
+            }}
+          >
+            <div className="w-[clamp(320px,80vw,620px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Start a mosh</p>
+                  <h2 className="text-xl font-semibold text-white">Invite a friend</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeMoshInvite}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                <div className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                  {moshInviteBook?.cover ? (
+                    <img src={moshInviteBook.cover} alt={moshInviteBook.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white line-clamp-2">{moshInviteBook?.title ?? 'Book'}</p>
+                  <p className="text-sm text-white/60 line-clamp-1">{moshInviteBook?.author ?? 'Unknown author'}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Friend</label>
+                <select
+                  value={moshInviteFriend}
+                  onChange={(e) => setMoshInviteFriend(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
+                >
+                  <option value="">Select a friend...</option>
+                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : []).map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{moshInviteError}</p>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeMoshInvite}
+                  className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmMoshInvite}
+                  disabled={moshInviteLoading}
+                  className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {moshInviteLoading ? 'Starting…' : 'Start mosh'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {currentUser && isMoshPanelOpen && (
