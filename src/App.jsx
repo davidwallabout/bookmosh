@@ -1532,9 +1532,8 @@ function App() {
 
     setAuthLoading(true)
     try {
-      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+        redirectTo: 'https://bookmosh.com',
       })
       if (error) {
         setAuthMessage(error.message || 'Password reset failed')
@@ -2757,7 +2756,7 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        const inviteUrl = window.location.origin
+                        const inviteUrl = 'https://bookmosh.com'
                         navigator.clipboard.writeText(inviteUrl)
                         alert('Invite link copied to clipboard! Share it with friends to invite them to BookMosh.')
                       }}
