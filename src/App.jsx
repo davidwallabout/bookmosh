@@ -1623,11 +1623,11 @@ function App() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleAddBook(book, 'Read')
+                              handleAddBook(book, 'to-read')
                             }}
                             className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                           >
-                            + Read
+                            + to-read
                           </button>
                           <button
                             type="button"
@@ -1635,7 +1635,7 @@ function App() {
                               e.stopPropagation()
                               handleAddBook(book, 'Reading')
                             }}
-                            className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                           >
                             + Reading
                           </button>
@@ -1643,11 +1643,11 @@ function App() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleAddBook(book, 'to-read')
+                              handleAddBook(book, 'Read')
                             }}
                             className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                           >
-                            + to-read
+                            + Read
                           </button>
                         </div>
                       </div>
