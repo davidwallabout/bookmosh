@@ -779,9 +779,27 @@ function App() {
       return
     }
     
+    setAuthLoading(true)
     try {
+      let loginEmail = authIdentifier.trim().toLowerCase()
+      if (!loginEmail.includes('@')) {
+        const { data: userLookup, error: usernameError } = await supabase
+          .from('users')
+          .select('email')
+          .eq('username', loginEmail)
+          .single()
+        if (usernameError) {
+          setAuthMessage(usernameError.message || 'Login failed')
+          return
+        }
+        if (!userLookup) {
+          setAuthMessage('User not found')
+          return
+        }
+        loginEmail = userLookup.email
+      }
       const { data: { user }, error } = await supabase.auth.signInWithPassword({
-        email: authIdentifier,
+        email: loginEmail,
         password: authPassword,
       })
       
@@ -829,6 +847,8 @@ function App() {
     } catch (error) {
       console.error('Login error:', error)
       setAuthMessage(error.message || 'Login failed')
+    } finally {
+      setAuthLoading(false)
     }
   }
 
@@ -1146,10 +1166,15 @@ function App() {
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                   />
                   <button
-                    onClick={handleLogin}
-                    className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleLogin()
+                    }}
+                    disabled={authLoading}
+                    className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Continue
+                    {authLoading ? 'Signing in…' : 'Continue'}
                   </button>
                 </div>
               ) : (
@@ -1574,10 +1599,15 @@ function App() {
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                     />
                     <button
-                      onClick={handleLogin}
-                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleLogin()
+                      }}
+                      disabled={authLoading}
+                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Continue
+                      {authLoading ? 'Signing in…' : 'Continue'}
                     </button>
                   </div>
                 ) : (
@@ -1625,28 +1655,27 @@ function App() {
                     Log out
                   </button>
                 </div>
-              )}
-              <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
-            </div>
-            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
-                    <p className="text-sm text-white/60">
-                      {isPrivate ? 'Private profile' : 'Public profile'}
-                    </p>
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
+                      <p className="text-sm text-white/60">
+                        {isPrivate ? 'Private profile' : 'Public profile'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsPrivate(!isPrivate)}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      {isPrivate ? 'Make Public' : 'Make Private'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setIsPrivate(!isPrivate)}
-                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
-                  >
-                    {isPrivate ? 'Make Public' : 'Make Private'}
-                  </button>
+                  <p className="text-xs text-white/50">
+                    {isPrivate ? 'Only friends can see your reading activity' : 'Anyone can discover your reading profile'}
+                  </p>
                 </div>
-                <p className="text-xs text-white/50">
-                  {isPrivate ? 'Only friends can see your reading activity' : 'Anyone can discover your reading profile'}
-                </p>
               </div>
+
               <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
                 <div className="flex flex-wrap items-center justify-between">
                   <div>
@@ -1702,49 +1731,52 @@ function App() {
                   <p className="text-xs text-white/60">{friendMessage}</p>
                 </div>
               </div>
-            </div>
-            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-xs text-white/70">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
-                  <p className="text-[10px] text-white/60">Upload a Goodreads CSV or StoryGraph JSON export.</p>
+
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-xs text-white/70">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
+                    <p className="text-[10px] text-white/60">
+                      Upload a Goodreads CSV or StoryGraph JSON export.
+                    </p>
+                  </div>
+                  <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
+                    <button
+                      onClick={() => {
+                        setImportFileType('goodreads')
+                        setImportMessage('')
+                      }}
+                      className={`rounded-full px-3 py-1 transition ${importFileType === 'goodreads' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
+                    >
+                      Goodreads
+                    </button>
+                    <button
+                      onClick={() => {
+                        setImportFileType('storygraph')
+                        setImportMessage('')
+                      }}
+                      className={`rounded-full px-3 py-1 transition ${importFileType === 'storygraph' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
+                    >
+                      StoryGraph
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
-                  <button
-                    onClick={() => {
-                      setImportFileType('goodreads')
-                      setImportMessage('')
-                    }}
-                    className={`rounded-full px-3 py-1 transition ${importFileType === 'goodreads' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
-                  >
-                    Goodreads
-                  </button>
-                  <button
-                    onClick={() => {
-                      setImportFileType('storygraph')
-                      setImportMessage('')
-                    }}
-                    className={`rounded-full px-3 py-1 transition ${importFileType === 'storygraph' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
-                  >
-                    StoryGraph
-                  </button>
-                </div>
+                <p className="text-[10px] text-white/60">
+                  Export your Goodreads library via My Books → Import/Export → Export Library (CSV) or grab the StoryGraph JSON from Tools → Export Library, then upload the file here.
+                </p>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
+                    {importFileType === 'goodreads' ? 'CSV file' : 'CSV or JSON file'}
+                  </span>
+                  <input
+                    type="file"
+                    accept={importFileType === 'goodreads' ? '.csv' : '.csv,.json'}
+                    onChange={importHandler}
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  />
+                </label>
+                <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
               </div>
-              <p className="text-[10px] text-white/60">
-                Export your Goodreads library via My Books → Import/Export → Export Library (CSV) or grab the StoryGraph JSON from Tools → Export Library, then upload the file here.
-              </p>
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
-                  {importFileType === 'goodreads' ? 'CSV file' : 'CSV or JSON file'}
-                </span>
-                <input
-                  type="file"
-                  accept={importFileType === 'goodreads' ? '.csv' : '.csv,.json'}
-                  onChange={importHandler}
-                  className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                />
-              </label>
-              <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
             </div>
             <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
