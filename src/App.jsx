@@ -1823,7 +1823,7 @@ function App() {
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10">
         {currentUser && (
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-center">
           <button
             onClick={() => {
               setSelectedStatusFilter(null)
@@ -1839,14 +1839,6 @@ function App() {
               alt="BookMosh"
               className="h-48 w-auto"
             />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsMoshPanelOpen(true)}
-            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60 hover:text-white"
-          >
-            Mosh
           </button>
         </header>
         )}
