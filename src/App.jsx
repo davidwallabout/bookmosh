@@ -163,7 +163,9 @@ const getMoshMessages = async (moshId) => {
   }
 }
 
-const statusOptions = ['Reading', 'Want to Read', 'Read']
+const statusOptions = ['Reading', 'Want', 'Read']
+const statusTags = ['Want', 'Reading', 'Read']
+const allTags = ['Want', 'Reading', 'Read', 'Owned']
 
 const defaultUsers = []
 
@@ -186,16 +188,17 @@ const normalizeStatus = (status, progress = 0) => {
   if (lower.includes('read')) return 'Read'
   if (lower.includes('currently') || lower.includes('reading')) return 'Reading'
   if (lower.includes('want') || lower.includes('queue') || lower.includes('wish')) {
-    return 'Want to Read'
+    return 'Want'
   }
   if (progress >= 100) return 'Read'
   if (progress > 0) return 'Reading'
-  return 'Want to Read'
+  return 'Want'
 }
 
 const buildBookEntry = (book) => {
   const progress =
     Number(book.progress ?? book.percent ?? book.percentComplete ?? 0) || 0
+  const status = normalizeStatus(book.status ?? book.shelf, progress)
   const entry = {
     title: book.title ?? book.name ?? 'Untitled',
     author:
@@ -203,7 +206,8 @@ const buildBookEntry = (book) => {
       book.authors?.[0] ??
       (Array.isArray(book.authors) ? book.authors[0] : null) ??
       'Unknown author',
-    status: normalizeStatus(book.status ?? book.shelf, progress),
+    status,
+    tags: [status],
     progress,
     mood: book.mood ?? book.tag ?? 'Imported',
     rating: Number(book.rating ?? book.score ?? 0) || 0,
@@ -271,7 +275,7 @@ const parseStoryGraphCSV = (text) => {
     .map((item) => ({
       title: item.Title || item.title || '',
       author: item.Author || item.author || '',
-      status: item['Read Status'] || item.readStatus || 'Want to Read',
+      status: item['Read Status'] || item.readStatus || 'Want',
       rating: parseInt(item['My Rating'] || item.rating) || 0,
       progress: item['Read Progress'] || item.progress || 0,
       mood: item['Mood'] || item.mood || '',
@@ -284,7 +288,7 @@ const parseStoryGraphJSON = (text) => {
     return data.map((item) => ({
       title: item.title || '',
       author: item.author || '',
-      status: item.readStatus || 'Want to Read',
+      status: item.readStatus || 'Want',
       rating: item.rating || 0,
       progress: item.progress || 0,
       mood: item.mood || '',
@@ -323,10 +327,35 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
 
 const SUPABASE_TABLE = 'bookmosh_books'
 
+const deriveStatusFromTags = (tags = [], fallback = 'Want') => {
+  if (tags.includes('Reading')) return 'Reading'
+  if (tags.includes('Read')) return 'Read'
+  if (tags.includes('Want')) return 'Want'
+  return fallback
+}
+
+const normalizeBookTags = (book) => {
+  const existingTags = Array.isArray(book.tags) ? book.tags : []
+  const status = book.status ?? deriveStatusFromTags(existingTags, 'Want')
+  const owned = existingTags.includes('Owned')
+  const nextTags = Array.from(
+    new Set([status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
+  )
+  return {
+    ...book,
+    status,
+    tags: nextTags,
+  }
+}
+
 const mapSupabaseRow = (row) => ({
   title: row.title ?? 'Untitled',
   author: row.author ?? 'Unknown author',
-  status: row.status ?? 'Want to Read',
+  tags: Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'Want'],
+  status: deriveStatusFromTags(
+    Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'Want'],
+    row.status ?? 'Want',
+  ),
   progress: Number(row.progress ?? 0) || 0,
   mood: row.mood ?? 'Supabase sync',
   rating: Number(row.rating ?? 0) || 0,
@@ -337,6 +366,7 @@ const buildSupabasePayload = (book, owner) => ({
   title: book.title,
   author: book.author,
   status: book.status,
+  tags: Array.isArray(book.tags) ? book.tags : undefined,
   progress: book.progress,
   mood: book.mood,
   rating: book.rating,
@@ -364,12 +394,25 @@ const loadSupabaseBooks = async (owner) => {
 const persistTrackerToSupabase = async (owner, books) => {
   if (!supabase || !owner || !books.length) return
   try {
+    const payload = books.map((book) => buildSupabasePayload(book, owner))
     const { error } = await supabase
       .from(SUPABASE_TABLE)
-      .upsert(books.map((book) => buildSupabasePayload(book, owner)), {
+      .upsert(payload, {
         onConflict: ['owner', 'title'],
       })
     if (error) {
+      // Backwards compat: if the table doesn't have a tags column yet, retry without it.
+      const message = String(error.message ?? '')
+      if (message.toLowerCase().includes('tags') && message.toLowerCase().includes('column')) {
+        const fallbackPayload = payload.map(({ tags, ...rest }) => rest)
+        const { error: fallbackError } = await supabase
+          .from(SUPABASE_TABLE)
+          .upsert(fallbackPayload, { onConflict: ['owner', 'title'] })
+        if (fallbackError) {
+          console.error('Supabase upsert failed', fallbackError)
+        }
+        return
+      }
       console.error('Supabase upsert failed', error)
     }
   } catch (error) {
@@ -399,6 +442,7 @@ function App() {
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalMood, setModalMood] = useState('')
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
+  const [libraryFilterTags, setLibraryFilterTags] = useState([])
   const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [isPrivate, setIsPrivate] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
@@ -446,7 +490,7 @@ function App() {
         summary[book.status] = (summary[book.status] ?? 0) + 1
         return summary
       },
-      { Reading: 0, 'Want to Read': 0, Read: 0 },
+      { Reading: 0, Want: 0, Read: 0 },
     )
   }, [tracker])
 
@@ -688,14 +732,35 @@ function App() {
 
   const updateBook = (title, updates) => {
     setTracker((prev) =>
-      prev.map((book) => (book.title === title ? { ...book, ...updates } : book)),
+      prev.map((book) => {
+        if (book.title !== title) return book
+        const merged = { ...book, ...updates }
+
+        // Keep status/tags consistent.
+        if (Object.prototype.hasOwnProperty.call(updates, 'tags')) {
+          const nextTags = Array.isArray(merged.tags) ? merged.tags : []
+          const status = deriveStatusFromTags(nextTags, merged.status ?? 'Want')
+          return { ...merged, status, tags: Array.from(new Set(nextTags)) }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+          const existingTags = Array.isArray(book.tags) ? book.tags : []
+          const owned = existingTags.includes('Owned')
+          const nextTags = Array.from(
+            new Set([updates.status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
+          )
+          return { ...merged, tags: nextTags, status: updates.status }
+        }
+
+        return normalizeBookTags(merged)
+      }),
     )
     setSelectedBook((book) =>
       book?.title === title ? { ...book, ...updates } : book,
     )
   }
 
-  const handleAddBook = (book, status = 'Want to Read') => {
+  const handleAddBook = (book, status = 'Want') => {
     setTracker((prev) => {
       if (prev.some((item) => item.title === book.title)) return prev
       return [
@@ -703,6 +768,13 @@ function App() {
           title: book.title,
           author: book.author,
           status: status,
+          tags: Array.from(new Set([status])),
+          cover: book.cover ?? null,
+          year: book.year ?? null,
+          isbn: book.isbn ?? null,
+          publisher: book.publisher ?? null,
+          language: book.language ?? null,
+          editionCount: book.editionCount ?? 0,
           progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
           mood: 'Open shelf',
           rating: 0,
@@ -710,6 +782,40 @@ function App() {
         ...prev,
       ]
     })
+  }
+
+  const toggleLibraryFilterTag = (tag) => {
+    setLibraryFilterTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    )
+  }
+
+  const filteredLibrary = useMemo(() => {
+    const normalized = tracker.map(normalizeBookTags)
+    const filtered = !libraryFilterTags.length
+      ? normalized
+      : normalized.filter((book) =>
+          libraryFilterTags.every((tag) => (book.tags ?? []).includes(tag)),
+        )
+
+    return filtered
+      .slice()
+      .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+  }, [tracker, libraryFilterTags])
+
+  const setBookStatusTag = (title, nextStatus) => {
+    updateBook(title, { status: nextStatus })
+  }
+
+  const toggleBookOwned = (title) => {
+    const current = tracker.find((b) => b.title === title)
+    const tags = Array.isArray(current?.tags) ? current.tags : []
+    const hasOwned = tags.includes('Owned')
+    const status = deriveStatusFromTags(tags, current?.status ?? 'Want')
+    const nextTags = Array.from(
+      new Set([status, ...(hasOwned ? [] : ['Owned'])].filter(Boolean)),
+    )
+    updateBook(title, { tags: nextTags })
   }
 
   const handleAuthModeSwitch = (mode) => {
@@ -1042,10 +1148,11 @@ function App() {
   }
 
   const openModal = (book) => {
-    setSelectedBook(book)
+    const normalized = normalizeBookTags(book)
+    setSelectedBook(normalized)
     setModalRating(book.rating ?? 0)
     setModalProgress(book.progress ?? 0)
-    setModalStatus(book.status ?? statusOptions[0])
+    setModalStatus(normalized.status ?? statusOptions[0])
     setModalMood(book.mood ?? '')
   }
 
@@ -1388,7 +1495,7 @@ function App() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleAddBook(book, 'Want to Read')
+                          handleAddBook(book, 'Want')
                         }}
                         className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                       >
@@ -1413,142 +1520,11 @@ function App() {
           )}
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm uppercase tracking-[0.4em] text-white/50">Currently Reading</p>
-                <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Reading').length}</h3>
-              </div>
-              <button
-                onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
-                className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-              >
-                + Add book
-              </button>
-            </div>
-            <div className="space-y-4">
-              {tracker.filter(book => book.status === 'Reading').length > 0 ? (
-                tracker.filter(book => book.status === 'Reading').map((book) => (
-                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white">{book.title}</p>
-                        <p className="text-sm text-white/60">{book.author}</p>
-                      </div>
-                      <span className="text-xs text-white/50">{book.mood}</span>
-                    </div>
-                    <div className="mt-4 h-2 rounded-full bg-white/10">
-                      <div
-                        style={{ width: `${book.progress}%` }}
-                        className="h-2 rounded-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-white/50">{book.progress}% complete</p>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => openModal(book)}
-                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Details
-                      </button>
-                      <button
-                        onClick={() => startMosh(book.title)}
-                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Start Mosh
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBook(book.title)}
-                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-white/60 mb-4">No books currently being read</p>
-                  <button
-                    onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                  >
-                    + Add a book
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm uppercase tracking-[0.4em] text-white/50">Read</p>
-                <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Read').length}</h3>
-              </div>
-              <button
-                onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
-                className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-              >
-                + Add book
-              </button>
-            </div>
-            <div className="space-y-4">
-              {tracker.filter(book => book.status === 'Read').length > 0 ? (
-                tracker.filter(book => book.status === 'Read').map((book) => (
-                  <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white">{book.title}</p>
-                        <p className="text-sm text-white/60">{book.author}</p>
-                      </div>
-                      <span className="text-xs text-white/50">{book.mood}</span>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => openModal(book)}
-                        className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Details
-                      </button>
-                      <button
-                        onClick={() => startMosh(book.title)}
-                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Start Mosh
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBook(book.title)}
-                        className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-white/60 mb-4">No books completed yet</p>
-                  <button
-                    onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                  >
-                    + Add a book
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want to Read</p>
-              <h3 className="text-2xl font-semibold text-white">{tracker.filter(book => book.status === 'Want to Read').length}</h3>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
+              <h3 className="text-2xl font-semibold text-white">{filteredLibrary.length}</h3>
             </div>
             <button
               onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
@@ -1557,42 +1533,141 @@ function App() {
               + Add book
             </button>
           </div>
-          <div className="space-y-4">
-            {tracker.filter(book => book.status === 'Want to Read').length > 0 ? (
-              tracker.filter(book => book.status === 'Want to Read').map((book) => (
-                <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                      <p className="text-lg font-semibold text-white">{book.title}</p>
-                      <p className="text-sm text-white/60">{book.author}</p>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleLibraryFilterTag(tag)}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                  libraryFilterTags.includes(tag)
+                    ? 'border-white/60 bg-white/10 text-white'
+                    : 'border-white/10 text-white/60 hover:border-white/40'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+            {libraryFilterTags.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setLibraryFilterTags([])}
+                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {filteredLibrary.length > 0 ? (
+              filteredLibrary.map((book) => (
+                <div
+                  key={book.title}
+                  className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => openModal(book)}
+                    className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                  >
+                    {book.cover ? (
+                      <img
+                        src={book.cover}
+                        alt={book.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">
+                        Cover
+                      </div>
+                    )}
+                  </button>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
+                        <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+                      </div>
+                      <div className="text-xs text-white/50">{book.mood}</div>
                     </div>
-                    <span className="text-xs text-white/50">{book.mood}</span>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => openModal(book)}
-                      className="rounded-2xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                    >
-                      Details
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBook(book.title)}
-                      className="rounded-2xl border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                    >
-                      Delete
-                    </button>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(book.tags ?? []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {statusTags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setBookStatusTag(book.title, tag)
+                          }}
+                          className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                            book.status === tag
+                              ? 'border-white/60 bg-white/10 text-white'
+                              : 'border-white/10 text-white/60 hover:border-white/40'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleBookOwned(book.title)
+                        }}
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                          (book.tags ?? []).includes('Owned')
+                            ? 'border-white/60 bg-white/10 text-white'
+                            : 'border-white/10 text-white/60 hover:border-white/40'
+                        }`}
+                      >
+                        Owned
+                      </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openModal(book)}
+                        className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBook(book.title)}
+                        className="rounded-full border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
             ) : (
               <div className="text-center py-8">
-                <p className="text-white/60 mb-4">No books in your reading queue</p>
+                <p className="text-white/60 mb-4">No books match those tags</p>
                 <button
-                  onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+                  type="button"
+                  onClick={() => setLibraryFilterTags([])}
                   className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
                 >
-                  + Add a book
+                  Clear filters
                 </button>
               </div>
             )}
@@ -1894,9 +1969,9 @@ function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want to Read ({selectedFriend.books?.filter(b => b.status === 'Want to Read').length || 0})</p>
+                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want ({selectedFriend.books?.filter(b => b.status === 'Want').length || 0})</p>
                     <div className="space-y-3">
-                      {selectedFriend.books?.filter(b => b.status === 'Want to Read').map((book) => (
+                      {selectedFriend.books?.filter(b => b.status === 'Want').map((book) => (
                         <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                           <div className="flex items-center justify-between">
                             <div>
