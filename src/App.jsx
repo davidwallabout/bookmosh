@@ -1455,11 +1455,11 @@ function App() {
         )}
 
         {!currentUser && (
-          <header className="flex items-center justify-center py-6">
+          <header className="flex items-center justify-center py-10">
             <img
-              src="/bookmosh-logo.png"
+              src="/bookmosh-center.png"
               alt="BookMosh"
-              className="h-20 w-auto sm:h-24"
+              className="h-32 w-auto sm:h-44 md:h-56"
             />
           </header>
         )}
