@@ -266,9 +266,9 @@ const parseStoryGraphCSV = (text) => {
         status = 'to-read'
       }
       
-      // Check if book is owned
-      const owned = (item.Owned || item.owned || '').toLowerCase()
-      const isOwned = owned === 'true' || owned === 'yes' || owned === '1'
+      // Check if book is owned (Storygraph uses "Owned?" as column name)
+      const owned = (item['Owned?'] || item.Owned || item.owned || '').toLowerCase()
+      const isOwned = owned === 'true' || owned === 'yes' || owned === '1' || owned === 'owned'
       
       // Build tags array with status and owned
       const tags = [status]
