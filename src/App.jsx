@@ -1430,7 +1430,7 @@ function App() {
             <img
               src="/bookmosh-logo.png"
               alt="BookMosh"
-              className="h-16 w-auto"
+              className="h-48 w-auto"
             />
           </button>
 
