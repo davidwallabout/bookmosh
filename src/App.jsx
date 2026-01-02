@@ -417,7 +417,8 @@ function App() {
   const [moshDraft, setMoshDraft] = useState('')
   const [isMoshInviteOpen, setIsMoshInviteOpen] = useState(false)
   const [moshInviteBook, setMoshInviteBook] = useState(null)
-  const [moshInviteFriend, setMoshInviteFriend] = useState('')
+  const [moshInviteFriends, setMoshInviteFriends] = useState([])
+  const [moshInviteSearch, setMoshInviteSearch] = useState('')
   const [moshInviteError, setMoshInviteError] = useState('')
   const [moshInviteLoading, setMoshInviteLoading] = useState(false)
   const [librarySearch, setLibrarySearch] = useState('')
@@ -1028,9 +1029,9 @@ function App() {
 
   const openMoshInvite = (book) => {
     if (!currentUser) return
-    const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
     setMoshInviteBook(normalizeBookTags(book))
-    setMoshInviteFriend(friends[0] ?? '')
+    setMoshInviteFriends([])
+    setMoshInviteSearch('')
     setMoshInviteError('')
     setIsMoshInviteOpen(true)
   }
@@ -1038,22 +1039,34 @@ function App() {
   const closeMoshInvite = () => {
     setIsMoshInviteOpen(false)
     setMoshInviteBook(null)
-    setMoshInviteFriend('')
+    setMoshInviteFriends([])
+    setMoshInviteSearch('')
     setMoshInviteError('')
     setMoshInviteLoading(false)
   }
 
+  const addMoshInviteFriend = (friendUsername) => {
+    if (!moshInviteFriends.includes(friendUsername)) {
+      setMoshInviteFriends([...moshInviteFriends, friendUsername])
+      setMoshInviteSearch('')
+    }
+  }
+
+  const removeMoshInviteFriend = (friendUsername) => {
+    setMoshInviteFriends(moshInviteFriends.filter(f => f !== friendUsername))
+  }
+
   const confirmMoshInvite = async () => {
     if (!currentUser || !moshInviteBook) return
-    const inviteUsername = moshInviteFriend.trim()
-    if (!inviteUsername) {
-      setMoshInviteError('Choose a friend to invite.')
+    if (moshInviteFriends.length === 0) {
+      setMoshInviteError('Select at least one friend to invite.')
       return
     }
     setMoshInviteLoading(true)
     setMoshInviteError('')
     try {
-      await sendMoshInvite(moshInviteBook, inviteUsername)
+      // Send invite to first friend for now (multi-participant moshes need backend support)
+      await sendMoshInvite(moshInviteBook, moshInviteFriends[0])
       closeMoshInvite()
     } catch {
       setMoshInviteError('Failed to start mosh.')
@@ -2284,19 +2297,63 @@ function App() {
               </div>
 
               <div className="mt-5 space-y-3">
-                <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Friend</label>
-                <select
-                  value={moshInviteFriend}
-                  onChange={(e) => setMoshInviteFriend(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
-                >
-                  <option value="">Select a friend...</option>
-                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : []).map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Invite Friends</label>
+                
+                {/* Selected friends tiles */}
+                {moshInviteFriends.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {moshInviteFriends.map((friend) => (
+                      <div key={friend} className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1">
+                        <span className="text-sm text-white">{friend}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMoshInviteFriend(friend)}
+                          className="text-white/60 hover:text-white transition"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Search input */}
+                <input
+                  type="text"
+                  value={moshInviteSearch}
+                  onChange={(e) => setMoshInviteSearch(e.target.value)}
+                  placeholder="Type to search friends..."
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                />
+
+                {/* Available friends list */}
+                {moshInviteSearch && (
+                  <div className="max-h-40 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-[#050914]/60 p-3">
+                    {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                      .filter(f => 
+                        f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
+                        !moshInviteFriends.includes(f)
+                      )
+                      .map((friend) => (
+                        <button
+                          key={friend}
+                          type="button"
+                          onClick={() => addMoshInviteFriend(friend)}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
+                        >
+                          {friend}
+                        </button>
+                      ))}
+                    {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                      .filter(f => 
+                        f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
+                        !moshInviteFriends.includes(f)
+                      ).length === 0 && (
+                      <p className="text-sm text-white/60">No matching friends</p>
+                    )}
+                  </div>
+                )}
+
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{moshInviteError}</p>
               </div>
 
