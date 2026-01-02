@@ -781,13 +781,26 @@ function App() {
     
     setAuthLoading(true)
     try {
+      const withTimeout = async (promise, ms, label) => {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out`)), ms),
+          ),
+        ])
+      }
+
       let loginEmail = authIdentifier.trim().toLowerCase()
       if (!loginEmail.includes('@')) {
-        const { data: userLookup, error: usernameError } = await supabase
-          .from('users')
-          .select('email')
-          .eq('username', loginEmail)
-          .single()
+        const { data: userLookup, error: usernameError } = await withTimeout(
+          supabase
+            .from('users')
+            .select('email')
+            .eq('username', loginEmail)
+            .single(),
+          15000,
+          'Username lookup',
+        )
         if (usernameError) {
           setAuthMessage(usernameError.message || 'Login failed')
           return
@@ -798,10 +811,15 @@ function App() {
         }
         loginEmail = userLookup.email
       }
-      const { data: { user }, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: authPassword,
-      })
+
+      const { data: { user }, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: authPassword,
+        }),
+        15000,
+        'Sign in',
+      )
       
       if (error) {
         setAuthMessage(error.message || 'Login failed')
@@ -809,11 +827,15 @@ function App() {
       }
       
       // Get user profile from users table by ID (not email)
-      const { data: profiles, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      const { data: profiles, error: profileError } = await withTimeout(
+        supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
+          .single(),
+        15000,
+        'Profile lookup',
+      )
       
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Profile lookup error:', profileError)
@@ -846,7 +868,11 @@ function App() {
       setAuthPassword('')
     } catch (error) {
       console.error('Login error:', error)
-      setAuthMessage(error.message || 'Login failed')
+      if (String(error?.message || '').includes('timed out')) {
+        setAuthMessage('Login timed out. Please check your connection and try again.')
+      } else {
+        setAuthMessage(error.message || 'Login failed')
+      }
     } finally {
       setAuthLoading(false)
     }
