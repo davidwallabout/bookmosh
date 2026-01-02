@@ -1679,7 +1679,14 @@ function App() {
           }
         }
         
-        alert(`Updated ${readBooks.length} books to 100% progress`)
+        // Show success modal
+        setSuccessModal({ 
+          show: true, 
+          book: null, 
+          list: `Updated ${readBooks.length} book${readBooks.length === 1 ? '' : 's'} to 100% progress`, 
+          alreadyAdded: false 
+        })
+        setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
       }
     } catch (error) {
       console.error('[LIBRARY] Update progress exception:', error)
@@ -2608,12 +2615,20 @@ function App() {
                 </p>
                 {!successModal.alreadyAdded && (
                   <>
-                    <p className="text-sm text-white/80">
-                      <span className="font-semibold">{successModal.book?.title}</span>
-                    </p>
-                    <p className="text-xs uppercase tracking-[0.3em] text-aurora">
-                      Added to {successModal.list}
-                    </p>
+                    {successModal.book ? (
+                      <>
+                        <p className="text-sm text-white/80">
+                          <span className="font-semibold">{successModal.book.title}</span>
+                        </p>
+                        <p className="text-xs uppercase tracking-[0.3em] text-aurora">
+                          Added to {successModal.list}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-white/80">
+                        {successModal.list}
+                      </p>
+                    )}
                   </>
                 )}
                 {successModal.alreadyAdded && (
