@@ -2327,7 +2327,7 @@ function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Community</p>
-                  <h3 className="text-2xl font-semibold text-white">{activeFriendProfiles.length}</h3>
+                  <h3 className="text-2xl font-semibold text-white">{currentUser?.friends?.length ?? 0}</h3>
                 </div>
                 <button
                   type="button"
@@ -2349,27 +2349,42 @@ function App() {
                   </div>
                   <div className="space-y-2">
                     {activeFriendProfiles.length > 0 ? (
-                      activeFriendProfiles.map((friend) => (
-                        <div key={friend.username} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => viewFriendProfile(friend.username)}
-                              className="text-left text-sm font-semibold text-white hover:text-white/80 transition-colors"
-                            >
-                              {friend.username}
-                            </button>
-                            <p className="text-xs text-white/60">{friend.email}</p>
+                      activeFriendProfiles.map((friend) => {
+                        const friendBooks = users.find(u => u.username === friend.username)?.library || []
+                        const recentBooks = friendBooks.filter(b => b.status === 'Read').slice(0, 3)
+                        
+                        return (
+                          <div key={friend.username} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <button
+                                type="button"
+                                onClick={() => viewFriendProfile(friend.username)}
+                                className="text-left text-sm font-semibold text-white hover:text-white/80 transition-colors"
+                              >
+                                {friend.username}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => viewFriendProfile(friend.username)}
+                                className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition"
+                              >
+                                View
+                              </button>
+                            </div>
+                            {recentBooks.length > 0 && (
+                              <div className="space-y-1 mt-2 pt-2 border-t border-white/10">
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Last 3 Read</p>
+                                {recentBooks.map((book, idx) => (
+                                  <div key={idx} className="flex items-center gap-1 text-xs text-white/50">
+                                    <span className="text-white/30">•</span>
+                                    <span className="line-clamp-1">{book.title}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => viewFriendProfile(friend.username)}
-                            className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition"
-                          >
-                            View
-                          </button>
-                        </div>
-                      ))
+                        )
+                      })
                     ) : (
                       <p className="text-sm text-white/60">No friends yet.</p>
                     )}
