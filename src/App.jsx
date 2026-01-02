@@ -334,7 +334,7 @@ const matchBookInBackground = async (book, setTracker) => {
   }
 }
 
-const startBackgroundMatching = (books, setTracker, username) => {
+const startBackgroundMatching = (books, setTracker, username, setMatchingProgress) => {
   const queueKey = `bookmosh-match-queue-${username}`
   
   // Save queue to localStorage
@@ -343,15 +343,38 @@ const startBackgroundMatching = (books, setTracker, username) => {
     localStorage.setItem(queueKey, JSON.stringify(booksToMatch))
   }
   
+  const totalBooks = booksToMatch.length
   let index = 0
+  
+  // Set initial progress
+  if (setMatchingProgress && totalBooks > 0) {
+    setMatchingProgress({ active: true, current: 0, total: totalBooks, currentBook: null })
+  }
+  
   const matchNext = () => {
     // Get current queue from localStorage
     const queueData = localStorage.getItem(queueKey)
-    if (!queueData) return
+    if (!queueData) {
+      if (setMatchingProgress) {
+        setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+      }
+      return
+    }
     
     const queue = JSON.parse(queueData)
     if (index < queue.length) {
       const book = queue[index]
+      
+      // Update progress with current book
+      if (setMatchingProgress) {
+        setMatchingProgress({ 
+          active: true, 
+          current: totalBooks - queue.length + 1, 
+          total: totalBooks, 
+          currentBook: book.title 
+        })
+      }
+      
       matchBookInBackground(book, setTracker).then(() => {
         // Remove matched book from queue
         queue.splice(index, 1)
@@ -359,12 +382,18 @@ const startBackgroundMatching = (books, setTracker, username) => {
           localStorage.setItem(queueKey, JSON.stringify(queue))
         } else {
           localStorage.removeItem(queueKey)
+          if (setMatchingProgress) {
+            setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+          }
         }
       })
       index++
       setTimeout(matchNext, 2000) // Wait 2 seconds between requests
     } else {
       localStorage.removeItem(queueKey)
+      if (setMatchingProgress) {
+        setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+      }
     }
   }
   setTimeout(matchNext, 1000) // Start after 1 second
@@ -559,6 +588,7 @@ function App() {
   const [showAllLibrary, setShowAllLibrary] = useState(false)
   const [libraryDisplayCount, setLibraryDisplayCount] = useState(6)
   const [librarySort, setLibrarySort] = useState('recent')
+  const [matchingProgress, setMatchingProgress] = useState({ active: false, current: 0, total: 0, currentBook: null })
   const [showFindMatch, setShowFindMatch] = useState(false)
   const [findMatchQuery, setFindMatchQuery] = useState('')
   const [findMatchResults, setFindMatchResults] = useState([])
@@ -1712,7 +1742,7 @@ function App() {
         const queue = JSON.parse(queueData)
         if (queue.length > 0) {
           console.log('[IMPORT] Resuming background matching for', queue.length, 'books')
-          startBackgroundMatching(queue, setTracker, currentUser.username)
+          startBackgroundMatching(queue, setTracker, currentUser.username, setMatchingProgress)
         }
       } catch (error) {
         console.error('[IMPORT] Failed to resume background matching:', error)
@@ -1770,7 +1800,7 @@ function App() {
       
       // Start background matching for imported books
       if (currentUser) {
-        startBackgroundMatching(imported, setTracker, currentUser.username)
+        startBackgroundMatching(imported, setTracker, currentUser.username, setMatchingProgress)
       }
     }
     reader.onerror = () => {
@@ -2132,6 +2162,26 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {matchingProgress.active && (
+                <div className="mt-5 rounded-2xl border border-aurora/30 bg-aurora/5 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase tracking-[0.3em] text-aurora">Matching Covers</p>
+                    <p className="text-xs text-white/60">{matchingProgress.current} / {matchingProgress.total}</p>
+                  </div>
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                    <div 
+                      className="h-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
+                      style={{ width: `${(matchingProgress.current / matchingProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  {matchingProgress.currentBook && (
+                    <p className="text-xs text-white/50 line-clamp-1">
+                      Matching: {matchingProgress.currentBook}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="mt-5 relative">
                 <input
