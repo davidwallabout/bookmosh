@@ -1473,8 +1473,31 @@ function App() {
     }
   }
 
-  const handleDeleteBook = (title) => {
+  const handleDeleteBook = async (title) => {
+    if (!currentUser) return
+    
+    // Delete from local state
     setTracker(prev => prev.filter(book => book.title !== title))
+    
+    // Delete from Supabase
+    if (supabase) {
+      try {
+        console.log('[LIBRARY] Deleting book from Supabase:', title)
+        const { error } = await supabase
+          .from(SUPABASE_TABLE)
+          .delete()
+          .eq('owner', currentUser.username)
+          .eq('title', title)
+        
+        if (error) {
+          console.error('[LIBRARY] Delete error:', error)
+        } else {
+          console.log('[LIBRARY] Book deleted successfully from Supabase')
+        }
+      } catch (error) {
+        console.error('[LIBRARY] Delete exception:', error)
+      }
+    }
   }
 
   const closeModal = () => {
