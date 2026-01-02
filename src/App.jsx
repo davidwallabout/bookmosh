@@ -996,7 +996,7 @@ function App() {
         .from('moshes')
         .select('*')
         .contains('participants_ids', [currentUser.id])
-        .eq('archived', moshArchiveFilter === 'archived' ? true : false)
+        .eq('archived', moshArchiveFilter === 'archived')
         .order('created_at', { ascending: false })
         .limit(50)
       if (error) throw error
@@ -1319,7 +1319,12 @@ function App() {
   const setBookStatusTag = (title, nextStatus) => {
     const current = tracker.find((b) => b.title === title)
     const next = normalizeBookTags({ ...(current ?? { title }), status: nextStatus })
-    updateBook(title, { status: nextStatus })
+    // Auto-set progress to 100% when marking as Read
+    if (nextStatus === 'Read') {
+      updateBook(title, { status: nextStatus, progress: 100 })
+    } else {
+      updateBook(title, { status: nextStatus })
+    }
     logBookEvent(next, 'status_changed')
   }
 
@@ -2877,8 +2882,9 @@ function App() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.mosh_title || mosh.book_title}</p>
                           <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                          <p className="text-xs text-white/40 line-clamp-1">with {(mosh.participants_usernames || []).filter(u => u !== currentUser?.username).join(', ')}</p>
                         </div>
                         {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
                           <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
