@@ -526,56 +526,65 @@ function App() {
     }
 
     if (!supabase) {
-      console.error('Supabase client not initialized')
+      console.error('[AUTH] Supabase client not initialized')
       return
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      console.log('[AUTH] Initial session check:', { hasSession: !!session, hasUser: !!session?.user, sessionError })
-      
-      if (sessionError) {
-        console.error('[AUTH] Session check error:', sessionError)
-        return
-      }
-      
-      if (mounted && session?.user) {
-        console.log('[AUTH] Found session, fetching profile for user:', session.user.id)
-        // Get user profile from users table
-        supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data: profile, error }) => {
-            if (error) {
-              console.error('[AUTH] Profile lookup error:', error)
-              if (mounted) {
-                console.log('[AUTH] Setting fallback user')
-                setCurrentUser({
-                  id: session.user.id,
-                  username: session.user.email?.split('@')[0] || 'user',
-                  email: session.user.email || '',
-                  friends: [],
-                  is_private: false,
-                })
-              }
-              return
-            }
-            if (mounted && profile) {
-              console.log('[AUTH] Setting user from profile:', profile.username)
+    // Manual session restoration from localStorage
+    const restoreSession = async () => {
+      try {
+        const storedSession = localStorage.getItem('bookmosh-session')
+        console.log('[AUTH] Checking for stored session:', !!storedSession)
+        
+        if (storedSession) {
+          const sessionData = JSON.parse(storedSession)
+          console.log('[AUTH] Found stored session, restoring for user:', sessionData.user?.id)
+          
+          // Manually set the session in Supabase
+          const { data, error } = await supabase.auth.setSession({
+            access_token: sessionData.access_token,
+            refresh_token: sessionData.refresh_token
+          })
+          
+          if (error) {
+            console.error('[AUTH] Session restore failed:', error)
+            localStorage.removeItem('bookmosh-session')
+            return
+          }
+          
+          if (data.user && mounted) {
+            console.log('[AUTH] Session restored, fetching profile')
+            // Get user profile
+            const { data: profile, error: profileError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', data.user.id)
+              .single()
+            
+            if (profile && !profileError && mounted) {
+              console.log('[AUTH] User restored:', profile.username)
               setCurrentUser(profile)
+            } else if (mounted) {
+              console.log('[AUTH] Setting fallback user')
+              setCurrentUser({
+                id: data.user.id,
+                username: data.user.email?.split('@')[0] || 'user',
+                email: data.user.email || '',
+                friends: [],
+                is_private: false,
+              })
             }
-          })
-          .catch((err) => {
-            console.error('[AUTH] Profile fetch failed:', err)
-          })
-      } else {
-        console.log('[AUTH] No session found on initial check')
+          }
+        } else {
+          console.log('[AUTH] No stored session found')
+        }
+      } catch (err) {
+        console.error('[AUTH] Session restore error:', err)
+        localStorage.removeItem('bookmosh-session')
       }
-    }).catch((err) => {
-      console.error('[AUTH] Auth session check failed:', err)
-    })
+    }
+
+    restoreSession()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -1351,6 +1360,17 @@ function App() {
         return
       }
       
+      // Store session manually in localStorage
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        console.log('[AUTH] Storing session in localStorage')
+        localStorage.setItem('bookmosh-session', JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: session.user
+        }))
+      }
+      
       setCurrentUser(profiles)
       setAuthIdentifier('')
       setAuthPassword('')
@@ -1441,9 +1461,11 @@ function App() {
     
     try {
       await supabase.auth.signOut()
+      localStorage.removeItem('bookmosh-session')
       setCurrentUser(null)
     } catch (error) {
       console.error('Logout error:', error)
+      localStorage.removeItem('bookmosh-session')
       setCurrentUser(null)
     }
   }
