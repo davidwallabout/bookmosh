@@ -1266,6 +1266,9 @@ function App() {
     
     setAuthLoading(true)
     try {
+      // Clear any stale session first
+      await supabase.auth.signOut({ scope: 'local' })
+      
       const withTimeout = async (promise, ms, label) => {
         return await Promise.race([
           promise,
@@ -1283,7 +1286,7 @@ function App() {
             .select('email')
             .eq('username', loginEmail)
             .single(),
-          15000,
+          30000,
           'Username lookup',
         )
         if (usernameError) {
@@ -1302,7 +1305,7 @@ function App() {
           email: loginEmail,
           password: authPassword,
         }),
-        15000,
+        30000,
         'Sign in',
       )
       
@@ -1318,7 +1321,7 @@ function App() {
           .select('*')
           .eq('id', user.id)
           .single(),
-        15000,
+        30000,
         'Profile lookup',
       )
       
@@ -1353,8 +1356,25 @@ function App() {
       setAuthPassword('')
     } catch (error) {
       console.error('Login error:', error)
+      
+      // Clear all auth storage on error to prevent corruption
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('bookmosh-auth')
+          // Clear any Supabase auth keys
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('supabase') || key.includes('sb-')) {
+              localStorage.removeItem(key)
+            }
+          })
+        }
+      } catch (cleanupError) {
+        console.error('Cleanup error:', cleanupError)
+      }
+      
       if (String(error?.message || '').includes('timed out')) {
-        setAuthMessage('Login timed out. Please check your connection and try again.')
+        setAuthMessage('Login timed out. Please try again.')
       } else {
         setAuthMessage(error.message || 'Login failed')
       }
