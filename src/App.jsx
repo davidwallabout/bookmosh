@@ -2551,6 +2551,37 @@ function App() {
 
               {!activeMosh ? (
                 <div className="mt-5 space-y-4">
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoshArchiveFilter('open')
+                        fetchActiveMoshes()
+                      }}
+                      className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                        moshArchiveFilter === 'open'
+                          ? 'bg-white/10 border border-white/40 text-white'
+                          : 'border border-white/10 text-white/60 hover:border-white/30'
+                      }`}
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoshArchiveFilter('archived')
+                        fetchActiveMoshes()
+                      }}
+                      className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                        moshArchiveFilter === 'archived'
+                          ? 'bg-white/10 border border-white/40 text-white'
+                          : 'border border-white/10 text-white/60 hover:border-white/30'
+                      }`}
+                    >
+                      Archived
+                    </button>
+                  </div>
+                  
                   <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Start a mosh from your library</p>
                     <input
@@ -2692,6 +2723,14 @@ function App() {
                         ))}
                       </div>
                     </div>
+                    
+                    <button
+                      type="button"
+                      onClick={() => archiveMosh(activeMosh.id)}
+                      className="w-full rounded-full border border-amber-500/50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-amber-400 transition hover:border-amber-500 hover:bg-amber-500/10"
+                    >
+                      Archive Mosh
+                    </button>
                     
                     <button
                       type="button"
