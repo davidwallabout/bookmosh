@@ -1427,146 +1427,530 @@ function App() {
           </button>
         </header>
         )}
-        
-        {/* Active Moshes module (below Library, above Community) */}
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Moshes</p>
-              <h3 className="text-2xl font-semibold text-white">{activeMoshes.length}</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsMoshPanelOpen(true)}
-              className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-            >
-              Open
-            </button>
-          </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {activeMoshes.length > 0 ? (
-              activeMoshes.map((mosh) => (
-                <button
-                  key={mosh.id}
-                  type="button"
-                  onClick={() => openMosh(mosh)}
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-3 text-left transition hover:border-white/40"
-                >
-                  <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
-                    {mosh.book_cover ? (
-                      <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
-                    <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
-                  </div>
-                  {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
-                    <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                      {unreadByMoshId[mosh.id]}
-                    </span>
-                  )}
-                </button>
-              ))
-            ) : (
-              <p className="text-sm text-white/60">No moshes yet. Start one from a book.</p>
-            )}
-          </div>
-        </section>
-
-        {/* Feed module (below Discovery + Library) */}
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Feed</p>
-              <h3 className="text-2xl font-semibold text-white">{feedItems.length}</h3>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {['everyone', 'friends', 'me'].map((scope) => (
-                <button
-                  key={scope}
-                  type="button"
-                  onClick={() => setFeedScope(scope)}
-                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                    feedScope === scope
-                      ? 'border-white/60 bg-white/10 text-white'
-                      : 'border-white/10 text-white/60 hover:border-white/40'
-                  }`}
-                >
-                  {scope}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={fetchFeed}
-                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            {feedItems.length > 0 ? (
-              feedItems.map((item) => {
-                const book = mapFeedItemToBook(item)
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4"
-                  >
+        {currentUser && (
+          <>
+            {/* Discovery */}
+            <section id="discovery" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
+                  <h2 className="text-2xl font-semibold text-white">
+                    {selectedAuthor ? `Books by ${selectedAuthor}` : 'Search the open shelves'}
+                  </h2>
+                  {selectedAuthor && (
                     <button
                       type="button"
-                      onClick={() => openModal(book)}
-                      className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                      onClick={() => {
+                        setSelectedAuthor(null)
+                        setSearchQuery('')
+                        setSearchResults([])
+                        setHasSearched(false)
+                        setShowAllResults(false)
+                      }}
+                      className="mt-1 text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white"
                     >
-                      {book.cover ? (
-                        <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                      ← Back to search
+                    </button>
+                  )}
+                </div>
+                <p className="text-sm text-white/60">
+                  {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
+                </p>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                {!selectedAuthor && (
+                  <>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value)
+                        setShowAllResults(false)
+                      }}
+                      placeholder="Search authors, themes, or moods..."
+                      className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                    />
+                    {searchQuery && (
+                      <div className="flex items-center justify-between text-xs text-white/60">
+                        <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {hasSearched && searchResults.length > 0 && (
+                <div className="mt-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {(selectedAuthor || showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                      <div
+                        key={book.key}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40 cursor-pointer"
+                        onClick={() => openModal(book)}
+                      >
+                        <div className="flex items-start gap-4">
+                          {book.cover ? (
+                            <img src={book.cover} alt={book.title} className="h-20 w-16 rounded-xl object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">Cover</div>
+                          )}
+                          <div className="flex flex-1 flex-col gap-2 min-w-0">
+                            <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                fetchAuthorBooks(book.author)
+                              }}
+                              className="text-sm text-white/60 hover:text-white transition-colors text-left"
+                            >
+                              {book.author}
+                            </button>
+                            <div className="flex items-center gap-4 text-xs text-white/50">
+                              {book.year && <span>{book.year}</span>}
+                              {book.editionCount > 0 && <span>{book.editionCount} editions</span>}
+                              {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAddBook(book, 'Read')
+                            }}
+                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                          >
+                            + Read
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAddBook(book, 'Reading')
+                            }}
+                            className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                          >
+                            + Reading
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAddBook(book, 'to-read')
+                            }}
+                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                          >
+                            + to-read
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {!selectedAuthor && searchResults.length > 6 && (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllResults(!showAllResults)}
+                        className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                      >
+                        {showAllResults ? 'Show first 6' : `Show ${searchResults.length - 6} more results`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Library */}
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
+                  <h3 className="text-2xl font-semibold text-white">{filteredLibrary.length}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={scrollToDiscovery}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  + Add book
+                </button>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleLibraryFilterTag(tag)}
+                    className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                      libraryFilterTags.includes(tag)
+                        ? 'border-white/60 bg-white/10 text-white'
+                        : 'border-white/10 text-white/60 hover:border-white/40'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+                {libraryFilterTags.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setLibraryFilterTags([])}
+                    className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {filteredLibrary.length > 0 ? (
+                  filteredLibrary.map((book) => (
+                    <div key={book.title} className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <button
+                        type="button"
+                        onClick={() => openModal(book)}
+                        className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                      >
+                        {book.cover ? (
+                          <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                        )}
+                      </button>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
+                        <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {(book.tags ?? []).map((tag) => (
+                            <span key={tag} className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">{tag}</span>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {statusTags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setBookStatusTag(book.title, tag)}
+                              className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                                book.status === tag
+                                  ? 'border-white/60 bg-white/10 text-white'
+                                  : 'border-white/10 text-white/60 hover:border-white/40'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => toggleBookOwned(book.title)}
+                            className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                              (book.tags ?? []).includes('Owned')
+                                ? 'border-white/60 bg-white/10 text-white'
+                                : 'border-white/10 text-white/60 hover:border-white/40'
+                            }`}
+                          >
+                            Owned
+                          </button>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openModal(book)}
+                            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                          >
+                            Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => sendMoshInvite(book)}
+                            className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                          >
+                            Send Mosh invite
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-white/60">No books yet. Add one from Discovery.</p>
+                )}
+              </div>
+            </section>
+
+            {/* Active Moshes (below Library) */}
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Moshes</p>
+                  <h3 className="text-2xl font-semibold text-white">{activeMoshes.length}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMoshPanelOpen(true)}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  Open
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {activeMoshes.length > 0 ? (
+                  activeMoshes.map((mosh) => (
+                    <button
+                      key={mosh.id}
+                      type="button"
+                      onClick={() => openMosh(mosh)}
+                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-3 text-left transition hover:border-white/40"
+                    >
+                      <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                        {mosh.book_cover ? (
+                          <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                        <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                      </div>
+                      {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
+                        <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                          {unreadByMoshId[mosh.id]}
+                        </span>
                       )}
                     </button>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">{item.owner_username}</p>
-                      <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                      <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {(book.tags ?? []).map((tag) => (
-                          <span key={tag} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                  ))
+                ) : (
+                  <p className="text-sm text-white/60">No moshes yet. Start one from a book.</p>
+                )}
+              </div>
+            </section>
+
+            {/* Feed (below Active Moshes) */}
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Feed</p>
+                  <h3 className="text-2xl font-semibold text-white">{feedItems.length}</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['everyone', 'friends', 'me'].map((scope) => (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() => setFeedScope(scope)}
+                      className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                        feedScope === scope
+                          ? 'border-white/60 bg-white/10 text-white'
+                          : 'border-white/10 text-white/60 hover:border-white/40'
+                      }`}
+                    >
+                      {scope}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={fetchFeed}
+                    className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {feedItems.length > 0 ? (
+                  feedItems.map((item) => {
+                    const book = mapFeedItemToBook(item)
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4"
+                      >
                         <button
                           type="button"
                           onClick={() => openModal(book)}
-                          className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                          className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
                         >
-                          Details
+                          {book.cover ? (
+                            <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                          )}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => sendMoshInvite(book)}
-                          className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                        >
-                          Send Mosh invite
-                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50">{item.owner_username}</p>
+                          <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                          <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {(book.tags ?? []).map((tag) => (
+                              <span key={tag} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openModal(book)}
+                              className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                            >
+                              Details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => sendMoshInvite(book)}
+                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                            >
+                              Send Mosh invite
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <p className="text-sm text-white/60">No feed activity yet.</p>
-            )}
-          </div>
-        </section>
+                    )
+                  })
+                ) : (
+                  <p className="text-sm text-white/60">No feed activity yet.</p>
+                )}
+              </div>
+            </section>
 
-        {isMoshPanelOpen && (
+            {/* Community */}
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Community</p>
+                  <h3 className="text-2xl font-semibold text-white">{activeFriendProfiles.length}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchFeed()}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
+                      <p className="text-sm text-white/60">{currentUser.friends?.length ?? 0} connections</p>
+                    </div>
+                    <div className="text-xs text-white/50">{activeFriendProfiles.length} online</div>
+                  </div>
+                  <div className="space-y-2">
+                    {activeFriendProfiles.length > 0 ? (
+                      activeFriendProfiles.map((friend) => (
+                        <div key={friend.username} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => viewFriendProfile(friend.username)}
+                              className="text-left text-sm font-semibold text-white hover:text-white/80 transition-colors"
+                            >
+                              {friend.username}
+                            </button>
+                            <p className="text-xs text-white/60">{friend.email}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => viewFriendProfile(friend.username)}
+                            className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition"
+                          >
+                            View
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-white/60">No friends yet.</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      value={friendQuery}
+                      onChange={(e) => setFriendQuery(e.target.value)}
+                      placeholder="Search by username or email"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddFriend}
+                      className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                    >
+                      Add friend
+                    </button>
+                    <p className="text-xs text-white/60">{friendMessage}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
+                      <p className="text-sm text-white/60">{isPrivate ? 'Private profile' : 'Public profile'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(!isPrivate)}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      {isPrivate ? 'Make Public' : 'Make Private'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
+                    <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImportFileType('goodreads')
+                          setImportMessage('')
+                        }}
+                        className={`rounded-full px-3 py-1 transition ${importFileType === 'goodreads' ? 'bg-white/10 text-white' : 'text-white/50'}`}
+                      >
+                        Goodreads
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImportFileType('storygraph')
+                          setImportMessage('')
+                        }}
+                        className={`rounded-full px-3 py-1 transition ${importFileType === 'storygraph' ? 'bg-white/10 text-white' : 'text-white/50'}`}
+                      >
+                        StoryGraph
+                      </button>
+                    </div>
+                    <input
+                      type="file"
+                      accept={importFileType === 'goodreads' ? '.csv' : '.csv,.json'}
+                      onChange={importHandler}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white"
+                    />
+                    <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {currentUser && isMoshPanelOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="w-[clamp(320px,80vw,900px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
               <div className="flex items-start justify-between">
