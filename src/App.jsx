@@ -426,6 +426,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [isUpdatingUser, setIsUpdatingUser] = useState(false)
   const [authMode, setAuthMode] = useState('login')
+  const [successModal, setSuccessModal] = useState({ show: false, book: null, list: '' })
   const [authIdentifier, setAuthIdentifier] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [resetPassword, setResetPassword] = useState('')
@@ -554,9 +555,13 @@ function App() {
     if (!supabase || !currentUser) return
     let canceled = false
     ;(async () => {
+      console.log('[LIBRARY] Loading books for user:', currentUser.username)
       const rows = await loadSupabaseBooks(currentUser.username)
-      if (!canceled && rows.length) {
-        setTracker(rows)
+      if (!canceled) {
+        console.log('[LIBRARY] Loaded books from Supabase:', rows.length)
+        if (rows.length > 0) {
+          setTracker(rows)
+        }
       }
     })()
     return () => {
@@ -720,7 +725,11 @@ function App() {
 
   const handleAddBook = (book, status = 'to-read') => {
     setTracker((prev) => {
-      if (prev.some((item) => item.title === book.title)) return prev
+      if (prev.some((item) => item.title === book.title)) {
+        setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
+        setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+        return prev
+      }
       const entry = {
         title: book.title,
         author: book.author,
@@ -737,6 +746,12 @@ function App() {
         rating: 0,
       }
       logBookEvent(entry, 'created')
+      
+      // Show success modal
+      const listName = status === 'Read' ? 'Read List' : status === 'Reading' ? 'Reading List' : 'To-Read List'
+      setSuccessModal({ show: true, book: entry, list: listName, alreadyAdded: false })
+      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+      
       return [entry, ...prev]
     })
   }
@@ -2000,6 +2015,38 @@ function App() {
               </div>
             </section>
           </>
+        )}
+
+        {successModal.show && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-[clamp(280px,90vw,400px)] rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+              <img
+                src="/bookmosh-logo.png"
+                alt="BookMosh"
+                className="mx-auto h-20 w-auto mb-6"
+              />
+              <div className="space-y-2">
+                <p className="text-2xl font-semibold text-white">
+                  {successModal.alreadyAdded ? '📚 Already Added!' : '✨ Success!'}
+                </p>
+                {!successModal.alreadyAdded && (
+                  <>
+                    <p className="text-sm text-white/80">
+                      <span className="font-semibold">{successModal.book?.title}</span>
+                    </p>
+                    <p className="text-xs uppercase tracking-[0.3em] text-aurora">
+                      Added to {successModal.list}
+                    </p>
+                  </>
+                )}
+                {successModal.alreadyAdded && (
+                  <p className="text-sm text-white/60">
+                    This book is already in your library
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {!currentUser && (
