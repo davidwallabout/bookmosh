@@ -539,7 +539,7 @@ function App() {
   const [moshArchiveFilter, setMoshArchiveFilter] = useState('open')
   const [librarySearch, setLibrarySearch] = useState('')
   const [showAllLibrary, setShowAllLibrary] = useState(false)
-  const [libraryPage, setLibraryPage] = useState(0)
+  const [libraryDisplayCount, setLibraryDisplayCount] = useState(6)
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
@@ -615,14 +615,9 @@ function App() {
       return filteredLibrary.slice(0, 6)
     }
     
-    // Paginate with 50 books per page
-    const startIndex = libraryPage * 50
-    return filteredLibrary.slice(startIndex, startIndex + 50)
-  }, [filteredLibrary, showAllLibrary, libraryPage])
-
-  const totalLibraryPages = useMemo(() => {
-    return Math.ceil(filteredLibrary.length / 50)
-  }, [filteredLibrary])
+    // Infinite scroll: show libraryDisplayCount books
+    return filteredLibrary.slice(0, libraryDisplayCount)
+  }, [filteredLibrary, showAllLibrary, libraryDisplayCount])
 
   const moshLibraryMatches = useMemo(() => {
     const query = moshLibrarySearch.trim().toLowerCase()
@@ -2031,7 +2026,7 @@ function App() {
                     type="button"
                     onClick={() => {
                       setShowAllLibrary(true)
-                      setLibraryPage(0)
+                      setLibraryDisplayCount(20)
                     }}
                     className="rounded-2xl bg-gradient-to-r from-aurora/80 to-white/60 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-aurora hover:to-white/80 shadow-lg"
                   >
@@ -2041,38 +2036,17 @@ function App() {
               )}
 
               {showAllLibrary && (
-                <div className="mt-4 flex items-center justify-between">
+                <div className="mt-4 flex items-center justify-center">
                   <button
                     type="button"
                     onClick={() => {
                       setShowAllLibrary(false)
-                      setLibraryPage(0)
+                      setLibraryDisplayCount(6)
                     }}
                     className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
                   >
                     ← Show Less
                   </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setLibraryPage(Math.max(0, libraryPage - 1))}
-                      disabled={libraryPage === 0}
-                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      ←
-                    </button>
-                    <span className="text-xs text-white/60">
-                      Page {libraryPage + 1} of {totalLibraryPages}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setLibraryPage(Math.min(totalLibraryPages - 1, libraryPage + 1))}
-                      disabled={libraryPage >= totalLibraryPages - 1}
-                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      →
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -2180,6 +2154,18 @@ function App() {
                   <p className="text-sm text-white/60">No books yet. Add one from Discovery.</p>
                 )}
               </div>
+
+              {showAllLibrary && libraryDisplayCount < filteredLibrary.length && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setLibraryDisplayCount(prev => prev + 20)}
+                    className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                  >
+                    Load More ({Math.min(20, filteredLibrary.length - libraryDisplayCount)} more)
+                  </button>
+                </div>
+              )}
             </section>
 
             {/* Active Moshes (below Library) */}
