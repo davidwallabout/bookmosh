@@ -540,6 +540,10 @@ function App() {
   const [librarySearch, setLibrarySearch] = useState('')
   const [showAllLibrary, setShowAllLibrary] = useState(false)
   const [libraryDisplayCount, setLibraryDisplayCount] = useState(6)
+  const [showFindMatch, setShowFindMatch] = useState(false)
+  const [findMatchQuery, setFindMatchQuery] = useState('')
+  const [findMatchResults, setFindMatchResults] = useState([])
+  const [findMatchLoading, setFindMatchLoading] = useState(false)
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
@@ -629,7 +633,8 @@ function App() {
           return title.includes(query) || author.includes(query)
         })
       : normalized
-    return matches.slice(0, 12)
+    // Show only 4 most recent books by default, or 12 when searching
+    return matches.slice(0, query ? 12 : 4)
   }, [tracker, moshLibrarySearch])
 
   useEffect(() => {
@@ -3077,25 +3082,120 @@ function App() {
                   />
                 </div>
 
-                <div className="flex gap-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleDeleteBook(selectedBook.title)
-                      closeModal()
-                    }}
-                    className="flex-1 rounded-2xl border border-rose-500/50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleModalSave}
-                    className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                  >
-                    Save
-                  </button>
-                </div>
+                {!showFindMatch ? (
+                  <div className="flex gap-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDeleteBook(selectedBook.title)
+                        closeModal()
+                      }}
+                      className="flex-1 rounded-2xl border border-rose-500/50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10"
+                    >
+                      Delete
+                    </button>
+                    {!selectedBook.cover && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFindMatch(true)
+                          setFindMatchQuery(`${selectedBook.title} ${selectedBook.author}`)
+                        }}
+                        className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Find Match
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleModalSave}
+                      className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Search Open Library</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={findMatchQuery}
+                          onChange={(e) => setFindMatchQuery(e.target.value)}
+                          placeholder="Search for book..."
+                          className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!findMatchQuery.trim()) return
+                            setFindMatchLoading(true)
+                            try {
+                              const response = await fetch(
+                                `https://openlibrary.org/search.json?q=${encodeURIComponent(findMatchQuery)}&limit=5&fields=key,title,author_name,cover_i,isbn`
+                              )
+                              const data = await response.json()
+                              setFindMatchResults(data.docs || [])
+                            } catch (error) {
+                              console.error('Search failed:', error)
+                            } finally {
+                              setFindMatchLoading(false)
+                            }
+                          }}
+                          className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                        >
+                          Search
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {findMatchLoading && <p className="text-sm text-white/60">Searching...</p>}
+                    
+                    {findMatchResults.length > 0 && (
+                      <div className="max-h-60 space-y-2 overflow-auto">
+                        {findMatchResults.map((result) => (
+                          <button
+                            key={result.key}
+                            type="button"
+                            onClick={() => {
+                              const cover = result.cover_i ? `https://covers.openlibrary.org/b/id/${result.cover_i}-M.jpg` : null
+                              const isbn = result.isbn?.[0] || null
+                              updateBook(selectedBook.title, { cover, isbn })
+                              setSelectedBook({ ...selectedBook, cover, isbn })
+                              setShowFindMatch(false)
+                              setFindMatchResults([])
+                            }}
+                            className="w-full flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-white/40"
+                          >
+                            <div className="h-16 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                              {result.cover_i ? (
+                                <img src={`https://covers.openlibrary.org/b/id/${result.cover_i}-S.jpg`} alt={result.title} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">No Cover</div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-white line-clamp-1">{result.title}</p>
+                              <p className="text-xs text-white/60 line-clamp-1">{result.author_name?.[0] || 'Unknown'}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFindMatch(false)
+                        setFindMatchResults([])
+                      }}
+                      className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
