@@ -2645,6 +2645,32 @@ function App() {
                     </button>
                     <p className="text-[10px] text-white/50">This will permanently delete all books from your library.</p>
                   </div>
+
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invite & Share</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const inviteUrl = window.location.origin
+                        navigator.clipboard.writeText(inviteUrl)
+                        alert('Invite link copied to clipboard! Share it with friends to invite them to BookMosh.')
+                      }}
+                      className="w-full rounded-2xl border border-aurora/50 bg-aurora/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-aurora transition hover:border-aurora hover:bg-aurora/20"
+                    >
+                      Invite Friends to BookMosh
+                    </button>
+                    <p className="text-[10px] text-white/50">Share BookMosh with friends and start reading together.</p>
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full rounded-2xl border border-white/20 bg-white/5 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/10"
+                    >
+                      Log Out
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
