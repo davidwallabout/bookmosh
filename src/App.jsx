@@ -304,37 +304,7 @@ const parseStoryGraphJSON = (text) => {
   }))
 }
 
-const mergeImportedBooks = async (books, setMessage, setTracker) => {
-  setMessage('Matching books to database...')
-  
-  // Match each book to Open Library to get covers and metadata
-  const matchedBooks = await Promise.all(
-    books.map(async (book) => {
-      try {
-        const searchQuery = `${book.title} ${book.author}`.trim()
-        const response = await fetch(
-          `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1&fields=key,title,author_name,cover_i,isbn`
-        )
-        const data = await response.json()
-        
-        if (data.docs && data.docs.length > 0) {
-          const match = data.docs[0]
-          return {
-            ...book,
-            cover: match.cover_i 
-              ? `https://covers.openlibrary.org/b/id/${match.cover_i}-M.jpg`
-              : book.cover || null,
-            isbn: match.isbn?.[0] || book.isbn || null,
-          }
-        }
-        return book
-      } catch (error) {
-        console.error('[IMPORT] Failed to match book:', book.title, error)
-        return book
-      }
-    })
-  )
-  
+const mergeImportedBooks = (books, setMessage, setTracker) => {
   setTracker((prev) => {
     const seen = new Set(
       prev.map(
@@ -343,7 +313,7 @@ const mergeImportedBooks = async (books, setMessage, setTracker) => {
       ),
     )
     const unique = []
-    for (const entry of matchedBooks) {
+    for (const entry of books) {
       const key = `${entry.title.trim().toLowerCase()}|${(entry.author ?? '').trim().toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -353,7 +323,7 @@ const mergeImportedBooks = async (books, setMessage, setTracker) => {
       setMessage('No new titles were added from this import.')
       return prev
     }
-    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'} with covers and metadata.`)
+    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}.`)
     return [...unique, ...prev]
   })
 }
