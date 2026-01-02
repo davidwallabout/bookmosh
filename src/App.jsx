@@ -76,10 +76,9 @@ const updateUserFriends = async (userId, friends) => {
       .update({ friends, updated_at: new Date().toISOString() })
       .eq('id', userId)
       .select('id, username, email, friends, is_private')
-      .single()
     
     if (error) throw error
-    return data
+    return Array.isArray(data) ? data[0] : data
   } catch (error) {
     console.error('Error updating friends:', error)
     throw error
@@ -90,12 +89,23 @@ const searchUsers = async (query) => {
   if (!supabase) return []
   
   try {
+    const normalized = query.trim()
+    const { data: exactData, error: exactError } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .or(`username.ilike.${normalized},email.ilike.${normalized}`)
+      .limit(5)
+    
+    if (exactError) throw exactError
+
+    if (Array.isArray(exactData) && exactData.length > 0) return exactData
+
     const { data, error } = await supabase
       .from('users')
       .select('id, username, email')
-      .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
+      .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%`)
       .limit(10)
-    
+
     if (error) throw error
     return data || []
   } catch (error) {
@@ -397,6 +407,65 @@ const startBackgroundMatching = (books, setTracker, username, setMatchingProgres
       }
     }
   }
+
+  const openAuthorModal = async (authorName) => {
+    const name = (authorName ?? '').trim()
+    if (!name || name === 'Unknown author') return
+
+    setIsAuthorModalOpen(true)
+    setAuthorModalName(name)
+    setAuthorModalBooks([])
+    setAuthorModalLoading(true)
+
+    try {
+      const response = await fetch(
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(name)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+      )
+      const data = await response.json()
+
+      const authorLower = name.toLowerCase()
+
+      const mapped = (data.docs || [])
+        .filter((doc) => {
+          if (!doc.title) return false
+          const title = doc.title.toLowerCase()
+          if (
+            title.includes('best of') ||
+            title.includes('anthology') ||
+            title.includes('collection') ||
+            title.includes('complete works') ||
+            title.includes('selected works')
+          ) {
+            return false
+          }
+          if (doc.author_name?.some((a) => a.toLowerCase().includes(authorLower))) return true
+          return true
+        })
+        .map((doc) => ({
+          key: doc.key,
+          title: doc.title,
+          author: doc.author_name?.[0] ?? name,
+          year: doc.first_publish_year,
+          cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+          editionCount: doc.edition_count || 0,
+          rating: doc.ratings_average || 0,
+          subjects: doc.subject?.slice(0, 3) || [],
+          isbn: doc.isbn?.[0] || null,
+          publisher: doc.publisher?.[0] || null,
+          language: doc.language?.[0] || null,
+        }))
+        .sort((a, b) => {
+          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
+          return (b.year || 0) - (a.year || 0)
+        })
+
+      setAuthorModalBooks(mapped)
+    } catch (error) {
+      console.error('Author modal search failed', error)
+    } finally {
+      setAuthorModalLoading(false)
+    }
+  }
   setTimeout(matchNext, 1000) // Start after 1 second
 }
 
@@ -564,6 +633,10 @@ function App() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
   const [libraryFilterTags, setLibraryFilterTags] = useState([])
   const [selectedAuthor, setSelectedAuthor] = useState(null)
+  const [isAuthorModalOpen, setIsAuthorModalOpen] = useState(false)
+  const [authorModalName, setAuthorModalName] = useState('')
+  const [authorModalBooks, setAuthorModalBooks] = useState([])
+  const [authorModalLoading, setAuthorModalLoading] = useState(false)
   const [isPrivate, setIsPrivate] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
   const [moshes, setMoshes] = useState([]) // Track book chats
@@ -1854,15 +1927,15 @@ function App() {
       const searchResults = await searchUsers(query)
       
       if (searchResults.length === 0) {
-        setFriendMessage('No users found matching your search.')
+        setFriendMessage(`No user found for "${query}".`)
         return
       }
       
       // Filter out current user and existing friends
-      const availableMatches = searchResults.filter(user => 
-        user.id !== currentUser.id && 
-        !existingFriends.includes(user.username)
-      )
+      const queryLower = query.toLowerCase()
+      const availableMatches = searchResults
+        .filter(user => user.id !== currentUser.id)
+        .filter(user => !existingFriends.includes(user.username))
       
       if (availableMatches.length === 0) {
         if (searchResults.some(user => user.id === currentUser.id)) {
@@ -1874,14 +1947,16 @@ function App() {
       }
       
       // Add first available friend
-      const friendToAdd = availableMatches[0]
+      const exactUsername = availableMatches.find(u => (u.username ?? '').toLowerCase() === queryLower)
+      const exactEmail = availableMatches.find(u => (u.email ?? '').toLowerCase() === queryLower)
+      const friendToAdd = exactUsername || exactEmail || availableMatches[0]
       const updatedFriends = [...existingFriends, friendToAdd.username]
       
       // Update friends in database
       const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
 
       if (!updatedUser) {
-        throw new Error('Friend update returned no user data')
+        throw new Error('Unable to update friends (no data returned).')
       }
       
       // Update current user state locally AND in localStorage
@@ -1892,7 +1967,12 @@ function App() {
       setFriendQuery('')
     } catch (error) {
       console.error('Friend add error:', error)
-      setFriendMessage('Failed to add friend. Please try again.')
+      const message = String(error?.message || '')
+      if (message.toLowerCase().includes('row-level security') || message.toLowerCase().includes('permission')) {
+        setFriendMessage('Unable to add friend (database permission denied).')
+      } else {
+        setFriendMessage('Failed to add friend. Please try again.')
+      }
     } finally {
       isUpdatingUserRef.current = false
     }
@@ -2286,9 +2366,7 @@ function App() {
                         <button
                           type="button"
                           onClick={() => {
-                            setActiveTab('discovery')
-                            fetchAuthorBooks(book.author)
-                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                            openAuthorModal(book.author)
                           }}
                           className="text-sm text-white/60 line-clamp-1 hover:text-white hover:underline transition text-left"
                         >
@@ -3510,6 +3588,69 @@ function App() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {isAuthorModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="w-full max-w-4xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/50">Author</p>
+                  <h2 className="text-2xl font-semibold text-white">{authorModalName}</h2>
+                  <p className="text-sm text-white/60">{authorModalBooks.length} books</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAuthorModalOpen(false)
+                    setAuthorModalBooks([])
+                    setAuthorModalName('')
+                  }}
+                  className="text-white/60 hover:text-white transition text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {authorModalLoading ? (
+                <p className="text-sm text-white/60">Loading books…</p>
+              ) : authorModalBooks.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {authorModalBooks.map((book) => (
+                    <div
+                      key={book.key}
+                      className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
+                    >
+                      {book.cover ? (
+                        <img
+                          src={book.cover}
+                          alt={book.title}
+                          className="h-24 w-16 rounded-xl object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="flex h-24 w-16 items-center justify-center rounded-xl bg-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
+                          Cover
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                        <p className="text-xs text-white/60">{book.year || '—'}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleAddBook(book, 'to-read')}
+                          className="mt-3 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-white/60">No books found for this author.</p>
+              )}
             </div>
           </div>
         )}
