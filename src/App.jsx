@@ -711,6 +711,18 @@ function App() {
     persistTrackerToSupabase(currentUser.username, tracker)
   }, [tracker, currentUser])
 
+  // Fetch all users when logged in to populate friend profiles
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    
+    const loadUsers = async () => {
+      const allUsers = await fetchUsers()
+      setUsers(allUsers)
+    }
+    
+    loadUsers()
+  }, [currentUser])
+
   const activeFriendProfiles = useMemo(() => {
     if (!currentUser) return []
     return currentUser.friends
