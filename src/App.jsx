@@ -750,6 +750,12 @@ function App() {
     const handleAuthChange = async (event, session) => {
       console.log('[AUTH] Auth state changed:', event, session)
       
+      // Don't process auth changes during user updates (like adding friends)
+      if (isUpdatingUser) {
+        console.log('[AUTH] Ignoring auth change during user update')
+        return
+      }
+      
       if (event === 'SIGNED_IN' && session?.user) {
         // User signed in via magic link
         const { user: authUser } = session
