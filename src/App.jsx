@@ -207,20 +207,44 @@ const parseGoodreadsCSV = (text) => {
 }
 
 const parseStoryGraphCSV = (text) => {
+  // Proper CSV parser that handles quoted fields with commas
+  const parseCSVLine = (line) => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      const nextChar = line[i + 1]
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    result.push(current.trim())
+    return result
+  }
+  
   const lines = text.split('\n').filter((line) => line.trim())
   if (lines.length < 2) return []
   
-  // Find header line
-  const headerLine = lines[0]
-  const headers = headerLine.split(',').map(h => h.trim().replace(/"/g, ''))
-  
-  // Find data rows
+  const headers = parseCSVLine(lines[0])
   const dataRows = lines.slice(1)
   
   return dataRows
     .map((line) => {
-      const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
-      if (values.length < headers.length) return null
+      const values = parseCSVLine(line)
+      if (values.length === 0) return null
       
       const obj = {}
       headers.forEach((header, index) => {
@@ -230,14 +254,28 @@ const parseStoryGraphCSV = (text) => {
       return obj
     })
     .filter(Boolean)
-    .map((item) => ({
-      title: item.Title || item.title || '',
-      author: item.Author || item.author || '',
-      status: item['Read Status'] || item.readStatus || 'to-read',
-      rating: parseInt(item['My Rating'] || item.rating) || 0,
-      progress: item['Read Progress'] || item.progress || 0,
-      mood: item['Mood'] || item.mood || '',
-    }))
+    .map((item) => {
+      // Map Storygraph status to our status
+      let status = 'to-read'
+      const readStatus = (item['Read Status'] || item.readStatus || '').toLowerCase()
+      if (readStatus.includes('read') && !readStatus.includes('to-read') && !readStatus.includes('currently')) {
+        status = 'Read'
+      } else if (readStatus.includes('currently') || readStatus.includes('reading')) {
+        status = 'Reading'
+      } else if (readStatus.includes('to-read') || readStatus.includes('want')) {
+        status = 'to-read'
+      }
+      
+      return {
+        title: item.Title || item.title || '',
+        author: item.Authors || item.Author || item.author || '',
+        status: status,
+        rating: parseInt(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
+        progress: parseInt(item['Read Progress'] || item.progress) || 0,
+        mood: item.Review || item.Notes || item.Mood || item.mood || '',
+      }
+    })
+    .filter(book => book.title && book.author)
 }
 
 const parseStoryGraphJSON = (text) => {
