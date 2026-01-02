@@ -1942,8 +1942,9 @@ function App() {
       // Update friends in database
       const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
       
-      // Update current user state locally
+      // Update current user state locally AND in localStorage
       setCurrentUser(updatedUser)
+      localStorage.setItem('bookmosh-user', JSON.stringify(updatedUser))
       
       setFriendMessage(`Connected with ${friendToAdd.username}!`)
       setFriendQuery('')
