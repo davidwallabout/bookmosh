@@ -540,6 +540,7 @@ function App() {
   const [librarySearch, setLibrarySearch] = useState('')
   const [showAllLibrary, setShowAllLibrary] = useState(false)
   const [libraryDisplayCount, setLibraryDisplayCount] = useState(6)
+  const [librarySort, setLibrarySort] = useState('recent')
   const [showFindMatch, setShowFindMatch] = useState(false)
   const [findMatchQuery, setFindMatchQuery] = useState('')
   const [findMatchResults, setFindMatchResults] = useState([])
@@ -610,18 +611,38 @@ function App() {
             (book.author ?? '').toLowerCase().includes(librarySearch.toLowerCase()),
         )
     
-    return searchFiltered
-  }, [tracker, libraryFilterTags, librarySearch])
-
-  const paginatedLibrary = useMemo(() => {
-    if (!showAllLibrary) {
-      // Show only last 6 books added when not in "view all" mode
-      return filteredLibrary.slice(0, 6)
+    // Apply sorting
+    const sorted = [...searchFiltered]
+    switch (librarySort) {
+      case 'recent':
+        // Most recently added first (default order from tracker)
+        break
+      case 'oldest':
+        sorted.reverse()
+        break
+      case 'title-asc':
+        sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+        break
+      case 'title-desc':
+        sorted.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+        break
+      case 'author-asc':
+        sorted.sort((a, b) => (a.author || '').localeCompare(b.author || ''))
+        break
+      case 'author-desc':
+        sorted.sort((a, b) => (b.author || '').localeCompare(a.author || ''))
+        break
+      default:
+        break
     }
     
-    // Infinite scroll: show libraryDisplayCount books
+    return sorted
+  }, [tracker, libraryFilterTags, librarySearch, librarySort])
+
+  const paginatedLibrary = useMemo(() => {
+    // Show libraryDisplayCount books (starts at 6, increases by 20)
     return filteredLibrary.slice(0, libraryDisplayCount)
-  }, [filteredLibrary, showAllLibrary, libraryDisplayCount])
+  }, [filteredLibrary, libraryDisplayCount])
 
   const moshLibraryMatches = useMemo(() => {
     const query = moshLibrarySearch.trim().toLowerCase()
@@ -1985,13 +2006,27 @@ function App() {
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
                   <h3 className="text-2xl font-semibold text-white">{filteredLibrary.length}</h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={scrollToDiscovery}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  + Add book
-                </button>
+                <div className="flex gap-2">
+                  <select
+                    value={librarySort}
+                    onChange={(e) => setLibrarySort(e.target.value)}
+                    className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 focus:outline-none"
+                  >
+                    <option value="recent">Most Recent</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="title-asc">Title A-Z</option>
+                    <option value="title-desc">Title Z-A</option>
+                    <option value="author-asc">Author A-Z</option>
+                    <option value="author-desc">Author Z-A</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={scrollToDiscovery}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    + Add book
+                  </button>
+                </div>
               </div>
 
               <div className="mt-5">
@@ -2029,36 +2064,6 @@ function App() {
                   </button>
                 )}
               </div>
-
-              {!showAllLibrary && filteredLibrary.length > 6 && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAllLibrary(true)
-                      setLibraryDisplayCount(20)
-                    }}
-                    className="rounded-2xl bg-gradient-to-r from-aurora/80 to-white/60 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-aurora hover:to-white/80 shadow-lg"
-                  >
-                    View All {filteredLibrary.length} Books →
-                  </button>
-                </div>
-              )}
-
-              {showAllLibrary && (
-                <div className="mt-4 flex items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAllLibrary(false)
-                      setLibraryDisplayCount(6)
-                    }}
-                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                  >
-                    ← Show Less
-                  </button>
-                </div>
-              )}
 
               <div className="mt-6 space-y-3">
                 {paginatedLibrary.length > 0 ? (
@@ -2171,7 +2176,7 @@ function App() {
                 )}
               </div>
 
-              {showAllLibrary && libraryDisplayCount < filteredLibrary.length && (
+              {libraryDisplayCount < filteredLibrary.length && (
                 <div className="mt-6 flex justify-center">
                   <button
                     type="button"
