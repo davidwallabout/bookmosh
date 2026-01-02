@@ -3530,6 +3530,64 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Friend Profile Modal */}
+        {selectedFriend && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
+                  <p className="text-sm text-white/60">{selectedFriend.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFriend(null)}
+                  className="text-white/60 hover:text-white transition text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Library</p>
+                  {selectedFriend.books && selectedFriend.books.length > 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {selectedFriend.books.map((book, idx) => (
+                        <div key={idx} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex gap-3">
+                            {book.cover ? (
+                              <img src={book.cover} alt={book.title} className="h-20 w-14 rounded-lg object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="flex h-20 w-14 items-center justify-center rounded-lg bg-white/5 text-xs text-white/40 flex-shrink-0">
+                                No cover
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                              <p className="text-xs text-white/60 line-clamp-1">{book.author}</p>
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="rounded-full bg-aurora/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-aurora">
+                                  {book.status}
+                                </span>
+                                {book.progress > 0 && (
+                                  <span className="text-[10px] text-white/50">{book.progress}%</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/60">No books in library yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
