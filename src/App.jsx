@@ -930,10 +930,16 @@ function App() {
   }
 
   const sendMoshMessage = async () => {
-    if (!supabase || !currentUser || !activeMosh) return
+    if (!supabase || !currentUser || !activeMosh) {
+      console.error('[MOSH] Missing requirements for sending message')
+      return
+    }
     const body = moshDraft.trim()
     if (!body) return
+    
+    console.log('[MOSH] Sending message:', { moshId: activeMosh.id, body })
     setMoshDraft('')
+    
     try {
       const { data, error } = await supabase
         .from('mosh_messages')
@@ -946,8 +952,19 @@ function App() {
           },
         ])
         .select()
-      if (error) throw error
-      setActiveMoshMessages((prev) => [...prev, ...(data ?? [])])
+      
+      if (error) {
+        console.error('[MOSH] Message insert error:', error)
+        throw error
+      }
+      
+      console.log('[MOSH] Message sent successfully:', data)
+      setActiveMoshMessages((prev) => {
+        const updated = [...prev, ...(data ?? [])]
+        console.log('[MOSH] Updated messages count:', updated.length)
+        return updated
+      })
+      
       await supabase
         .from('mosh_reads')
         .upsert(
@@ -961,7 +978,7 @@ function App() {
         )
       setUnreadByMoshId((prev) => ({ ...prev, [activeMosh.id]: 0 }))
     } catch (error) {
-      console.error('Send message failed', error)
+      console.error('[MOSH] Send message failed:', error)
     }
   }
 
@@ -2563,6 +2580,20 @@ function App() {
                     >
                       ← Back to moshes
                     </button>
+                    
+                    {/* Participants */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Participants</p>
+                      <div className="space-y-2">
+                        {(activeMosh?.participants_usernames || []).map((username) => (
+                          <div key={username} className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-green-400"></div>
+                            <p className="text-sm text-white">{username}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
                     <button
                       type="button"
                       onClick={() => fetchActiveMoshes()}
