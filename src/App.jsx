@@ -1887,16 +1887,31 @@ function App() {
               <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {!selectedAuthor && (
                   <>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value)
-                        setShowAllResults(false)
-                      }}
-                      placeholder="Search authors, themes, or moods..."
-                      className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value)
+                          setShowAllResults(false)
+                        }}
+                        placeholder="Search authors, themes, or moods..."
+                        className="w-full bg-transparent px-4 py-3 pr-10 text-white placeholder:text-white/40 focus:outline-none"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('')
+                            setSearchResults([])
+                            setHasSearched(false)
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                     {searchQuery && (
                       <div className="flex items-center justify-between text-xs text-white/60">
                         <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
@@ -2026,14 +2041,23 @@ function App() {
                 </div>
               </div>
 
-              <div className="mt-5">
+              <div className="mt-5 relative">
                 <input
                   type="text"
                   value={librarySearch}
                   onChange={(e) => setLibrarySearch(e.target.value)}
                   placeholder="Search your library..."
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
+                {librarySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setLibrarySearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
