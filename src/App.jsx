@@ -75,10 +75,11 @@ const updateUserFriends = async (userId, friends) => {
       .from('users')
       .update({ friends, updated_at: new Date().toISOString() })
       .eq('id', userId)
-      .select()
+      .select('id, username, email, friends, is_private')
+      .single()
     
     if (error) throw error
-    return data[0]
+    return data
   } catch (error) {
     console.error('Error updating friends:', error)
     throw error
@@ -742,88 +743,6 @@ function App() {
         console.error('[AUTH] Failed to restore user:', err)
         localStorage.removeItem('bookmosh-user')
       }
-    }
-
-    // Handle magic link authentication
-    if (!supabase) return
-
-    const handleAuthChange = async (event, session) => {
-      console.log('[AUTH] Auth state changed:', event, session)
-      
-      // Don't process auth changes during user updates (like adding friends)
-      if (isUpdatingUserRef.current) {
-        console.log('[AUTH] Ignoring auth change during user update')
-        return
-      }
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        // User signed in via magic link
-        const { user: authUser } = session
-        
-        // Look up or create user profile
-        const { data: users, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', authUser.email)
-          .limit(1)
-        
-        if (error) {
-          console.error('[AUTH] Failed to fetch user profile:', error)
-          return
-        }
-        
-        let userProfile
-        if (users && users.length > 0) {
-          // Existing user
-          userProfile = users[0]
-        } else {
-          // New user - create profile
-          const username = authUser.email.split('@')[0]
-          try {
-            await createUser({
-              id: authUser.id,
-              username: username,
-              email: authUser.email,
-              password_hash: 'managed_by_supabase_auth',
-              friends: [],
-              is_private: false,
-            })
-            
-            userProfile = {
-              id: authUser.id,
-              username: username,
-              email: authUser.email,
-              friends: [],
-              is_private: false,
-            }
-          } catch (createError) {
-            console.error('[AUTH] Failed to create user profile:', createError)
-            return
-          }
-        }
-        
-        // Store in localStorage and set current user
-        localStorage.setItem('bookmosh-user', JSON.stringify(userProfile))
-        setCurrentUser(userProfile)
-        console.log('[AUTH] Magic link login successful:', userProfile.username)
-        
-        // Sign out from Supabase (we manage sessions via localStorage)
-        await supabase.auth.signOut({ scope: 'local' })
-      }
-    }
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthChange)
-
-    // Check for existing session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        handleAuthChange('SIGNED_IN', session)
-      }
-    })
-
-    return () => {
-      subscription?.unsubscribe()
     }
   }, [])
 
@@ -1928,6 +1847,8 @@ function App() {
     try {
       // Prevent auth state changes during friend update
       isUpdatingUserRef.current = true
+
+      const existingFriends = Array.isArray(currentUser.friends) ? currentUser.friends : []
       
       // Search for users
       const searchResults = await searchUsers(query)
@@ -1940,7 +1861,7 @@ function App() {
       // Filter out current user and existing friends
       const availableMatches = searchResults.filter(user => 
         user.id !== currentUser.id && 
-        !currentUser.friends.includes(user.username)
+        !existingFriends.includes(user.username)
       )
       
       if (availableMatches.length === 0) {
@@ -1954,10 +1875,14 @@ function App() {
       
       // Add first available friend
       const friendToAdd = availableMatches[0]
-      const updatedFriends = [...currentUser.friends, friendToAdd.username]
+      const updatedFriends = [...existingFriends, friendToAdd.username]
       
       // Update friends in database
       const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
+
+      if (!updatedUser) {
+        throw new Error('Friend update returned no user data')
+      }
       
       // Update current user state locally AND in localStorage
       setCurrentUser(updatedUser)
