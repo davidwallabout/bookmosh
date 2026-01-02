@@ -1614,7 +1614,7 @@ function App() {
         email: signupData.email,
         password: signupData.password,
         options: {
-          emailRedirectTo: 'https://bookmosh.com',
+          emailRedirectTo: window.location.origin,
           data: {
             username: signupData.username,
           }
