@@ -1783,15 +1783,21 @@ function App() {
                         <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
                         <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
                         
-                        {book.rating > 0 && (
-                          <div className="mt-1 flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <span key={star} className={`text-sm ${star <= book.rating ? 'text-yellow-400' : 'text-white/20'}`}>
-                                ★
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <div className="mt-1 flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                updateBook(book.title, { rating: star })
+                              }}
+                              className={`text-sm transition hover:scale-110 ${star <= (book.rating || 0) ? 'text-yellow-400' : 'text-white/20 hover:text-yellow-400/50'}`}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
 
                         <div className="mt-2 flex flex-wrap gap-2">
                           {(book.tags ?? []).map((tag) => (
@@ -2378,32 +2384,30 @@ function App() {
                 />
 
                 {/* Available friends list */}
-                {moshInviteSearch && (
-                  <div className="max-h-40 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-[#050914]/60 p-3">
-                    {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
-                      .filter(f => 
-                        f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
-                        !moshInviteFriends.includes(f)
-                      )
-                      .map((friend) => (
-                        <button
-                          key={friend}
-                          type="button"
-                          onClick={() => addMoshInviteFriend(friend)}
-                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
-                        >
-                          {friend}
-                        </button>
-                      ))}
-                    {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
-                      .filter(f => 
-                        f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
-                        !moshInviteFriends.includes(f)
-                      ).length === 0 && (
-                      <p className="text-sm text-white/60">No matching friends</p>
-                    )}
-                  </div>
-                )}
+                <div className="max-h-40 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-[#050914]/60 p-3">
+                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                    .filter(f => 
+                      f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
+                      !moshInviteFriends.includes(f)
+                    )
+                    .map((friend) => (
+                      <button
+                        key={friend}
+                        type="button"
+                        onClick={() => addMoshInviteFriend(friend)}
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
+                      >
+                        {friend}
+                      </button>
+                    ))}
+                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                    .filter(f => 
+                      f.toLowerCase().includes(moshInviteSearch.toLowerCase()) && 
+                      !moshInviteFriends.includes(f)
+                    ).length === 0 && (
+                    <p className="text-sm text-white/60">{moshInviteSearch ? 'No matching friends' : 'No friends yet'}</p>
+                  )}
+                </div>
 
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{moshInviteError}</p>
               </div>
