@@ -352,15 +352,29 @@ const loadSupabaseBooks = async (owner) => {
 }
 
 const persistTrackerToSupabase = async (owner, books) => {
-  if (!supabase || !owner || !books.length) return
+  console.log('[LIBRARY] persistTrackerToSupabase called:', { owner, bookCount: books.length })
+  if (!supabase) {
+    console.error('[LIBRARY] No supabase client')
+    return
+  }
+  if (!owner) {
+    console.error('[LIBRARY] No owner provided')
+    return
+  }
+  if (!books.length) {
+    console.log('[LIBRARY] No books to persist')
+    return
+  }
   try {
     const payload = books.map((book) => buildSupabasePayload(book, owner))
+    console.log('[LIBRARY] Upserting books to Supabase:', payload.length)
     const { error } = await supabase
       .from(SUPABASE_TABLE)
       .upsert(payload, {
         onConflict: ['owner', 'title'],
       })
     if (error) {
+      console.error('[LIBRARY] Upsert error:', error)
       // Backwards compat: if the table doesn't have a tags column yet, retry without it.
       const message = String(error.message ?? '')
       if (message.toLowerCase().includes('tags') && message.toLowerCase().includes('column')) {
@@ -369,14 +383,18 @@ const persistTrackerToSupabase = async (owner, books) => {
           .from(SUPABASE_TABLE)
           .upsert(fallbackPayload, { onConflict: ['owner', 'title'] })
         if (fallbackError) {
-          console.error('Supabase upsert failed', fallbackError)
+          console.error('[LIBRARY] Fallback upsert failed', fallbackError)
+        } else {
+          console.log('[LIBRARY] Fallback upsert succeeded')
         }
         return
       }
-      console.error('Supabase upsert failed', error)
+      console.error('[LIBRARY] Supabase upsert failed', error)
+    } else {
+      console.log('[LIBRARY] Books saved successfully to Supabase')
     }
   } catch (error) {
-    console.error('Supabase upsert failed', error)
+    console.error('[LIBRARY] Supabase upsert exception:', error)
   }
 }
 
