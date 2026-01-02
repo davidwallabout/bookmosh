@@ -1628,6 +1628,47 @@ function App() {
     }
   }
 
+  const updateReadBooksProgress = async () => {
+    if (!currentUser) return
+    
+    const confirmed = window.confirm('Update all books marked as "Read" to 100% progress?')
+    if (!confirmed) return
+    
+    try {
+      // Update local state first
+      const updatedBooks = tracker.map(book => {
+        if (book.status === 'Read' && book.progress !== 100) {
+          return { ...book, progress: 100 }
+        }
+        return book
+      })
+      
+      setTracker(updatedBooks)
+      
+      // Update in Supabase
+      if (supabase) {
+        const readBooks = tracker.filter(b => b.status === 'Read' && b.progress !== 100)
+        
+        for (const book of readBooks) {
+          const { error } = await supabase
+            .from(SUPABASE_TABLE)
+            .update({ progress: 100 })
+            .eq('owner', currentUser.username)
+            .eq('title', book.title)
+          
+          if (error) {
+            console.error('[LIBRARY] Update progress failed for:', book.title, error)
+          }
+        }
+        
+        alert(`Updated ${readBooks.length} books to 100% progress`)
+      }
+    } catch (error) {
+      console.error('[LIBRARY] Update progress exception:', error)
+      alert('Failed to update book progress')
+    }
+  }
+
   const handleLogout = async () => {
     console.log('[AUTH] Logging out')
     localStorage.removeItem('bookmosh-user')
@@ -2486,6 +2527,14 @@ function App() {
                   
                   <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <p className="text-xs uppercase tracking-[0.3em] text-white/50">Danger Zone</p>
+                    <button
+                      type="button"
+                      onClick={updateReadBooksProgress}
+                      className="w-full rounded-2xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-400 transition hover:border-amber-500 hover:bg-amber-500/20"
+                    >
+                      Update Read Books to 100%
+                    </button>
+                    <p className="text-[10px] text-white/50">Set all books marked as "Read" to 100% progress.</p>
                     <button
                       type="button"
                       onClick={deleteAllBooks}
