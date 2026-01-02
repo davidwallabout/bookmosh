@@ -266,10 +266,21 @@ const parseStoryGraphCSV = (text) => {
         status = 'to-read'
       }
       
+      // Check if book is owned
+      const owned = (item.Owned || item.owned || '').toLowerCase()
+      const isOwned = owned === 'true' || owned === 'yes' || owned === '1'
+      
+      // Build tags array with status and owned
+      const tags = [status]
+      if (isOwned) {
+        tags.push('Owned')
+      }
+      
       return {
         title: item.Title || item.title || '',
         author: item.Authors || item.Author || item.author || '',
         status: status,
+        tags: tags,
         rating: parseInt(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
         progress: parseInt(item['Read Progress'] || item.progress) || 0,
         mood: item.Review || item.Notes || item.Mood || item.mood || '',
@@ -1528,6 +1539,36 @@ function App() {
     }
   }
 
+  const deleteAllBooks = async () => {
+    if (!currentUser) return
+    
+    const confirmed = window.confirm('Are you sure you want to delete ALL books from your library? This cannot be undone.')
+    if (!confirmed) return
+    
+    try {
+      // Delete from Supabase
+      if (supabase) {
+        const { error } = await supabase
+          .from(SUPABASE_TABLE)
+          .delete()
+          .eq('owner', currentUser.username)
+        
+        if (error) {
+          console.error('[LIBRARY] Delete all failed:', error)
+          alert('Failed to delete books from database')
+          return
+        }
+      }
+      
+      // Clear local state
+      setTracker([])
+      alert('All books deleted successfully')
+    } catch (error) {
+      console.error('[LIBRARY] Delete all exception:', error)
+      alert('Failed to delete books')
+    }
+  }
+
   const handleLogout = async () => {
     console.log('[AUTH] Logging out')
     localStorage.removeItem('bookmosh-user')
@@ -2314,6 +2355,18 @@ function App() {
                       className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white"
                     />
                     <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
+                  </div>
+                  
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Danger Zone</p>
+                    <button
+                      type="button"
+                      onClick={deleteAllBooks}
+                      className="w-full rounded-2xl border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/20"
+                    >
+                      Delete All Books
+                    </button>
+                    <p className="text-[10px] text-white/50">This will permanently delete all books from your library.</p>
                   </div>
                 </div>
               </div>
