@@ -532,12 +532,15 @@ function App() {
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      console.log('[AUTH] Initial session check:', { hasSession: !!session, hasUser: !!session?.user, sessionError })
+      
       if (sessionError) {
-        console.error('Session check error:', sessionError)
+        console.error('[AUTH] Session check error:', sessionError)
         return
       }
       
-      if (mounted && session?.user && !isUpdatingUser) {
+      if (mounted && session?.user) {
+        console.log('[AUTH] Found session, fetching profile for user:', session.user.id)
         // Get user profile from users table
         supabase
           .from('users')
@@ -546,8 +549,9 @@ function App() {
           .single()
           .then(({ data: profile, error }) => {
             if (error) {
-              console.error('Profile lookup error:', error)
+              console.error('[AUTH] Profile lookup error:', error)
               if (mounted) {
+                console.log('[AUTH] Setting fallback user')
                 setCurrentUser({
                   id: session.user.id,
                   username: session.user.email?.split('@')[0] || 'user',
@@ -559,20 +563,25 @@ function App() {
               return
             }
             if (mounted && profile) {
+              console.log('[AUTH] Setting user from profile:', profile.username)
               setCurrentUser(profile)
             }
           })
           .catch((err) => {
-            console.error('Profile fetch failed:', err)
+            console.error('[AUTH] Profile fetch failed:', err)
           })
+      } else {
+        console.log('[AUTH] No session found on initial check')
       }
     }).catch((err) => {
-      console.error('Auth session check failed:', err)
+      console.error('[AUTH] Auth session check failed:', err)
     })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted || isUpdatingUser) return
+      console.log('[AUTH] State change event:', event, { hasSession: !!session, hasUser: !!session?.user })
+      
+      if (!mounted) return
 
       if (event === 'PASSWORD_RECOVERY') {
         setAuthMode('reset')
@@ -582,12 +591,14 @@ function App() {
       }
       
       if (event === 'SIGNED_OUT') {
+        console.log('[AUTH] User signed out')
         setCurrentUser(null)
         return
       }
       
       if (session?.user) {
         try {
+          console.log('[AUTH] Fetching profile for user:', session.user.id)
           // Get user profile from users table
           const { data: profile, error } = await supabase
             .from('users')
@@ -596,9 +607,11 @@ function App() {
             .single()
           
           if (profile && !error) {
+            console.log('[AUTH] Setting user from profile:', profile.username)
             setCurrentUser(profile)
           } else if (error) {
-            console.error('Profile lookup failed:', error)
+            console.error('[AUTH] Profile lookup failed:', error)
+            console.log('[AUTH] Setting fallback user')
             setCurrentUser({
               id: session.user.id,
               username: session.user.email?.split('@')[0] || 'user',
@@ -608,7 +621,7 @@ function App() {
             })
           }
         } catch (error) {
-          console.error('Profile lookup failed:', error)
+          console.error('[AUTH] Profile lookup failed:', error)
           setCurrentUser({
             id: session.user.id,
             username: session.user.email?.split('@')[0] || 'user',
@@ -624,7 +637,7 @@ function App() {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [isUpdatingUser])
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -642,20 +655,6 @@ function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker))
   }, [tracker])
-
-  useEffect(() => {
-    if (!supabase || !currentUser) return
-    let canceled = false
-    ;(async () => {
-      const rows = await loadSupabaseBooks(currentUser.username)
-      if (!canceled && rows.length) {
-        setTracker(rows)
-      }
-    })()
-    return () => {
-      canceled = true
-    }
-  }, [currentUser])
 
   useEffect(() => {
     if (!supabase || !currentUser) return
