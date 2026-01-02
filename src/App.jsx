@@ -1181,6 +1181,12 @@ function App() {
                     type="text"
                     value={authIdentifier}
                     onChange={(e) => setAuthIdentifier(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleLogin()
+                      }
+                    }}
                     placeholder="Username or email"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                   />
@@ -1188,6 +1194,12 @@ function App() {
                     type="password"
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleLogin()
+                      }
+                    }}
                     placeholder="Password"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                   />
@@ -1614,6 +1626,12 @@ function App() {
                       type="text"
                       value={authIdentifier}
                       onChange={(e) => setAuthIdentifier(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleLogin()
+                        }
+                      }}
                       placeholder="Username or email"
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                     />
@@ -1621,6 +1639,12 @@ function App() {
                       type="password"
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleLogin()
+                        }
+                      }}
                       placeholder="Password"
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                     />
