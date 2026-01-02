@@ -1835,7 +1835,7 @@ function App() {
             className="transition-opacity hover:opacity-80"
           >
             <img
-              src="/bookmosh-logo.png"
+              src="/bookmosh-vert.png"
               alt="BookMosh"
               className="h-48 w-auto"
             />
