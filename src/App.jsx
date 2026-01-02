@@ -673,26 +673,53 @@ function App() {
   const fetchAuthorBooks = async (authorName) => {
     if (!authorName?.trim()) return
     setIsSearching(true)
+    setSelectedAuthor(authorName)
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=100&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
-      const mapped = data.docs.map((doc) => ({
-        key: doc.key,
-        title: doc.title,
-        author: doc.author_name?.[0] ?? authorName,
-        year: doc.first_publish_year,
-        cover: doc.cover_i
-          ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-          : null,
-        editionCount: doc.edition_count || 0,
-        rating: doc.ratings_average || 0,
-        subjects: doc.subject?.slice(0, 3) || [],
-        isbn: doc.isbn?.[0] || null,
-        publisher: doc.publisher?.[0] || null,
-        language: doc.language?.[0] || null,
-      }))
+      
+      const authorLower = authorName.toLowerCase()
+      
+      const mapped = data.docs
+        .filter(doc => {
+          if (!doc.title) return false
+          const title = doc.title.toLowerCase()
+          // Filter out compilations, anthologies, and "best of" collections
+          if (title.includes('best of') || 
+              title.includes('anthology') || 
+              title.includes('collection') ||
+              title.includes('complete works') ||
+              title.includes('selected works')) {
+            return false
+          }
+          return true
+        })
+        .map((doc) => ({
+          key: doc.key,
+          title: doc.title,
+          author: doc.author_name?.[0] ?? 'Unknown author',
+          year: doc.first_publish_year,
+          cover: doc.cover_i
+            ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+            : null,
+          editionCount: doc.edition_count || 0,
+          rating: doc.ratings_average || 0,
+          subjects: doc.subject?.slice(0, 3) || [],
+          isbn: doc.isbn?.[0] || null,
+          publisher: doc.publisher?.[0] || null,
+          language: doc.language?.[0] || null,
+        }))
+        .sort((a, b) => {
+          // Sort by edition count (popularity) first
+          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
+          // Then by rating
+          if (b.rating !== a.rating) return b.rating - a.rating
+          // Then by year (newer first)
+          return (b.year || 0) - (a.year || 0)
+        })
+      
       setSearchResults(mapped)
       setHasSearched(true)
       setSelectedAuthor(authorName)
@@ -704,7 +731,7 @@ function App() {
     }
   }
 
-  const fetchResults = async (term, limit = 6) => {
+  const fetchResults = async (term, limit = 20) => {
     if (!term?.trim()) {
       setHasSearched(false)
       setSearchResults([])
@@ -714,7 +741,7 @@ function App() {
     try {
       // Use general search to include both title and author
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 2}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
       
