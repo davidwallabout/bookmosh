@@ -2684,9 +2684,18 @@ function App() {
                           value={moshDraft}
                           onChange={(e) => handleMoshDraftChange(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !showMentionDropdown) {
+                            if (e.key === 'Enter') {
                               e.preventDefault()
-                              sendMoshMessage()
+                              if (showMentionDropdown) {
+                                // Select first matching participant
+                                const matches = (activeMosh?.participants_usernames || [])
+                                  .filter(u => u.toLowerCase().includes(moshMentionQuery))
+                                if (matches.length > 0) {
+                                  insertMention(matches[0])
+                                }
+                              } else {
+                                sendMoshMessage()
+                              }
                             }
                           }}
                           placeholder="Type a message… (use @ to mention)"
