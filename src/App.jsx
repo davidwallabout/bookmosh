@@ -279,20 +279,18 @@ const parseStoryGraphCSV = (text) => {
 }
 
 const parseStoryGraphJSON = (text) => {
-  try {
-    const data = JSON.parse(text)
-    return data.map((item) => ({
-      title: item.title || '',
-      author: item.author || '',
-      status: item.readStatus || 'to-read',
-      rating: item.rating || 0,
-      progress: item.progress || 0,
-      mood: item.mood || '',
-    }))
-  } catch (error) {
-    console.error('Failed to parse StoryGraph JSON:', error)
-    return []
+  const data = JSON.parse(text)
+  if (!Array.isArray(data)) {
+    throw new Error('JSON data is not an array')
   }
+  return data.map((item) => ({
+    title: item.title || '',
+    author: item.author || '',
+    status: item.readStatus || 'to-read',
+    rating: item.rating || 0,
+    progress: item.progress || 0,
+    mood: item.mood || '',
+  }))
 }
 
 const mergeImportedBooks = (books, setMessage, setTracker) => {
