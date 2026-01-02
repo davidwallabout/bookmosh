@@ -525,57 +525,80 @@ function App() {
       setAuthMode('reset')
     }
 
-    try {
-      // Get initial session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (mounted && session?.user && !isUpdatingUser) {
+    if (!supabase) {
+      console.error('Supabase client not initialized')
+      return
+    }
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      if (sessionError) {
+        console.error('Session check error:', sessionError)
+        return
+      }
+      
+      if (mounted && session?.user && !isUpdatingUser) {
+        // Get user profile from users table
+        supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data: profile, error }) => {
+            if (error) {
+              console.error('Profile lookup error:', error)
+              if (mounted) {
+                setCurrentUser({
+                  id: session.user.id,
+                  username: session.user.email?.split('@')[0] || 'user',
+                  email: session.user.email || '',
+                  friends: [],
+                  is_private: false,
+                })
+              }
+              return
+            }
+            if (mounted && profile) {
+              setCurrentUser(profile)
+            }
+          })
+          .catch((err) => {
+            console.error('Profile fetch failed:', err)
+          })
+      }
+    }).catch((err) => {
+      console.error('Auth session check failed:', err)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted || isUpdatingUser) return
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('reset')
+        setAuthMessage('')
+        setCurrentUser(null)
+        return
+      }
+      
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null)
+        return
+      }
+      
+      if (session?.user) {
+        try {
           // Get user profile from users table
-          supabase
+          const { data: profile, error } = await supabase
             .from('users')
             .select('*')
             .eq('id', session.user.id)
             .single()
-            .then(({ data: profile, error }) => {
-              if (mounted && profile && !error) {
-                setCurrentUser(profile)
-              }
-            })
-            .catch(() => {
-              // Silently fail if user profile doesn't exist yet
-            })
-        } else if (mounted) {
-          setCurrentUser(null)
-        }
-      }).catch(() => {
-        // Silently fail if auth check fails
-      })
-
-      // Listen for auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (!mounted || isUpdatingUser) return
-
-        if (event === 'PASSWORD_RECOVERY') {
-          setAuthMode('reset')
-          setAuthMessage('')
-          setCurrentUser(null)
-          return
-        }
-        
-        if (session?.user) {
-          try {
-            // Get user profile from users table
-            const { data: profile, error } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single()
-            
-            if (profile && !error) {
-              setCurrentUser(profile)
-            }
-          } catch (error) {
+          
+          if (profile && !error) {
+            setCurrentUser(profile)
+          } else if (error) {
             console.error('Profile lookup failed:', error)
-            // Still set user even if profile lookup fails
             setCurrentUser({
               id: session.user.id,
               username: session.user.email?.split('@')[0] || 'user',
@@ -584,17 +607,22 @@ function App() {
               is_private: false,
             })
           }
-        } else {
-          setCurrentUser(null)
+        } catch (error) {
+          console.error('Profile lookup failed:', error)
+          setCurrentUser({
+            id: session.user.id,
+            username: session.user.email?.split('@')[0] || 'user',
+            email: session.user.email || '',
+            friends: [],
+            is_private: false,
+          })
         }
-      })
-
-      return () => {
-        mounted = false
-        subscription.unsubscribe()
       }
-    } catch (error) {
-      console.error('Auth setup failed:', error)
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
     }
   }, [isUpdatingUser])
 
@@ -1031,11 +1059,13 @@ function App() {
             })),
           )
         await fetchActiveMoshes()
+        setIsMoshPanelOpen(true)
         await openMosh(created)
       }
     } catch (error) {
       console.error('Create mosh failed', error)
       setFriendMessage('Failed to start mosh.')
+      throw error
     }
   }
 
@@ -1565,7 +1595,7 @@ function App() {
             <img
               src="/bookmosh-logo.png"
               alt="BookMosh"
-              className="h-12 w-auto"
+              className="h-16 w-auto"
             />
           </button>
 
