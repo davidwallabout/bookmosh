@@ -519,6 +519,8 @@ function App() {
   const [moshInviteLoading, setMoshInviteLoading] = useState(false)
   const [moshArchiveFilter, setMoshArchiveFilter] = useState('open')
   const [librarySearch, setLibrarySearch] = useState('')
+  const [showAllLibrary, setShowAllLibrary] = useState(false)
+  const [libraryPage, setLibraryPage] = useState(0)
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
@@ -585,11 +587,23 @@ function App() {
             (book.author ?? '').toLowerCase().includes(librarySearch.toLowerCase()),
         )
     
-    // Show only last 6 books added (most recent first)
-    return searchFiltered.slice(0, 6)
-      .slice()
-      .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+    return searchFiltered
   }, [tracker, libraryFilterTags, librarySearch])
+
+  const paginatedLibrary = useMemo(() => {
+    if (!showAllLibrary) {
+      // Show only last 6 books added when not in "view all" mode
+      return filteredLibrary.slice(0, 6)
+    }
+    
+    // Paginate with 50 books per page
+    const startIndex = libraryPage * 50
+    return filteredLibrary.slice(startIndex, startIndex + 50)
+  }, [filteredLibrary, showAllLibrary, libraryPage])
+
+  const totalLibraryPages = useMemo(() => {
+    return Math.ceil(filteredLibrary.length / 50)
+  }, [filteredLibrary])
 
   const moshLibraryMatches = useMemo(() => {
     const query = moshLibrarySearch.trim().toLowerCase()
@@ -1992,9 +2006,60 @@ function App() {
                 )}
               </div>
 
+              {!showAllLibrary && filteredLibrary.length > 6 && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAllLibrary(true)
+                      setLibraryPage(0)
+                    }}
+                    className="rounded-2xl bg-gradient-to-r from-aurora/80 to-white/60 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-aurora hover:to-white/80 shadow-lg"
+                  >
+                    View All {filteredLibrary.length} Books →
+                  </button>
+                </div>
+              )}
+
+              {showAllLibrary && (
+                <div className="mt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAllLibrary(false)
+                      setLibraryPage(0)
+                    }}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                  >
+                    ← Show Less
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLibraryPage(Math.max(0, libraryPage - 1))}
+                      disabled={libraryPage === 0}
+                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      ←
+                    </button>
+                    <span className="text-xs text-white/60">
+                      Page {libraryPage + 1} of {totalLibraryPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLibraryPage(Math.min(totalLibraryPages - 1, libraryPage + 1))}
+                      disabled={libraryPage >= totalLibraryPages - 1}
+                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 space-y-3">
-                {filteredLibrary.length > 0 ? (
-                  filteredLibrary.map((book) => (
+                {paginatedLibrary.length > 0 ? (
+                  paginatedLibrary.map((book) => (
                     <div key={book.title} className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
                       <button
                         type="button"
