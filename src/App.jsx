@@ -594,7 +594,7 @@ function App() {
     
     if (searchQuery.trim()) {
       const newDebounce = setTimeout(() => {
-        fetchResults(searchQuery.trim(), showAllResults ? 50 : 6)
+        fetchResults(searchQuery.trim(), showAllResults ? 100 : 6)
       }, 300)
       setSearchDebounce(newDebounce)
     } else {
@@ -651,11 +651,13 @@ function App() {
     }
     setIsSearching(true)
     try {
-      // Use title search for better relevance
+      // Use general search to include both title and author
       const response = await fetch(
-        `https://openlibrary.org/search.json?title=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 2}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
+      
+      const searchLower = term.toLowerCase()
       
       // Filter and sort results for better relevance
       const mapped = data.docs
@@ -674,8 +676,15 @@ function App() {
           isbn: doc.isbn?.[0] || null,
           publisher: doc.publisher?.[0] || null,
           language: doc.language?.[0] || null,
-          // Calculate relevance score
-          relevance: doc.title.toLowerCase().includes(term.toLowerCase()) ? 1 : 0
+          // Calculate relevance score based on title and author match
+          relevance: (() => {
+            const titleMatch = doc.title.toLowerCase().includes(searchLower)
+            const authorMatch = doc.author_name?.some(a => a.toLowerCase().includes(searchLower))
+            if (titleMatch && authorMatch) return 3 // Both match
+            if (titleMatch) return 2 // Title match
+            if (authorMatch) return 1 // Author match
+            return 0
+          })()
         }))
         .sort((a, b) => {
           // Sort by relevance first, then by edition count
@@ -1633,13 +1642,13 @@ function App() {
                   </div>
 
                   {!selectedAuthor && searchResults.length > 6 && (
-                    <div className="mt-4 flex justify-center">
+                    <div className="mt-6 flex justify-center">
                       <button
                         type="button"
                         onClick={() => setShowAllResults(!showAllResults)}
-                        className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
+                        className="rounded-2xl bg-gradient-to-r from-aurora/80 to-white/60 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-aurora hover:to-white/80 shadow-lg"
                       >
-                        {showAllResults ? 'Show first 6' : `Show ${searchResults.length - 6} more results`}
+                        {showAllResults ? '← Show Less' : `Show All ${searchResults.length} Results →`}
                       </button>
                     </div>
                   )}
