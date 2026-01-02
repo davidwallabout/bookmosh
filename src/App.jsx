@@ -1717,13 +1717,13 @@ function App() {
       return
     }
     
+    setAuthLoading(true)
     try {
-      // Create auth user with custom email template
+      // Create auth user (email confirmation disabled in Supabase settings)
       const { data: { user }, error: authError } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
         options: {
-          emailRedirectTo: window.location.origin,
           data: {
             username: signupData.username,
           }
@@ -1732,26 +1732,37 @@ function App() {
       
       if (authError) throw authError
       
-      // Don't auto-logout - let user stay on page to check email
-      setAuthMessage('Success! Please check your email to confirm your account.')
-      setSignupData({ username: '', email: '', password: '' })
+      // Create user profile
+      const userProfile = {
+        id: user.id,
+        username: signupData.username,
+        email: signupData.email,
+        password_hash: 'managed_by_supabase_auth',
+        friends: [],
+        is_private: false,
+      }
       
-      // Create user profile immediately (will be accessible after email confirmation)
       try {
-        await createUser({
-          id: user.id,
-          username: signupData.username,
-          email: signupData.email,
-          password_hash: 'managed_by_supabase_auth',
-          friends: [],
-          is_private: false,
-        })
+        await createUser(userProfile)
       } catch (profileError) {
         console.error('Profile creation failed:', profileError)
-        // Don't show error to user since email confirmation is the main concern
+        // Continue anyway - profile might already exist
       }
+      
+      // Sign out from Supabase (we manage sessions locally)
+      await supabase.auth.signOut({ scope: 'local' })
+      
+      // Log user in immediately
+      localStorage.setItem('bookmosh-user', JSON.stringify(userProfile))
+      setCurrentUser(userProfile)
+      console.log('[AUTH] Signup successful, user logged in:', userProfile.username)
+      
+      setSignupData({ username: '', email: '', password: '' })
+      setAuthMessage('')
     } catch (error) {
       setAuthMessage(error.message || 'Signup failed')
+    } finally {
+      setAuthLoading(false)
     }
   }
 
