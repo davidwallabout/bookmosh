@@ -608,6 +608,7 @@ function App() {
     email: '',
     password: '',
   })
+  const [magicLinkEmail, setMagicLinkEmail] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [supabaseUser, setSupabaseUser] = useState(null)
@@ -1591,6 +1592,38 @@ function App() {
     } catch (error) {
       console.error('[AUTH] Login error:', error)
       setAuthMessage('Login failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleMagicLink = async () => {
+    setAuthMessage('')
+    if (!supabase) {
+      setAuthMessage('Supabase not configured. Please check environment variables.')
+      return
+    }
+    
+    if (!magicLinkEmail) {
+      setAuthMessage('Please enter your email.')
+      return
+    }
+    
+    setAuthLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: magicLinkEmail,
+        options: {
+          emailRedirectTo: window.location.origin,
+        }
+      })
+      
+      if (error) throw error
+      
+      setAuthMessage('Check your email for a magic link to sign in!')
+      setMagicLinkEmail('')
+    } catch (error) {
+      setAuthMessage(error.message || 'Failed to send magic link')
     } finally {
       setAuthLoading(false)
     }
@@ -2738,6 +2771,17 @@ function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleAuthModeSwitch('magic')}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    authMode === 'magic'
+                      ? 'border-white/60 bg-white/10 text-white'
+                      : 'border-white/10 text-white/60 hover:border-white/40'
+                  }`}
+                >
+                  Magic Link
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleAuthModeSwitch('signup')}
                   className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
                     authMode === 'signup'
@@ -2786,6 +2830,34 @@ function App() {
                   className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
                 >
                   {authLoading ? 'Signing in…' : 'Sign in'}
+                </button>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
+              </div>
+            ) : authMode === 'magic' ? (
+              <div className="mt-6 space-y-3">
+                <p className="text-sm text-white/60 text-center">
+                  Enter your email and we'll send you a magic link to sign in instantly - no password needed!
+                </p>
+                <input
+                  type="email"
+                  value={magicLinkEmail}
+                  onChange={(e) => setMagicLinkEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleMagicLink()
+                    }
+                  }}
+                  placeholder="Email"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleMagicLink}
+                  disabled={authLoading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {authLoading ? 'Sending…' : 'Send magic link'}
                 </button>
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
               </div>
