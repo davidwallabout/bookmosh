@@ -867,7 +867,7 @@ function App() {
         .from('moshes')
         .select('*')
         .contains('participants_ids', [currentUser.id])
-        .eq('archived', moshArchiveFilter === 'archived')
+        .eq('archived', moshArchiveFilter === 'archived' ? true : false)
         .order('created_at', { ascending: false })
         .limit(50)
       if (error) throw error
