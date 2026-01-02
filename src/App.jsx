@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
 
 const STORAGE_KEY = 'bookmosh-tracker-storage'
@@ -596,7 +596,7 @@ function App() {
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
-  const [isUpdatingUser, setIsUpdatingUser] = useState(false)
+  const isUpdatingUserRef = useRef(false)
   const [authMode, setAuthMode] = useState('login')
   const [successModal, setSuccessModal] = useState({ show: false, book: null, list: '' })
   const [authIdentifier, setAuthIdentifier] = useState('')
@@ -728,7 +728,7 @@ function App() {
     return currentUser.friends
       .map((username) => users.find((user) => user.username === username))
       .filter(Boolean)
-  }, [currentUser, users, isUpdatingUser])
+  }, [currentUser, users])
 
   useEffect(() => {
     // SIMPLE AUTH: Just restore user from localStorage
@@ -751,7 +751,7 @@ function App() {
       console.log('[AUTH] Auth state changed:', event, session)
       
       // Don't process auth changes during user updates (like adding friends)
-      if (isUpdatingUser) {
+      if (isUpdatingUserRef.current) {
         console.log('[AUTH] Ignoring auth change during user update')
         return
       }
@@ -825,7 +825,7 @@ function App() {
     return () => {
       subscription?.unsubscribe()
     }
-  }, [isUpdatingUser])
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1927,7 +1927,7 @@ function App() {
     
     try {
       // Prevent auth state changes during friend update
-      setIsUpdatingUser(true)
+      isUpdatingUserRef.current = true
       
       // Search for users
       const searchResults = await searchUsers(query)
@@ -1969,7 +1969,7 @@ function App() {
       console.error('Friend add error:', error)
       setFriendMessage('Failed to add friend. Please try again.')
     } finally {
-      setIsUpdatingUser(false)
+      isUpdatingUserRef.current = false
     }
   }
 
