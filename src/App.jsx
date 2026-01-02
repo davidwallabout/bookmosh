@@ -1782,6 +1782,16 @@ function App() {
                         <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
                         <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
                         <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+                        
+                        {book.rating > 0 && (
+                          <div className="mt-1 flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span key={star} className={`text-sm ${star <= book.rating ? 'text-yellow-400' : 'text-white/20'}`}>
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                         <div className="mt-2 flex flex-wrap gap-2">
                           {(book.tags ?? []).map((tag) => (
