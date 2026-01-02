@@ -304,6 +304,51 @@ const parseStoryGraphJSON = (text) => {
   }))
 }
 
+const matchBookInBackground = async (book, setTracker) => {
+  try {
+    const searchQuery = `${book.title} ${book.author}`.trim()
+    const response = await fetch(
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1&fields=key,title,author_name,cover_i,isbn`
+    )
+    const data = await response.json()
+    
+    if (data.docs && data.docs.length > 0) {
+      const match = data.docs[0]
+      const cover = match.cover_i 
+        ? `https://covers.openlibrary.org/b/id/${match.cover_i}-M.jpg`
+        : null
+      const isbn = match.isbn?.[0] || null
+      
+      if (cover || isbn) {
+        setTracker((prev) => 
+          prev.map((b) => 
+            b.title === book.title && b.author === book.author
+              ? { ...b, cover: cover || b.cover, isbn: isbn || b.isbn }
+              : b
+          )
+        )
+      }
+    }
+  } catch (error) {
+    console.error('[IMPORT] Background match failed:', book.title, error)
+  }
+}
+
+const startBackgroundMatching = (books, setTracker) => {
+  let index = 0
+  const matchNext = () => {
+    if (index < books.length) {
+      const book = books[index]
+      if (!book.cover) {
+        matchBookInBackground(book, setTracker)
+      }
+      index++
+      setTimeout(matchNext, 2000) // Wait 2 seconds between requests
+    }
+  }
+  setTimeout(matchNext, 1000) // Start after 1 second
+}
+
 const mergeImportedBooks = (books, setMessage, setTracker) => {
   setTracker((prev) => {
     const seen = new Set(
@@ -323,7 +368,11 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
       setMessage('No new titles were added from this import.')
       return prev
     }
-    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}.`)
+    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}. Matching covers in background...`)
+    
+    // Start background matching for books without covers
+    startBackgroundMatching(unique, setTracker)
+    
     return [...unique, ...prev]
   })
 }
