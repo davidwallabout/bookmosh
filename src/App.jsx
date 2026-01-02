@@ -646,25 +646,39 @@ function App() {
     }
     setIsSearching(true)
     try {
+      // Use title search for better relevance
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit}&sort=editions&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,key,isbn,publisher,language,place,person`,
+        `https://openlibrary.org/search.json?title=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
-      const mapped = data.docs.map((doc) => ({
-        key: doc.key,
-        title: doc.title,
-        author: doc.author_name?.[0] ?? 'Unknown author',
-        year: doc.first_publish_year,
-        cover: doc.cover_i
-          ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-          : null,
-        editionCount: doc.edition_count || 0,
-        rating: doc.ratings_average || 0,
-        subjects: doc.subject?.slice(0, 3) || [],
-        isbn: doc.isbn?.[0] || null,
-        publisher: doc.publisher?.[0] || null,
-        language: doc.language?.[0] || null,
-      }))
+      
+      // Filter and sort results for better relevance
+      const mapped = data.docs
+        .filter(doc => doc.title) // Only books with titles
+        .map((doc) => ({
+          key: doc.key,
+          title: doc.title,
+          author: doc.author_name?.[0] ?? 'Unknown author',
+          year: doc.first_publish_year,
+          cover: doc.cover_i
+            ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+            : null,
+          editionCount: doc.edition_count || 0,
+          rating: doc.ratings_average || 0,
+          subjects: doc.subject?.slice(0, 3) || [],
+          isbn: doc.isbn?.[0] || null,
+          publisher: doc.publisher?.[0] || null,
+          language: doc.language?.[0] || null,
+          // Calculate relevance score
+          relevance: doc.title.toLowerCase().includes(term.toLowerCase()) ? 1 : 0
+        }))
+        .sort((a, b) => {
+          // Sort by relevance first, then by edition count
+          if (b.relevance !== a.relevance) return b.relevance - a.relevance
+          return b.editionCount - a.editionCount
+        })
+        .slice(0, limit) // Take only the requested limit after sorting
+      
       setSearchResults(mapped)
       setHasSearched(true)
     } catch (err) {
