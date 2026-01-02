@@ -334,16 +334,37 @@ const matchBookInBackground = async (book, setTracker) => {
   }
 }
 
-const startBackgroundMatching = (books, setTracker) => {
+const startBackgroundMatching = (books, setTracker, username) => {
+  const queueKey = `bookmosh-match-queue-${username}`
+  
+  // Save queue to localStorage
+  const booksToMatch = books.filter(b => !b.cover).map(b => ({ title: b.title, author: b.author }))
+  if (booksToMatch.length > 0) {
+    localStorage.setItem(queueKey, JSON.stringify(booksToMatch))
+  }
+  
   let index = 0
   const matchNext = () => {
-    if (index < books.length) {
-      const book = books[index]
-      if (!book.cover) {
-        matchBookInBackground(book, setTracker)
-      }
+    // Get current queue from localStorage
+    const queueData = localStorage.getItem(queueKey)
+    if (!queueData) return
+    
+    const queue = JSON.parse(queueData)
+    if (index < queue.length) {
+      const book = queue[index]
+      matchBookInBackground(book, setTracker).then(() => {
+        // Remove matched book from queue
+        queue.splice(index, 1)
+        if (queue.length > 0) {
+          localStorage.setItem(queueKey, JSON.stringify(queue))
+        } else {
+          localStorage.removeItem(queueKey)
+        }
+      })
       index++
       setTimeout(matchNext, 2000) // Wait 2 seconds between requests
+    } else {
+      localStorage.removeItem(queueKey)
     }
   }
   setTimeout(matchNext, 1000) // Start after 1 second
@@ -369,9 +390,6 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
       return prev
     }
     setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}. Matching covers in background...`)
-    
-    // Start background matching for books without covers
-    startBackgroundMatching(unique, setTracker)
     
     return [...unique, ...prev]
   })
@@ -1675,6 +1693,27 @@ function App() {
     setCurrentUser(null)
   }
 
+  // Resume background matching on mount if there's a queue
+  useEffect(() => {
+    if (!currentUser) return
+    
+    const queueKey = `bookmosh-match-queue-${currentUser.username}`
+    const queueData = localStorage.getItem(queueKey)
+    
+    if (queueData) {
+      try {
+        const queue = JSON.parse(queueData)
+        if (queue.length > 0) {
+          console.log('[IMPORT] Resuming background matching for', queue.length, 'books')
+          startBackgroundMatching(queue, setTracker, currentUser.username)
+        }
+      } catch (error) {
+        console.error('[IMPORT] Failed to resume background matching:', error)
+        localStorage.removeItem(queueKey)
+      }
+    }
+  }, [currentUser])
+
   const importHandler = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -1721,6 +1760,11 @@ function App() {
         return
       }
       mergeImportedBooks(imported, setImportMessage, setTracker)
+      
+      // Start background matching for imported books
+      if (currentUser) {
+        startBackgroundMatching(imported, setTracker, currentUser.username)
+      }
     }
     reader.onerror = () => {
       setImportMessage('File reading failed.')
