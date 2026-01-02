@@ -2455,6 +2455,103 @@ function App() {
             </div>
           </div>
         )}
+
+        {selectedBook && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeModal}>
+            <div className="w-[clamp(320px,90vw,600px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-5">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
+                  <h2 className="text-xl font-semibold text-white">{selectedBook.title}</h2>
+                  <p className="text-sm text-white/60">{selectedBook.author}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
+                  <select
+                    value={modalStatus}
+                    onChange={(e) => setModalStatus(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Progress: {modalProgress}%</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={modalProgress}
+                    onChange={(e) => setModalProgress(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Rating</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => handleModalRating(star)}
+                        className={`text-2xl transition ${star <= modalRating ? 'text-yellow-400' : 'text-white/20'}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Mood / Notes</label>
+                  <textarea
+                    value={modalMood}
+                    onChange={(e) => setModalMood(e.target.value)}
+                    placeholder="How did this book make you feel?"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                    rows="3"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDeleteBook(selectedBook.title)
+                      closeModal()
+                    }}
+                    className="flex-1 rounded-2xl border border-rose-500/50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleModalSave}
+                    className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
