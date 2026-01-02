@@ -121,51 +121,9 @@ const fetchFriendBooks = async (username) => {
   }
 }
 
-// Create mosh (book chat)
-const createMosh = async (bookTitle, participants) => {
-  if (!supabase) throw new Error('Supabase not configured')
-  
-  try {
-    const { data, error } = await supabase
-      .from('moshes')
-      .insert([{
-        book_title: bookTitle,
-        participants: participants,
-        created_by: currentUser.id,
-        created_at: new Date().toISOString()
-      }])
-      .select()
-    
-    if (error) throw error
-    return data[0]
-  } catch (error) {
-    console.error('Error creating mosh:', error)
-    throw error
-  }
-}
-
-// Get mosh messages
-const getMoshMessages = async (moshId) => {
-  if (!supabase) return []
-  
-  try {
-    const { data, error } = await supabase
-      .from('mosh_messages')
-      .select('*')
-      .eq('mosh_id', moshId)
-      .order('created_at')
-    
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    console.error('Error fetching mosh messages:', error)
-    return []
-  }
-}
-
-const statusOptions = ['Reading', 'Want', 'Read']
-const statusTags = ['Want', 'Reading', 'Read']
-const allTags = ['Want', 'Reading', 'Read', 'Owned']
+const statusOptions = ['Reading', 'to-read', 'Read']
+const statusTags = ['to-read', 'Reading', 'Read']
+const allTags = ['to-read', 'Reading', 'Read', 'Owned']
 
 const defaultUsers = []
 
@@ -188,11 +146,11 @@ const normalizeStatus = (status, progress = 0) => {
   if (lower.includes('read')) return 'Read'
   if (lower.includes('currently') || lower.includes('reading')) return 'Reading'
   if (lower.includes('want') || lower.includes('queue') || lower.includes('wish')) {
-    return 'Want'
+    return 'to-read'
   }
   if (progress >= 100) return 'Read'
   if (progress > 0) return 'Reading'
-  return 'Want'
+  return 'to-read'
 }
 
 const buildBookEntry = (book) => {
@@ -275,7 +233,7 @@ const parseStoryGraphCSV = (text) => {
     .map((item) => ({
       title: item.Title || item.title || '',
       author: item.Author || item.author || '',
-      status: item['Read Status'] || item.readStatus || 'Want',
+      status: item['Read Status'] || item.readStatus || 'to-read',
       rating: parseInt(item['My Rating'] || item.rating) || 0,
       progress: item['Read Progress'] || item.progress || 0,
       mood: item['Mood'] || item.mood || '',
@@ -288,7 +246,7 @@ const parseStoryGraphJSON = (text) => {
     return data.map((item) => ({
       title: item.title || '',
       author: item.author || '',
-      status: item.readStatus || 'Want',
+      status: item.readStatus || 'to-read',
       rating: item.rating || 0,
       progress: item.progress || 0,
       mood: item.mood || '',
@@ -327,16 +285,16 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
 
 const SUPABASE_TABLE = 'bookmosh_books'
 
-const deriveStatusFromTags = (tags = [], fallback = 'Want') => {
+const deriveStatusFromTags = (tags = [], fallback = 'to-read') => {
   if (tags.includes('Reading')) return 'Reading'
   if (tags.includes('Read')) return 'Read'
-  if (tags.includes('Want')) return 'Want'
+  if (tags.includes('to-read')) return 'to-read'
   return fallback
 }
 
 const normalizeBookTags = (book) => {
   const existingTags = Array.isArray(book.tags) ? book.tags : []
-  const status = book.status ?? deriveStatusFromTags(existingTags, 'Want')
+  const status = book.status ?? deriveStatusFromTags(existingTags, 'to-read')
   const owned = existingTags.includes('Owned')
   const nextTags = Array.from(
     new Set([status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
@@ -351,10 +309,10 @@ const normalizeBookTags = (book) => {
 const mapSupabaseRow = (row) => ({
   title: row.title ?? 'Untitled',
   author: row.author ?? 'Unknown author',
-  tags: Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'Want'],
+  tags: Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
   status: deriveStatusFromTags(
-    Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'Want'],
-    row.status ?? 'Want',
+    Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
+    row.status ?? 'to-read',
   ),
   progress: Number(row.progress ?? 0) || 0,
   mood: row.mood ?? 'Supabase sync',
@@ -447,6 +405,14 @@ function App() {
   const [isPrivate, setIsPrivate] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
   const [moshes, setMoshes] = useState([]) // Track book chats
+  const [feedScope, setFeedScope] = useState('friends')
+  const [feedItems, setFeedItems] = useState([])
+  const [activeMoshes, setActiveMoshes] = useState([])
+  const [unreadByMoshId, setUnreadByMoshId] = useState({})
+  const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
+  const [activeMosh, setActiveMosh] = useState(null)
+  const [activeMoshMessages, setActiveMoshMessages] = useState([])
+  const [moshDraft, setMoshDraft] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
   const [isUpdatingUser, setIsUpdatingUser] = useState(false)
@@ -490,7 +456,7 @@ function App() {
         summary[book.status] = (summary[book.status] ?? 0) + 1
         return summary
       },
-      { Reading: 0, Want: 0, Read: 0 },
+      { Reading: 0, 'to-read': 0, Read: 0 },
     )
   }, [tracker])
 
@@ -739,7 +705,7 @@ function App() {
         // Keep status/tags consistent.
         if (Object.prototype.hasOwnProperty.call(updates, 'tags')) {
           const nextTags = Array.isArray(merged.tags) ? merged.tags : []
-          const status = deriveStatusFromTags(nextTags, merged.status ?? 'Want')
+          const status = deriveStatusFromTags(nextTags, merged.status ?? 'to-read')
           return { ...merged, status, tags: Array.from(new Set(nextTags)) }
         }
 
@@ -760,27 +726,26 @@ function App() {
     )
   }
 
-  const handleAddBook = (book, status = 'Want') => {
+  const handleAddBook = (book, status = 'to-read') => {
     setTracker((prev) => {
       if (prev.some((item) => item.title === book.title)) return prev
-      return [
-        {
-          title: book.title,
-          author: book.author,
-          status: status,
-          tags: Array.from(new Set([status])),
-          cover: book.cover ?? null,
-          year: book.year ?? null,
-          isbn: book.isbn ?? null,
-          publisher: book.publisher ?? null,
-          language: book.language ?? null,
-          editionCount: book.editionCount ?? 0,
-          progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
-          mood: 'Open shelf',
-          rating: 0,
-        },
-        ...prev,
-      ]
+      const entry = {
+        title: book.title,
+        author: book.author,
+        status: status,
+        tags: Array.from(new Set([status])),
+        cover: book.cover ?? null,
+        year: book.year ?? null,
+        isbn: book.isbn ?? null,
+        publisher: book.publisher ?? null,
+        language: book.language ?? null,
+        editionCount: book.editionCount ?? 0,
+        progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
+        mood: 'Open shelf',
+        rating: 0,
+      }
+      logBookEvent(entry, 'created')
+      return [entry, ...prev]
     })
   }
 
@@ -788,6 +753,241 @@ function App() {
     setLibraryFilterTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
     )
+  }
+
+  const resolveUserId = async (username) => {
+    if (!supabase || !username) return null
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .single()
+      if (error) return null
+      return data?.id ?? null
+    } catch {
+      return null
+    }
+  }
+
+  const logBookEvent = async (book, eventType = 'tags_updated') => {
+    if (!supabase || !currentUser) return
+    try {
+      const normalized = normalizeBookTags(book)
+      await supabase
+        .from('book_events')
+        .insert([
+          {
+            owner_id: currentUser.id,
+            owner_username: currentUser.username,
+            book_title: normalized.title,
+            book_author: normalized.author,
+            book_cover: normalized.cover ?? null,
+            tags: normalized.tags ?? [],
+            event_type: eventType,
+          },
+        ])
+    } catch (error) {
+      console.error('book_events insert failed', error)
+    }
+  }
+
+  const fetchFeed = async () => {
+    if (!supabase || !currentUser) return
+    try {
+      let query = supabase
+        .from('book_events')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(60)
+
+      if (feedScope === 'me') {
+        query = query.eq('owner_id', currentUser.id)
+      } else if (feedScope === 'friends') {
+        const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
+        if (!friends.length) {
+          setFeedItems([])
+          return
+        }
+        query = query.in('owner_username', friends)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+      setFeedItems(data ?? [])
+    } catch (error) {
+      console.error('Feed fetch failed', error)
+      setFeedItems([])
+    }
+  }
+
+  const fetchActiveMoshes = async () => {
+    if (!supabase || !currentUser) return
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .select('*')
+        .contains('participants_ids', [currentUser.id])
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+
+      const items = data ?? []
+      setActiveMoshes(items)
+
+      const unreadEntries = await Promise.all(
+        items.map(async (mosh) => {
+          const { data: reads } = await supabase
+            .from('mosh_reads')
+            .select('last_read_at')
+            .eq('mosh_id', mosh.id)
+            .eq('user_id', currentUser.id)
+            .single()
+
+          const lastReadAt = reads?.last_read_at ?? null
+          let msgQuery = supabase
+            .from('mosh_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('mosh_id', mosh.id)
+            .neq('sender_id', currentUser.id)
+          if (lastReadAt) {
+            msgQuery = msgQuery.gt('created_at', lastReadAt)
+          }
+          const { count } = await msgQuery
+          return [mosh.id, count ?? 0]
+        }),
+      )
+
+      setUnreadByMoshId(Object.fromEntries(unreadEntries))
+    } catch (error) {
+      console.error('Active moshes fetch failed', error)
+      setActiveMoshes([])
+      setUnreadByMoshId({})
+    }
+  }
+
+  const openMosh = async (mosh) => {
+    if (!supabase || !currentUser) return
+    setActiveMosh(mosh)
+    setIsMoshPanelOpen(true)
+    try {
+      const { data } = await supabase
+        .from('mosh_messages')
+        .select('*')
+        .eq('mosh_id', mosh.id)
+        .order('created_at')
+      setActiveMoshMessages(data ?? [])
+      await supabase
+        .from('mosh_reads')
+        .upsert(
+          [{
+            mosh_id: mosh.id,
+            user_id: currentUser.id,
+            username: currentUser.username,
+            last_read_at: new Date().toISOString(),
+          }],
+          { onConflict: 'mosh_id,user_id' },
+        )
+      setUnreadByMoshId((prev) => ({ ...prev, [mosh.id]: 0 }))
+    } catch (error) {
+      console.error('Open mosh failed', error)
+    }
+  }
+
+  const sendMoshMessage = async () => {
+    if (!supabase || !currentUser || !activeMosh) return
+    const body = moshDraft.trim()
+    if (!body) return
+    setMoshDraft('')
+    try {
+      const { data, error } = await supabase
+        .from('mosh_messages')
+        .insert([
+          {
+            mosh_id: activeMosh.id,
+            sender_id: currentUser.id,
+            sender_username: currentUser.username,
+            body,
+          },
+        ])
+        .select()
+      if (error) throw error
+      setActiveMoshMessages((prev) => [...prev, ...(data ?? [])])
+      await supabase
+        .from('mosh_reads')
+        .upsert(
+          [{
+            mosh_id: activeMosh.id,
+            user_id: currentUser.id,
+            username: currentUser.username,
+            last_read_at: new Date().toISOString(),
+          }],
+          { onConflict: 'mosh_id,user_id' },
+        )
+      setUnreadByMoshId((prev) => ({ ...prev, [activeMosh.id]: 0 }))
+    } catch (error) {
+      console.error('Send message failed', error)
+    }
+  }
+
+  const sendMoshInvite = async (book, friendUsername = null) => {
+    if (!supabase || !currentUser) return
+    const ok = window.confirm('Start a mosh?')
+    if (!ok) return
+
+    let inviteUsername = friendUsername
+    if (!inviteUsername) {
+      const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
+      inviteUsername = window.prompt('Invite which friend (username)?', friends[0] ?? '')
+    }
+    if (!inviteUsername) return
+
+    const friendId = await resolveUserId(inviteUsername)
+    if (!friendId) {
+      setFriendMessage('Could not find that friend profile.')
+      return
+    }
+
+    try {
+      const normalized = normalizeBookTags(book)
+      const participantsIds = Array.from(new Set([currentUser.id, friendId]))
+      const participantsUsernames = Array.from(new Set([currentUser.username, inviteUsername]))
+
+      const { data, error } = await supabase
+        .from('moshes')
+        .insert([
+          {
+            book_title: normalized.title,
+            book_author: normalized.author,
+            book_cover: normalized.cover ?? null,
+            created_by: currentUser.id,
+            created_by_username: currentUser.username,
+            participants_ids: participantsIds,
+            participants_usernames: participantsUsernames,
+          },
+        ])
+        .select()
+      if (error) throw error
+
+      const created = data?.[0]
+      if (created) {
+        await supabase
+          .from('mosh_reads')
+          .insert(
+            participantsIds.map((id) => ({
+              mosh_id: created.id,
+              user_id: id,
+              username: id === currentUser.id ? currentUser.username : inviteUsername,
+              last_read_at: new Date().toISOString(),
+            })),
+          )
+        await fetchActiveMoshes()
+        await openMosh(created)
+      }
+    } catch (error) {
+      console.error('Create mosh failed', error)
+      setFriendMessage('Failed to start mosh.')
+    }
   }
 
   const filteredLibrary = useMemo(() => {
@@ -803,19 +1003,33 @@ function App() {
       .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
   }, [tracker, libraryFilterTags])
 
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    fetchFeed()
+  }, [currentUser, feedScope])
+
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    fetchActiveMoshes()
+  }, [currentUser])
+
   const setBookStatusTag = (title, nextStatus) => {
+    const current = tracker.find((b) => b.title === title)
+    const next = normalizeBookTags({ ...(current ?? { title }), status: nextStatus })
     updateBook(title, { status: nextStatus })
+    logBookEvent(next, 'status_changed')
   }
 
   const toggleBookOwned = (title) => {
     const current = tracker.find((b) => b.title === title)
     const tags = Array.isArray(current?.tags) ? current.tags : []
     const hasOwned = tags.includes('Owned')
-    const status = deriveStatusFromTags(tags, current?.status ?? 'Want')
+    const status = deriveStatusFromTags(tags, current?.status ?? 'to-read')
     const nextTags = Array.from(
       new Set([status, ...(hasOwned ? [] : ['Owned'])].filter(Boolean)),
     )
     updateBook(title, { tags: nextTags })
+    logBookEvent({ ...(current ?? { title }), tags: nextTags, status }, 'tags_updated')
   }
 
   const handleAuthModeSwitch = (mode) => {
@@ -848,24 +1062,9 @@ function App() {
   }
 
   const startMosh = async (bookTitle, friendUsername = null) => {
-    try {
-      const participants = [currentUser.username]
-      if (friendUsername) {
-        participants.push(friendUsername)
-      }
-      
-      const mosh = await createMosh(bookTitle, participants)
-      
-      // Add to moshes list
-      setMoshes(prev => [...prev, mosh])
-      
-      // Open mosh modal
-      // TODO: Implement mosh modal UI
-      setFriendMessage(`Started mosh for "${bookTitle}"`)
-    } catch (error) {
-      console.error('Error starting mosh:', error)
-      setFriendMessage('Failed to start mosh')
-    }
+    const fromTracker = tracker.find((b) => b.title === bookTitle)
+    const fallback = { title: bookTitle, author: fromTracker?.author ?? 'Unknown author', cover: fromTracker?.cover ?? null, tags: fromTracker?.tags ?? [fromTracker?.status ?? 'to-read'], status: fromTracker?.status ?? 'to-read' }
+    await sendMoshInvite(fromTracker ?? fallback, friendUsername)
   }
 
   const scrollToDiscovery = () => {
@@ -1182,11 +1381,26 @@ function App() {
     closeModal()
   }
 
+  const mapFeedItemToBook = (item) => {
+    const tags = Array.isArray(item?.tags) ? item.tags : []
+    const status = deriveStatusFromTags(tags, tags[0] ?? 'to-read')
+    return normalizeBookTags({
+      title: item.book_title,
+      author: item.book_author ?? 'Unknown author',
+      cover: item.book_cover ?? null,
+      tags,
+      status,
+      mood: 'Feed',
+      rating: 0,
+      progress: status === 'Read' ? 100 : 0,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-10">
         {currentUser && (
-        <header className="flex justify-start">
+        <header className="flex items-center justify-between">
           <button
             onClick={() => {
               setSelectedStatusFilter(null)
@@ -1200,928 +1414,260 @@ function App() {
             <img
               src="/bookmosh-logo.png"
               alt="BookMosh"
-              className="h-48 w-auto max-w-96 rounded-lg"
-              onError={(e) => {
-                e.target.style.display = 'none'
-                e.target.nextSibling.style.display = 'block'
-              }}
+              className="h-12 w-auto"
             />
-            <div className="hidden" style={{ display: 'none' }}>
-              <div className="h-48 w-48 rounded-lg bg-gradient-to-br from-aurora to-white/70 flex items-center justify-center">
-                <span className="text-3xl font-bold text-midnight">B</span>
-              </div>
-            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsMoshPanelOpen(true)}
+            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60 hover:text-white"
+          >
+            Mosh
           </button>
         </header>
         )}
-
-        {!currentUser && (
-        <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-gradient-to-r from-[#030617] via-[#040a1a] to-[#120029] p-8 text-white shadow-[0_30px_120px_rgba(5,2,20,0.65)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_55%)] opacity-40" />
-          <div className="pointer-events-none absolute -right-8 top-1/3 h-52 w-52 rounded-full bg-[#9412ff]/30 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-8 left-4 h-40 w-40 rounded-full bg-[#2ee8d7]/30 blur-3xl" />
-          <div className="relative flex justify-center">
-            <img
-              src="/bookmosh-center.png"
-              alt="BookMosh"
-              className="h-64 w-auto max-w-lg rounded-lg"
-              onError={(e) => {
-                e.target.style.display = 'none'
-                e.target.nextSibling.style.display = 'flex'
-              }}
-            />
-            <div className="hidden flex-col items-center gap-5" style={{ display: 'none' }}>
-              <p className="text-xs uppercase tracking-[0.6em] text-white/70">
-                Bookmosh Codex
-              </p>
-              <h2 className="text-4xl font-semibold leading-tight text-white sm:text-5xl">
-                A modern book tracker.
-              </h2>
-              <p className="max-w-2xl text-base text-white/70">
-                Track what you read, discover new books, and connect with friends. Your shelf syncs automatically and works the way you do.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => handleAuthModeSwitch('signup')}
-                  className="rounded-full bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:bg-white/90"
-                >
-                  Sign up
-                </button>
-                <button
-                  onClick={() => handleAuthModeSwitch('login')}
-                  className="rounded-full border border-white/40 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/70 hover:text-white"
-                >
-                  Log in
-                </button>
-              </div>
-              <p className="text-xs text-white/60">
-                Ready for whatever you breathe in next.
-              </p>
-            </div>
-          </div>
-        </section>
-        )}
-
-        {!currentUser && (
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-white">Get started</h3>
-              <div className="flex gap-2 text-xs uppercase tracking-[0.3em] text-white/60">
-                <button
-                  onClick={() => handleAuthModeSwitch('login')}
-                  className={`rounded-full px-3 py-1 transition ${authMode === 'login' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => handleAuthModeSwitch('signup')}
-                  className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
-                >
-                  Sign up
-                </button>
-              </div>
-            </div>
-            <div className="mt-6 space-y-4">
-              {authMode === 'login' ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={authIdentifier}
-                    onChange={(e) => setAuthIdentifier(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleLogin()
-                      }
-                    }}
-                    placeholder="Username or email"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleLogin()
-                      }
-                    }}
-                    placeholder="Password"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      handleLogin()
-                    }}
-                    disabled={authLoading}
-                    className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {authLoading ? 'Signing in…' : 'Continue'}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={signupData.username}
-                    onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
-                    placeholder="Choose a username"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <input
-                    type="email"
-                    value={signupData.email}
-                    onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
-                    placeholder="Email address"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <input
-                    type="password"
-                    value={signupData.password}
-                    onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
-                    placeholder="Password"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleSignup}
-                    className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                  >
-                    Create account
-                  </button>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
-          </section>
-        )}
-
-        {currentUser && (
-          <>
-        {/* Discovery Search Bar at Top */}
-        <div className="rounded-3xl bg-white/5 p-6 shadow-[0_10px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Discovery</p>
-              <h2 className="text-2xl font-semibold text-white">
-                {selectedAuthor ? `Books by ${selectedAuthor}` : 'Search the open shelves'}
-              </h2>
-              {selectedAuthor && (
-                <button
-                  onClick={() => {
-                    setSelectedAuthor(null)
-                    setSearchQuery('')
-                    setSearchResults([])
-                    setHasSearched(false)
-                  }}
-                  className="text-xs uppercase tracking-[0.3em] text-white/60 transition hover:text-white mt-1"
-                >
-                  ← Back to search
-                </button>
-              )}
-            </div>
-            <p className="text-sm text-white/60">
-              {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
-            </p>
-          </div>
-          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-            {!selectedAuthor && (
-              <>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search authors, themes, or moods..."
-                  className="w-full bg-transparent px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                />
-                {searchQuery && (
-                  <div className="flex items-center justify-between text-xs text-white/60">
-                    <span>{isSearching ? 'Searching...' : `${searchResults.length} results`}</span>
-                    {searchResults.length >= 6 && !showAllResults && (
-                      <button
-                        onClick={() => setShowAllResults(true)}
-                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                      >
-                        Show all
-                      </button>
-                    )}
-                    {showAllResults && searchResults.length > 6 && (
-                      <button
-                        onClick={() => setShowAllResults(false)}
-                        className="text-xs uppercase tracking-[0.3em] text-white/80 transition hover:text-white"
-                      >
-                        Show less
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Search Results - Now directly below search bar */}
-          {hasSearched && searchResults.length > 0 && (
-            <div className="mt-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                {(selectedAuthor || showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
-                  <div
-                    key={book.key}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40 cursor-pointer"
-                    onClick={() => openModal(book)}
-                  >
-                    <div className="flex items-start gap-4">
-                      {book.cover ? (
-                        <img
-                          src={book.cover}
-                          alt={book.title}
-                          className="h-20 w-16 rounded-xl object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="flex h-20 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
-                          Cover
-                        </div>
-                      )}
-                      <div className="flex flex-1 flex-col gap-2 min-w-0">
-                        <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            fetchAuthorBooks(book.author)
-                          }}
-                          className="text-sm text-white/60 hover:text-white transition-colors text-left"
-                        >
-                          {book.author}
-                        </button>
-                        <div className="flex items-center gap-4 text-xs text-white/50">
-                          {book.year && <span>{book.year}</span>}
-                          {book.editionCount > 0 && <span>{book.editionCount} editions</span>}
-                          {book.rating > 0 && <span>★ {book.rating.toFixed(1)}</span>}
-                        </div>
-                        {book.subjects.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {book.subjects.slice(0, 3).map((subject, idx) => (
-                              <span
-                                key={idx}
-                                className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70"
-                              >
-                                {subject}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleAddBook(book, 'Read')
-                        }}
-                        className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        + Read
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleAddBook(book, 'Reading')
-                        }}
-                        className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        + Reading
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleAddBook(book, 'Want')
-                        }}
-                        className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        + Want
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* Only show "Show more" button for regular searches, not author searches */}
-              {!selectedAuthor && searchResults.length > 6 && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    onClick={() => setShowAllResults(!showAllResults)}
-                    className="rounded-full border border-white/20 px-6 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                  >
-                    {showAllResults ? `Show first 6` : `Show ${searchResults.length - 6} more results`}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
+        
+        {/* Active Moshes module (below Library, above Community) */}
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
-              <h3 className="text-2xl font-semibold text-white">{filteredLibrary.length}</h3>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Moshes</p>
+              <h3 className="text-2xl font-semibold text-white">{activeMoshes.length}</h3>
             </div>
             <button
-              onClick={() => document.getElementById('discovery')?.scrollIntoView({ behavior: 'smooth' })}
+              type="button"
+              onClick={() => setIsMoshPanelOpen(true)}
               className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
             >
-              + Add book
+              Open
             </button>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleLibraryFilterTag(tag)}
-                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                  libraryFilterTags.includes(tag)
-                    ? 'border-white/60 bg-white/10 text-white'
-                    : 'border-white/10 text-white/60 hover:border-white/40'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-            {libraryFilterTags.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setLibraryFilterTags([])}
-                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          <div className="mt-6 space-y-3">
-            {filteredLibrary.length > 0 ? (
-              filteredLibrary.map((book) => (
-                <div
-                  key={book.title}
-                  className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {activeMoshes.length > 0 ? (
+              activeMoshes.map((mosh) => (
+                <button
+                  key={mosh.id}
+                  type="button"
+                  onClick={() => openMosh(mosh)}
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-3 text-left transition hover:border-white/40"
                 >
-                  <button
-                    type="button"
-                    onClick={() => openModal(book)}
-                    className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
-                  >
-                    {book.cover ? (
-                      <img
-                        src={book.cover}
-                        alt={book.title}
-                        className="h-full w-full object-cover"
-                      />
+                  <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                    {mosh.book_cover ? (
+                      <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">
-                        Cover
-                      </div>
+                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
                     )}
-                  </button>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
-                        <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
-                        <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
-                      </div>
-                      <div className="text-xs text-white/50">{book.mood}</div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(book.tags ?? []).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {statusTags.map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setBookStatusTag(book.title, tag)
-                          }}
-                          className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                            book.status === tag
-                              ? 'border-white/60 bg-white/10 text-white'
-                              : 'border-white/10 text-white/60 hover:border-white/40'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleBookOwned(book.title)
-                        }}
-                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                          (book.tags ?? []).includes('Owned')
-                            ? 'border-white/60 bg-white/10 text-white'
-                            : 'border-white/10 text-white/60 hover:border-white/40'
-                        }`}
-                      >
-                        Owned
-                      </button>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openModal(book)}
-                        className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                      >
-                        Details
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBook(book.title)}
-                        className="rounded-full border border-rose-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500/60"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </div>
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                    <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                  </div>
+                  {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
+                    <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                      {unreadByMoshId[mosh.id]}
+                    </span>
+                  )}
+                </button>
               ))
             ) : (
-              <div className="text-center py-8">
-                <p className="text-white/60 mb-4">No books match those tags</p>
-                <button
-                  type="button"
-                  onClick={() => setLibraryFilterTags([])}
-                  className="rounded-full border border-white/20 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  Clear filters
-                </button>
-              </div>
+              <p className="text-sm text-white/60">No moshes yet. Start one from a book.</p>
             )}
           </div>
         </section>
 
-        <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="space-y-6 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">Community</h3>
-                <div className="flex gap-2 text-xs uppercase tracking-[0.3em] text-white/60">
-                  <button
-                    onClick={() => handleAuthModeSwitch('login')}
-                    className={`rounded-full px-3 py-1 transition ${authMode === 'login' ? 'bg-white/10 text-white' : 'bg-white/0'}`}
+        {/* Feed module (below Discovery + Library) */}
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/50">Feed</p>
+              <h3 className="text-2xl font-semibold text-white">{feedItems.length}</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['everyone', 'friends', 'me'].map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => setFeedScope(scope)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    feedScope === scope
+                      ? 'border-white/60 bg-white/10 text-white'
+                      : 'border-white/10 text-white/60 hover:border-white/40'
+                  }`}
+                >
+                  {scope}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={fetchFeed}
+                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {feedItems.length > 0 ? (
+              feedItems.map((item) => {
+                const book = mapFeedItemToBook(item)
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4"
                   >
-                    Login
-                  </button>
-                  <button
-                    onClick={() => handleAuthModeSwitch('signup')}
-                    className={`rounded-full px-3 py-1 transition ${authMode === 'signup' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
-                  >
-                    Signup
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {authMode === 'login' ? (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={authIdentifier}
-                      onChange={(e) => setAuthIdentifier(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleLogin()
-                        }
-                      }}
-                      placeholder="Username or email"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                    />
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleLogin()
-                        }
-                      }}
-                      placeholder="Password"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                    />
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleLogin()
-                      }}
-                      disabled={authLoading}
-                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => openModal(book)}
+                      className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
                     >
-                      {authLoading ? 'Signing in…' : 'Continue'}
+                      {book.cover ? (
+                        <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                      )}
                     </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={signupData.username}
-                      onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
-                      placeholder="Choose a username"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                    />
-                    <input
-                      type="email"
-                      value={signupData.email}
-                      onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="Email address"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                    />
-                    <input
-                      type="password"
-                      value={signupData.password}
-                      onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
-                      placeholder="Password"
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                    />
-                    <button
-                      onClick={handleSignup}
-                      className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                    >
-                      Create account
-                    </button>
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-rose-300 mt-4">{authMessage}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-[#0b1225]/70 p-4 text-sm text-white">
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/60">Signed in as</p>
-                  <p className="text-lg font-semibold">{currentUser.username}</p>
-                  <p className="text-xs text-white/60">{currentUser.email}</p>
-                  <button
-                    onClick={handleLogout}
-                    className="mt-3 rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
-                  >
-                    Log out
-                  </button>
-                </div>
-                <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
-                      <p className="text-sm text-white/60">
-                        {isPrivate ? 'Private profile' : 'Public profile'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setIsPrivate(!isPrivate)}
-                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
-                    >
-                      {isPrivate ? 'Make Public' : 'Make Private'}
-                    </button>
-                  </div>
-                  <p className="text-xs text-white/50">
-                    {isPrivate ? 'Only friends can see your reading activity' : 'Anyone can discover your reading profile'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/70 p-4">
-                <div className="flex flex-wrap items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
-                    <p className="text-sm text-white/60">
-                      {currentUser ? `${currentUser.friends.length} connections` : 'Sign in to connect'}
-                    </p>
-                  </div>
-                  <div className="text-xs text-white/50">{activeFriendProfiles.length} online</div>
-                </div>
-                <div className="space-y-2">
-                  {activeFriendProfiles.length > 0 ? (
-                    activeFriendProfiles.map((friend) => (
-                      <div key={friend.username} className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#050914]/70 px-4 py-3">
-                        <div>
-                          <button
-                            onClick={() => viewFriendProfile(friend.username)}
-                            className="text-left text-sm font-semibold text-white hover:text-white/80 transition-colors"
-                          >
-                            {friend.username}
-                          </button>
-                          <p className="text-xs text-white/60">{friend.email}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs uppercase tracking-[0.3em] text-white/50">friend</span>
-                          <button
-                            onClick={() => viewFriendProfile(friend.username)}
-                            className="text-xs text-white/60 hover:text-white transition-colors"
-                          >
-                            View Profile
-                          </button>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">{item.owner_username}</p>
+                      <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
+                      <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(book.tags ?? []).map((tag) => (
+                          <span key={tag} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">
+                            {tag}
+                          </span>
+                        ))}
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-white/50">{currentUser ? 'No friends yet. Start adding one.' : 'Sign in to see friends.'}</p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    value={friendQuery}
-                    onChange={(e) => setFriendQuery(e.target.value)}
-                    placeholder="Search by username or email"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleAddFriend}
-                    className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                  >
-                    Search users
-                  </button>
-                  <p className="text-xs text-white/60">{friendMessage}</p>
-                </div>
-              </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                        >
+                          Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => sendMoshInvite(book)}
+                          className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                        >
+                          Send Mosh invite
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-sm text-white/60">No feed activity yet.</p>
+            )}
+          </div>
+        </section>
 
-              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-xs text-white/70">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Import</p>
-                    <p className="text-[10px] text-white/60">
-                      Upload a Goodreads CSV or StoryGraph JSON export.
-                    </p>
-                  </div>
-                  <div className="flex gap-2 text-[10px] uppercase tracking-[0.3em]">
-                    <button
-                      onClick={() => {
-                        setImportFileType('goodreads')
-                        setImportMessage('')
-                      }}
-                      className={`rounded-full px-3 py-1 transition ${importFileType === 'goodreads' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
-                    >
-                      Goodreads
-                    </button>
-                    <button
-                      onClick={() => {
-                        setImportFileType('storygraph')
-                        setImportMessage('')
-                      }}
-                      className={`rounded-full px-3 py-1 transition ${importFileType === 'storygraph' ? 'bg-white/10 text-white' : 'bg-white/0 text-white/50'}`}
-                    >
-                      StoryGraph
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-white/60">
-                  Export your Goodreads library via My Books → Import/Export → Export Library (CSV) or grab the StoryGraph JSON from Tools → Export Library, then upload the file here.
-                </p>
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
-                    {importFileType === 'goodreads' ? 'CSV file' : 'CSV or JSON file'}
-                  </span>
-                  <input
-                    type="file"
-                    accept={importFileType === 'goodreads' ? '.csv' : '.csv,.json'}
-                    onChange={importHandler}
-                    className="mt-1 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                  />
-                </label>
-                <p className="text-[10px] text-rose-300 min-h-[1rem]">{importMessage}</p>
-              </div>
-            </div>
-            <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">Handpicked reading lane</h3>
-                <button className="text-xs uppercase tracking-[0.4em] text-white/50 transition hover:text-white">Refresh</button>
-              </div>
-              <div className="space-y-4">
-                {curatedRecommendations.map((rec) => (
-                  <div
-                    key={rec.title}
-                    className={`rounded-2xl border border-white/15 bg-gradient-to-r ${rec.gradient} px-4 py-5 shadow-xl shadow-black/40`}
-                  >
-                    <p className="text-xs uppercase tracking-[0.4em] text-white/80">{rec.vibe}</p>
-                    <p className="text-lg font-semibold text-white">{rec.title}</p>
-                    <p className="text-sm text-white/70">{rec.author}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {selectedFriend && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="w-[clamp(280px,70vw,520px)] space-y-5 rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+        {isMoshPanelOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="w-[clamp(320px,80vw,900px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">
-                    {selectedFriend.username}'s Profile
-                  </p>
-                  <h2 className="text-xl font-semibold text-white">
-                    {selectedFriend.username}
-                  </h2>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                  <h2 className="text-xl font-semibold text-white">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
                 </div>
                 <button
-                  onClick={() => setSelectedFriend(null)}
+                  type="button"
+                  onClick={() => {
+                    setIsMoshPanelOpen(false)
+                    setActiveMosh(null)
+                  }}
                   className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
                 >
                   Close
                 </button>
               </div>
-              
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Currently Reading ({selectedFriend.books?.filter(b => b.status === 'Reading').length || 0})</p>
-                    <div className="space-y-3">
-                      {selectedFriend.books?.filter(b => b.status === 'Reading').map((book) => (
-                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{book.title}</p>
-                              <p className="text-sm text-white/60">{book.author}</p>
-                            </div>
-                            <button
-                              onClick={() => startMosh(book.title, selectedFriend.username)}
-                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                            >
-                              Mosh
-                            </button>
-                          </div>
+
+              {!activeMosh ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {activeMoshes.map((mosh) => (
+                    <button
+                      key={mosh.id}
+                      type="button"
+                      onClick={() => openMosh(mosh)}
+                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/40"
+                    >
+                      <div className="h-16 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                        {mosh.book_cover ? (
+                          <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                        <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                      </div>
+                      {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
+                        <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                          {unreadByMoshId[mosh.id]}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <div className="max-h-[45vh] space-y-3 overflow-auto pr-2">
+                      {activeMoshMessages.map((msg) => (
+                        <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50">{msg.sender_username}</p>
+                          <p className="text-sm text-white">{msg.body}</p>
                         </div>
                       ))}
+                      {activeMoshMessages.length === 0 && (
+                        <p className="text-sm text-white/60">No messages yet.</p>
+                      )}
                     </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Want ({selectedFriend.books?.filter(b => b.status === 'Want').length || 0})</p>
-                    <div className="space-y-3">
-                      {selectedFriend.books?.filter(b => b.status === 'Want').map((book) => (
-                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{book.title}</p>
-                              <p className="text-sm text-white/60">{book.author}</p>
-                            </div>
-                            <button
-                              onClick={() => startMosh(book.title, selectedFriend.username)}
-                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                            >
-                              Mosh
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <p className="text-sm uppercase tracking-[0.4em] text-white/50">Read ({selectedFriend.books?.filter(b => b.status === 'Read').length || 0})</p>
-                    <div className="space-y-3">
-                      {selectedFriend.books?.filter(b => b.status === 'Read').map((book) => (
-                        <div key={book.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{book.title}</p>
-                              <p className="text-sm text-white/60">{book.author}</p>
-                            </div>
-                            <button
-                              onClick={() => startMosh(book.title, selectedFriend.username)}
-                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                            >
-                              Mosh
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedBook && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="w-[clamp(280px,70vw,520px)] space-y-5 rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">
-                    {selectedBook.status}
-                  </p>
-                  <h3 className="text-2xl font-semibold text-white">
-                    {selectedBook.title}
-                  </h3>
-                  <p className="text-sm text-white/60">{selectedBook.author}</p>
-                </div>
-                <button
-                  onClick={closeModal}
-                  className="text-sm font-semibold text-white/60 hover:text-white"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="space-y-4 text-sm">
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-[0.4em] text-white/50">
-                    Mood
-                  </label>
-                  <input
-                    type="text"
-                    value={modalMood}
-                    onChange={(e) => setModalMood(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                    placeholder="Describe your current mood"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-[0.4em] text-white/50">
-                    Status
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {statusOptions.map((status) => (
+                    <div className="mt-4 flex gap-2">
+                      <input
+                        value={moshDraft}
+                        onChange={(e) => setMoshDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            sendMoshMessage()
+                          }
+                        }}
+                        placeholder="Type a message…"
+                        className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                      />
                       <button
-                        key={status}
-                        onClick={() => setModalStatus(status)}
-                        className={`rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                          modalStatus === status
-                            ? 'border-white/60 bg-white/10 text-white'
-                            : 'border-white/10 text-white/60 hover:border-white/40'
-                        }`}
+                        type="button"
+                        onClick={sendMoshMessage}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
                       >
-                        {status}
+                        Send
                       </button>
-                    ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMosh(null)}
+                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      ← Back to moshes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchActiveMoshes()}
+                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      Refresh
+                    </button>
                   </div>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-[0.4em] text-white/50">
-                    Progress
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={modalProgress}
-                    onChange={(e) => setModalProgress(Number(e.target.value))}
-                    className="w-full accent-[#9b42ff]"
-                  />
-                  <p className="text-xs text-white/60">{modalProgress}% complete</p>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-[0.4em] text-white/50">
-                    Rating
-                  </label>
-                  <div className="flex gap-2 text-sm">
-                    {[...Array(5)].map((_, index) => (
-                      <span
-                        key={index}
-                        onClick={() => handleModalRating(index + 1)}
-                        className={`cursor-pointer text-2xl ${
-                          modalRating >= index + 1 ? 'text-amber-400' : 'text-white/40'
-                        }`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={closeModal}
-                  className="rounded-2xl border border-white/20 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/40"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleModalSave}
-                  className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                >
-                  Save
-                </button>
-              </div>
+              )}
             </div>
           </div>
         )}
