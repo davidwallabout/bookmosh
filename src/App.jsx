@@ -938,19 +938,32 @@ function App() {
   }
 
   const sendMoshInvite = async (book, friendUsername) => {
-    if (!supabase || !currentUser) return
-    if (!friendUsername) return
+    if (!supabase || !currentUser) {
+      console.error('[MOSH] Missing supabase or currentUser')
+      return
+    }
+    if (!friendUsername) {
+      console.error('[MOSH] Missing friendUsername')
+      return
+    }
+
+    console.log('[MOSH] Starting mosh invite:', { book: book.title, friend: friendUsername, currentUserId: currentUser.id })
 
     const friendId = await resolveUserId(friendUsername)
     if (!friendId) {
+      console.error('[MOSH] Could not resolve friend ID for:', friendUsername)
       setFriendMessage('Could not find that friend profile.')
       return
     }
+
+    console.log('[MOSH] Resolved friend ID:', friendId)
 
     try {
       const normalized = normalizeBookTags(book)
       const participantsIds = Array.from(new Set([currentUser.id, friendId]))
       const participantsUsernames = Array.from(new Set([currentUser.username, friendUsername]))
+
+      console.log('[MOSH] Creating mosh with:', { participantsIds, participantsUsernames })
 
       const { data, error } = await supabase
         .from('moshes')
@@ -966,11 +979,18 @@ function App() {
           },
         ])
         .select()
-      if (error) throw error
+      
+      if (error) {
+        console.error('[MOSH] Insert error:', error)
+        throw error
+      }
+
+      console.log('[MOSH] Mosh created:', data)
 
       const created = data?.[0]
       if (created) {
-        await supabase
+        console.log('[MOSH] Creating mosh_reads entries')
+        const { error: readsError } = await supabase
           .from('mosh_reads')
           .insert(
             participantsIds.map((id) => ({
@@ -980,12 +1000,18 @@ function App() {
               last_read_at: new Date().toISOString(),
             })),
           )
+        
+        if (readsError) {
+          console.error('[MOSH] mosh_reads insert error:', readsError)
+        }
+
         await fetchActiveMoshes()
         setIsMoshPanelOpen(true)
         await openMosh(created)
+        console.log('[MOSH] Mosh invite complete')
       }
     } catch (error) {
-      console.error('Create mosh failed', error)
+      console.error('[MOSH] Create mosh failed:', error)
       setFriendMessage('Failed to start mosh.')
       throw error
     }
