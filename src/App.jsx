@@ -2056,7 +2056,7 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="w-[clamp(280px,90vw,400px)] rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
               <img
-                src="/bookmosh-logo.png"
+                src="/bookmosh-logo-new.png"
                 alt="BookMosh"
                 className="mx-auto h-20 w-auto mb-6"
               />
