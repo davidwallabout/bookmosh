@@ -293,7 +293,37 @@ const parseStoryGraphJSON = (text) => {
   }))
 }
 
-const mergeImportedBooks = (books, setMessage, setTracker) => {
+const mergeImportedBooks = async (books, setMessage, setTracker) => {
+  setMessage('Matching books to database...')
+  
+  // Match each book to Open Library to get covers and metadata
+  const matchedBooks = await Promise.all(
+    books.map(async (book) => {
+      try {
+        const searchQuery = `${book.title} ${book.author}`.trim()
+        const response = await fetch(
+          `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1&fields=key,title,author_name,cover_i,isbn`
+        )
+        const data = await response.json()
+        
+        if (data.docs && data.docs.length > 0) {
+          const match = data.docs[0]
+          return {
+            ...book,
+            cover: match.cover_i 
+              ? `https://covers.openlibrary.org/b/id/${match.cover_i}-M.jpg`
+              : book.cover || null,
+            isbn: match.isbn?.[0] || book.isbn || null,
+          }
+        }
+        return book
+      } catch (error) {
+        console.error('[IMPORT] Failed to match book:', book.title, error)
+        return book
+      }
+    })
+  )
+  
   setTracker((prev) => {
     const seen = new Set(
       prev.map(
@@ -302,10 +332,8 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
       ),
     )
     const unique = []
-    for (const entry of books) {
-      const key = `${entry.title.trim().toLowerCase()}|${(entry.author ?? '')
-        .trim()
-        .toLowerCase()}`
+    for (const entry of matchedBooks) {
+      const key = `${entry.title.trim().toLowerCase()}|${(entry.author ?? '').trim().toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
       unique.push(entry)
@@ -314,7 +342,7 @@ const mergeImportedBooks = (books, setMessage, setTracker) => {
       setMessage('No new titles were added from this import.')
       return prev
     }
-    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}.`)
+    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'} with covers and metadata.`)
     return [...unique, ...prev]
   })
 }
@@ -538,17 +566,16 @@ function App() {
       : normalized.filter((book) =>
           libraryFilterTags.every((tag) => (book.tags ?? []).includes(tag)),
         )
-
-    const query = librarySearch.trim().toLowerCase()
-    const searched = query
-      ? filtered.filter((book) => {
-          const title = String(book.title ?? '').toLowerCase()
-          const author = String(book.author ?? '').toLowerCase()
-          return title.includes(query) || author.includes(query)
-        })
-      : filtered
-
-    return searched
+    const searchFiltered = !librarySearch.trim() 
+      ? filtered 
+      : filtered.filter(
+          (book) =>
+            book.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
+            (book.author ?? '').toLowerCase().includes(librarySearch.toLowerCase()),
+        )
+    
+    // Show only last 6 books added (most recent first)
+    return searchFiltered.slice(0, 6)
       .slice()
       .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
   }, [tracker, libraryFilterTags, librarySearch])
@@ -1943,7 +1970,17 @@ function App() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
                         <p className="text-lg font-semibold text-white line-clamp-2">{book.title}</p>
-                        <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('discovery')
+                            fetchAuthorBooks(book.author)
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}
+                          className="text-sm text-white/60 line-clamp-1 hover:text-white hover:underline transition text-left"
+                        >
+                          {book.author}
+                        </button>
                         
                         <div className="mt-1 flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
