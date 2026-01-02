@@ -1519,6 +1519,10 @@ function App() {
         setImportMessage('Unable to read this file.')
         return
       }
+      console.log('[IMPORT] File type:', importFileType)
+      console.log('[IMPORT] File size:', text.length, 'characters')
+      console.log('[IMPORT] First 200 chars:', text.substring(0, 200))
+      
       let imported = []
       if (importFileType === 'goodreads') {
         imported = parseGoodreadsCSV(text)
@@ -1526,16 +1530,26 @@ function App() {
         // Try JSON first, then CSV for StoryGraph
         try {
           imported = parseStoryGraphJSON(text)
+          console.log('[IMPORT] JSON parse succeeded, entries:', imported.length)
         } catch (error) {
+          console.log('[IMPORT] JSON parse failed, trying CSV:', error.message)
           // If JSON fails, try CSV
           try {
             imported = parseStoryGraphCSV(text)
+            console.log('[IMPORT] CSV parse succeeded, entries:', imported.length)
           } catch (csvError) {
+            console.error('[IMPORT] CSV parse failed:', csvError)
             setImportMessage('Unable to parse StoryGraph file. Please ensure it\'s a valid JSON or CSV export.')
             return
           }
         }
       }
+      
+      console.log('[IMPORT] Imported entries:', imported.length)
+      if (imported.length > 0) {
+        console.log('[IMPORT] First entry:', imported[0])
+      }
+      
       if (!imported.length) {
         setImportMessage('No readable entries were found in that file.')
         return
