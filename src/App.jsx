@@ -437,8 +437,10 @@ function App() {
   const [moshInviteBook, setMoshInviteBook] = useState(null)
   const [moshInviteFriends, setMoshInviteFriends] = useState([])
   const [moshInviteSearch, setMoshInviteSearch] = useState('')
+  const [moshInviteTitle, setMoshInviteTitle] = useState('')
   const [moshInviteError, setMoshInviteError] = useState('')
   const [moshInviteLoading, setMoshInviteLoading] = useState(false)
+  const [moshArchiveFilter, setMoshArchiveFilter] = useState('open')
   const [librarySearch, setLibrarySearch] = useState('')
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
@@ -982,7 +984,7 @@ function App() {
     }
   }
 
-  const sendMoshInvite = async (book, friendUsername) => {
+  const sendMoshInvite = async (book, friendUsername, customTitle = '') => {
     if (!supabase || !currentUser) {
       console.error('[MOSH] Missing supabase or currentUser')
       return
@@ -1003,6 +1005,18 @@ function App() {
 
     console.log('[MOSH] Resolved friend ID:', friendId)
 
+    // Check for duplicate mosh
+    const { data: existingMoshes } = await supabase
+      .from('moshes')
+      .select('*')
+      .eq('book_title', book.title)
+      .contains('participants_ids', [currentUser.id, friendId])
+      .eq('archived', false)
+    
+    if (existingMoshes && existingMoshes.length > 0) {
+      throw new Error(`You already have an active mosh for "${book.title}" with ${friendUsername}`)
+    }
+
     try {
       const normalized = normalizeBookTags(book)
       const participantsIds = Array.from(new Set([currentUser.id, friendId]))
@@ -1017,10 +1031,12 @@ function App() {
             book_title: normalized.title,
             book_author: normalized.author,
             book_cover: normalized.cover ?? null,
+            mosh_title: customTitle || normalized.title,
             created_by: currentUser.id,
             created_by_username: currentUser.username,
             participants_ids: participantsIds,
             participants_usernames: participantsUsernames,
+            archived: false,
           },
         ])
         .select()
@@ -1067,6 +1083,7 @@ function App() {
     setMoshInviteBook(normalizeBookTags(book))
     setMoshInviteFriends([])
     setMoshInviteSearch('')
+    setMoshInviteTitle('')
     setMoshInviteError('')
     setIsMoshInviteOpen(true)
   }
@@ -1076,6 +1093,7 @@ function App() {
     setMoshInviteBook(null)
     setMoshInviteFriends([])
     setMoshInviteSearch('')
+    setMoshInviteTitle('')
     setMoshInviteError('')
     setMoshInviteLoading(false)
   }
@@ -1101,10 +1119,10 @@ function App() {
     setMoshInviteError('')
     try {
       // Send invite to first friend for now (multi-participant moshes need backend support)
-      await sendMoshInvite(moshInviteBook, moshInviteFriends[0])
+      await sendMoshInvite(moshInviteBook, moshInviteFriends[0], moshInviteTitle)
       closeMoshInvite()
-    } catch {
-      setMoshInviteError('Failed to start mosh.')
+    } catch (error) {
+      setMoshInviteError(error.message || 'Failed to start mosh.')
       setMoshInviteLoading(false)
     }
   }
@@ -2368,6 +2386,17 @@ function App() {
                   <p className="text-sm font-semibold text-white line-clamp-2">{moshInviteBook?.title ?? 'Book'}</p>
                   <p className="text-sm text-white/60 line-clamp-1">{moshInviteBook?.author ?? 'Unknown author'}</p>
                 </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Mosh Title (Optional)</label>
+                <input
+                  type="text"
+                  value={moshInviteTitle}
+                  onChange={(e) => setMoshInviteTitle(e.target.value)}
+                  placeholder={moshInviteBook?.title || "Custom mosh title..."}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                />
               </div>
 
               <div className="mt-5 space-y-3">
