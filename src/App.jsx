@@ -1428,6 +1428,16 @@ function App() {
         </header>
         )}
 
+        {!currentUser && (
+          <header className="flex items-center justify-center">
+            <img
+              src="/bookmosh-logo.png"
+              alt="BookMosh"
+              className="h-12 w-auto"
+            />
+          </header>
+        )}
+
         {currentUser && (
           <>
             {/* Discovery */}
@@ -1948,6 +1958,108 @@ function App() {
               </div>
             </section>
           </>
+        )}
+
+        {!currentUser && (
+          <section className="mx-auto w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.4em] text-white/50">Welcome</p>
+                <h2 className="text-2xl font-semibold text-white">{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAuthModeSwitch('login')}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    authMode === 'login'
+                      ? 'border-white/60 bg-white/10 text-white'
+                      : 'border-white/10 text-white/60 hover:border-white/40'
+                  }`}
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAuthModeSwitch('signup')}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    authMode === 'signup'
+                      ? 'border-white/60 bg-white/10 text-white'
+                      : 'border-white/10 text-white/60 hover:border-white/40'
+                  }`}
+                >
+                  Sign up
+                </button>
+              </div>
+            </div>
+
+            {authMode === 'login' ? (
+              <div className="mt-6 space-y-3">
+                <input
+                  type="text"
+                  value={authIdentifier}
+                  onChange={(e) => setAuthIdentifier(e.target.value)}
+                  placeholder="Email or username"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleLogin()
+                    }
+                  }}
+                  placeholder="Password"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleLogin}
+                  disabled={authLoading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {authLoading ? 'Signing in…' : 'Sign in'}
+                </button>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                <input
+                  type="text"
+                  value={signupData.username}
+                  onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="Username"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <input
+                  type="email"
+                  value={signupData.email}
+                  onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="Email"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <input
+                  type="password"
+                  value={signupData.password}
+                  onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Password"
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleSignup}
+                  disabled={authLoading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {authLoading ? 'Creating…' : 'Create account'}
+                </button>
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{authMessage}</p>
+              </div>
+            )}
+          </section>
         )}
 
         {currentUser && isMoshPanelOpen && (
