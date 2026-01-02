@@ -433,6 +433,8 @@ function App() {
   const [activeMosh, setActiveMosh] = useState(null)
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
   const [moshDraft, setMoshDraft] = useState('')
+  const [moshMentionQuery, setMoshMentionQuery] = useState('')
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false)
   const [isMoshInviteOpen, setIsMoshInviteOpen] = useState(false)
   const [moshInviteBook, setMoshInviteBook] = useState(null)
   const [moshInviteFriends, setMoshInviteFriends] = useState([])
@@ -865,6 +867,7 @@ function App() {
         .from('moshes')
         .select('*')
         .contains('participants_ids', [currentUser.id])
+        .eq('archived', moshArchiveFilter === 'archived')
         .order('created_at', { ascending: false })
         .limit(50)
       if (error) throw error
@@ -931,6 +934,52 @@ function App() {
     }
   }
 
+  const handleMoshDraftChange = (value) => {
+    setMoshDraft(value)
+    
+    // Check for @ mentions
+    const lastAtIndex = value.lastIndexOf('@')
+    if (lastAtIndex !== -1) {
+      const afterAt = value.slice(lastAtIndex + 1)
+      const hasSpace = afterAt.includes(' ')
+      
+      if (!hasSpace && afterAt.length >= 0) {
+        setMoshMentionQuery(afterAt.toLowerCase())
+        setShowMentionDropdown(true)
+      } else {
+        setShowMentionDropdown(false)
+      }
+    } else {
+      setShowMentionDropdown(false)
+    }
+  }
+
+  const insertMention = (username) => {
+    const lastAtIndex = moshDraft.lastIndexOf('@')
+    const beforeAt = moshDraft.slice(0, lastAtIndex)
+    setMoshDraft(beforeAt + '@' + username + ' ')
+    setShowMentionDropdown(false)
+  }
+
+  const archiveMosh = async (moshId) => {
+    if (!supabase || !currentUser) return
+    
+    try {
+      const { error } = await supabase
+        .from('moshes')
+        .update({ archived: true })
+        .eq('id', moshId)
+      
+      if (error) throw error
+      
+      // Refresh moshes list and close current mosh
+      await fetchActiveMoshes()
+      setActiveMosh(null)
+    } catch (error) {
+      console.error('[MOSH] Archive failed:', error)
+    }
+  }
+
   const sendMoshMessage = async () => {
     if (!supabase || !currentUser || !activeMosh) {
       console.error('[MOSH] Missing requirements for sending message')
@@ -941,6 +990,7 @@ function App() {
     
     console.log('[MOSH] Sending message:', { moshId: activeMosh.id, body })
     setMoshDraft('')
+    setShowMentionDropdown(false)
     
     try {
       const { data, error } = await supabase
@@ -2579,26 +2629,46 @@ function App() {
                         <p className="text-sm text-white/60">No messages yet.</p>
                       )}
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <input
-                        value={moshDraft}
-                        onChange={(e) => setMoshDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            sendMoshMessage()
-                          }
-                        }}
-                        placeholder="Type a message…"
-                        className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={sendMoshMessage}
-                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                      >
-                        Send
-                      </button>
+                    <div className="mt-4 relative">
+                      {/* Mention dropdown */}
+                      {showMentionDropdown && (
+                        <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-white/10 bg-[#0b1225]/95 p-2 shadow-lg">
+                          {(activeMosh?.participants_usernames || [])
+                            .filter(u => u.toLowerCase().includes(moshMentionQuery))
+                            .map((username) => (
+                              <button
+                                key={username}
+                                type="button"
+                                onClick={() => insertMention(username)}
+                                className="w-full rounded-xl px-3 py-2 text-left text-sm text-white transition hover:bg-white/10"
+                              >
+                                @{username}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2">
+                        <input
+                          value={moshDraft}
+                          onChange={(e) => handleMoshDraftChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !showMentionDropdown) {
+                              e.preventDefault()
+                              sendMoshMessage()
+                            }
+                          }}
+                          placeholder="Type a message… (use @ to mention)"
+                          className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={sendMoshMessage}
+                          className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                        >
+                          Send
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
