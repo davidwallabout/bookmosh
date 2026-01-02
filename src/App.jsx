@@ -309,6 +309,7 @@ const normalizeBookTags = (book) => {
 const mapSupabaseRow = (row) => ({
   title: row.title ?? 'Untitled',
   author: row.author ?? 'Unknown author',
+  cover: row.cover ?? row.cover_url ?? null,
   tags: Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
   status: deriveStatusFromTags(
     Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
@@ -323,6 +324,7 @@ const buildSupabasePayload = (book, owner) => ({
   owner,
   title: book.title,
   author: book.author,
+  cover: book.cover ?? null,
   status: book.status,
   tags: Array.isArray(book.tags) ? book.tags : undefined,
   progress: book.progress,
@@ -413,6 +415,8 @@ function App() {
   const [activeMosh, setActiveMosh] = useState(null)
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
   const [moshDraft, setMoshDraft] = useState('')
+  const [librarySearch, setLibrarySearch] = useState('')
+  const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
   const [isUpdatingUser, setIsUpdatingUser] = useState(false)
@@ -459,6 +463,41 @@ function App() {
       { Reading: 0, 'to-read': 0, Read: 0 },
     )
   }, [tracker])
+
+  const filteredLibrary = useMemo(() => {
+    const normalized = tracker.map(normalizeBookTags)
+    const filtered = !libraryFilterTags.length
+      ? normalized
+      : normalized.filter((book) =>
+          libraryFilterTags.every((tag) => (book.tags ?? []).includes(tag)),
+        )
+
+    const query = librarySearch.trim().toLowerCase()
+    const searched = query
+      ? filtered.filter((book) => {
+          const title = String(book.title ?? '').toLowerCase()
+          const author = String(book.author ?? '').toLowerCase()
+          return title.includes(query) || author.includes(query)
+        })
+      : filtered
+
+    return searched
+      .slice()
+      .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+  }, [tracker, libraryFilterTags, librarySearch])
+
+  const moshLibraryMatches = useMemo(() => {
+    const query = moshLibrarySearch.trim().toLowerCase()
+    const normalized = tracker.map(normalizeBookTags)
+    const matches = query
+      ? normalized.filter((book) => {
+          const title = String(book.title ?? '').toLowerCase()
+          const author = String(book.author ?? '').toLowerCase()
+          return title.includes(query) || author.includes(query)
+        })
+      : normalized
+    return matches.slice(0, 12)
+  }, [tracker, moshLibrarySearch])
 
   useEffect(() => {
     if (!supabase || !currentUser) return
@@ -990,19 +1029,6 @@ function App() {
     }
   }
 
-  const filteredLibrary = useMemo(() => {
-    const normalized = tracker.map(normalizeBookTags)
-    const filtered = !libraryFilterTags.length
-      ? normalized
-      : normalized.filter((book) =>
-          libraryFilterTags.every((tag) => (book.tags ?? []).includes(tag)),
-        )
-
-    return filtered
-      .slice()
-      .sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
-  }, [tracker, libraryFilterTags])
-
   useEffect(() => {
     if (!supabase || !currentUser) return
     fetchFeed()
@@ -1429,11 +1455,11 @@ function App() {
         )}
 
         {!currentUser && (
-          <header className="flex items-center justify-center">
+          <header className="flex items-center justify-center py-6">
             <img
               src="/bookmosh-logo.png"
               alt="BookMosh"
-              className="h-12 w-auto"
+              className="h-20 w-auto sm:h-24"
             />
           </header>
         )}
@@ -1590,6 +1616,16 @@ function App() {
                 >
                   + Add book
                 </button>
+              </div>
+
+              <div className="mt-5">
+                <input
+                  type="text"
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  placeholder="Search your library..."
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
@@ -2083,32 +2119,70 @@ function App() {
               </div>
 
               {!activeMosh ? (
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {activeMoshes.map((mosh) => (
-                    <button
-                      key={mosh.id}
-                      type="button"
-                      onClick={() => openMosh(mosh)}
-                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/40"
-                    >
-                      <div className="h-16 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
-                        {mosh.book_cover ? (
-                          <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
-                        <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
-                      </div>
-                      {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
-                        <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                          {unreadByMoshId[mosh.id]}
-                        </span>
+                <div className="mt-5 space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Start a mosh from your library</p>
+                    <input
+                      type="text"
+                      value={moshLibrarySearch}
+                      onChange={(e) => setMoshLibrarySearch(e.target.value)}
+                      placeholder="Search your library..."
+                      className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                    />
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {moshLibraryMatches.map((book) => (
+                        <button
+                          key={`${book.title}-${book.author}`}
+                          type="button"
+                          onClick={() => startMosh(book.title)}
+                          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-white/40"
+                        >
+                          <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                            {book.cover ? (
+                              <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-white line-clamp-1">{book.title}</p>
+                            <p className="text-xs text-white/60 line-clamp-1">{book.author}</p>
+                          </div>
+                        </button>
+                      ))}
+                      {moshLibraryMatches.length === 0 && (
+                        <p className="text-sm text-white/60">No matches.</p>
                       )}
-                    </button>
-                  ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {activeMoshes.map((mosh) => (
+                      <button
+                        key={mosh.id}
+                        type="button"
+                        onClick={() => openMosh(mosh)}
+                        className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/40"
+                      >
+                        <div className="h-16 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                          {mosh.book_cover ? (
+                            <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                          <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                        </div>
+                        {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
+                          <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                            {unreadByMoshId[mosh.id]}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
