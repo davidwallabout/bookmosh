@@ -891,6 +891,10 @@ function App() {
   const isUpdatingUserRef = useRef(false)
   const [authMode, setAuthMode] = useState('login')
   const [successModal, setSuccessModal] = useState({ show: false, book: null, list: '' })
+  const showSuccessMessage = (message, timeoutMs = 2500) => {
+    setSuccessModal({ show: true, book: null, list: message, alreadyAdded: false })
+    setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), timeoutMs)
+  }
   const [authIdentifier, setAuthIdentifier] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [resetPassword, setResetPassword] = useState('')
@@ -1330,7 +1334,7 @@ function App() {
       const { error: inviteError } = await supabase.from('list_invites').insert(payload)
       if (inviteError) throw inviteError
       setListInviteUsername('')
-      setListsMessage('Invite sent.')
+      showSuccessMessage(`Invite sent to ${friend.username}`)
       await fetchOutgoingListInvites(selectedList.id)
     } catch (error) {
       console.error('Send list invite failed', error)
@@ -1342,6 +1346,7 @@ function App() {
     if (!supabase || !currentUser || !inviteId) return
     setListsMessage('')
     try {
+      const invite = outgoingListInvites.find((inv) => inv.id === inviteId)
       const { error } = await supabase
         .from('list_invites')
         .delete()
@@ -1351,6 +1356,7 @@ function App() {
       if (selectedList?.id) {
         await fetchOutgoingListInvites(selectedList.id)
       }
+      showSuccessMessage(`Invite removed${invite?.invitee_username ? ` for ${invite.invitee_username}` : ''}`)
     } catch (error) {
       console.error('Revoke invite failed', error)
       setListsMessage(error?.message || 'Failed to revoke invite.')
@@ -1361,6 +1367,7 @@ function App() {
     if (!supabase || !currentUser || !inviteId) return
     setListsMessage('')
     try {
+      const invite = pendingListInvites.find((inv) => inv.id === inviteId)
       const { error } = await supabase
         .from('list_invites')
         .update({ status })
@@ -1368,6 +1375,11 @@ function App() {
         .eq('invitee_id', currentUser.id)
       if (error) throw error
       await fetchLists()
+      if (status === 'accepted') {
+        showSuccessMessage(`Joined list: ${invite?.list_title ?? 'List'}`)
+      } else {
+        showSuccessMessage(`Invite declined${invite?.list_title ? `: ${invite.list_title}` : ''}`)
+      }
     } catch (error) {
       console.error('Invite response failed', error)
       setListsMessage(error?.message || 'Failed to respond to invite.')
@@ -1388,7 +1400,7 @@ function App() {
         return Boolean(t1 && t2 && t1 === t2 && a1 === a2)
       })
       if (alreadyInList) {
-        setListsMessage('That book is already in this list.')
+        showSuccessMessage('That book is already in this list.')
         setListBookSearch('')
         return
       }
@@ -1405,6 +1417,7 @@ function App() {
       if (error) throw error
       setListBookSearch('')
       await fetchListItems(selectedList.id)
+      showSuccessMessage(`Added to ${selectedList.title}`)
     } catch (error) {
       console.error('Add book to list failed', error)
       setListsMessage(error?.message || 'Failed to add book.')
@@ -1415,6 +1428,7 @@ function App() {
     if (!supabase || !currentUser || !selectedList?.id || !itemId) return
     setListsMessage('')
     try {
+      const item = selectedListItems.find((it) => it.id === itemId)
       const { error } = await supabase
         .from('list_items')
         .delete()
@@ -1422,6 +1436,7 @@ function App() {
         .eq('list_id', selectedList.id)
       if (error) throw error
       await fetchListItems(selectedList.id)
+      showSuccessMessage(`Removed${item?.book_title ? `: ${item.book_title}` : ''}`)
     } catch (error) {
       console.error('Remove list item failed', error)
       setListsMessage(error?.message || 'Failed to remove book.')
