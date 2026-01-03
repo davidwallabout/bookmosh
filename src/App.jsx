@@ -5061,7 +5061,7 @@ function App() {
                             onClick={() => openMoshInvite(book)}
                             className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
                           >
-                            Send Mosh invite
+                            Send Pit invite
                           </button>
                         </div>
                       </div>
@@ -5085,11 +5085,11 @@ function App() {
               )}
             </section>
 
-            {/* Active Moshes (below Library) */}
+            {/* Active Pits (below Library) */}
             <section id="moshes" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Moshes</p>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Pits</p>
                   <h3 className="text-2xl font-semibold text-white">{activeMoshes.length}</h3>
                 </div>
                 <button
@@ -5134,7 +5134,7 @@ function App() {
               </div>
             </section>
 
-            {/* Feed (below Active Moshes) */}
+            {/* Feed (below Active Pits) */}
             <section id="feed" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -5210,7 +5210,7 @@ function App() {
                               onClick={() => openMoshInvite(book)}
                               className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
                             >
-                              Send Mosh invite
+                              Send Pit invite
                             </button>
                           </div>
                         </div>
@@ -5500,7 +5500,7 @@ function App() {
                   <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invite by email</p>
-                      <p className="text-sm text-white/60">Send a cute BookMosh invite.</p>
+                      <p className="text-sm text-white/60">Send a cute BookPit invite.</p>
                     </div>
                     <input
                       type="email"
@@ -6453,7 +6453,7 @@ function App() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
-                      <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
+                      <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.book_title ?? 'Active Pits'}</h2>
                       {activeMosh?.id && (
                         <p className="text-xs text-white/50 break-words">{activeMosh.mosh_title || activeMosh.book_title}</p>
                       )}
