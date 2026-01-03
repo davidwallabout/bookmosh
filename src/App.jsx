@@ -815,9 +815,15 @@ function App() {
   const [selectedFriend, setSelectedFriend] = useState(null)
   const [profileAvatarIcon, setProfileAvatarIcon] = useState('pixel_book_1')
   const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
-  const [profileTopBooks, setProfileTopBooks] = useState([])
+  const [profileTopBooks, setProfileTopBooks] = useState(['', '', '', ''])
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
+  const [isProfileTopBookModalOpen, setIsProfileTopBookModalOpen] = useState(false)
+  const [profileTopBookSlotIndex, setProfileTopBookSlotIndex] = useState(0)
+  const [profileTopBookSearch, setProfileTopBookSearch] = useState('')
+  const [profileTopBookResults, setProfileTopBookResults] = useState([])
+  const [profileTopBookLoading, setProfileTopBookLoading] = useState(false)
+  const [profileTopBookError, setProfileTopBookError] = useState('')
   const [moshes, setMoshes] = useState([]) // Track book chats
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
@@ -1054,7 +1060,9 @@ function App() {
     setIsPrivate(Boolean(currentUser.is_private))
     setProfileAvatarIcon(currentUser.avatar_icon || 'pixel_book_1')
     setProfileAvatarUrl(currentUser.avatar_url || '')
-    setProfileTopBooks(Array.isArray(currentUser.top_books) ? currentUser.top_books.slice(0, 4) : [])
+    const incoming = Array.isArray(currentUser.top_books) ? currentUser.top_books.filter(Boolean) : []
+    const slots = [incoming[0] ?? '', incoming[1] ?? '', incoming[2] ?? '', incoming[3] ?? '']
+    setProfileTopBooks(slots)
   }, [currentUser?.id])
 
   const loadFriendRequests = async () => {
@@ -1984,7 +1992,7 @@ function App() {
       const payload = {
         avatar_icon: profileAvatarUrl ? null : profileAvatarIcon,
         avatar_url: profileAvatarUrl ? profileAvatarUrl : null,
-        top_books: Array.isArray(profileTopBooks) ? profileTopBooks.slice(0, 4) : [],
+        top_books: Array.isArray(profileTopBooks) ? profileTopBooks.slice(0, 4) : ['', '', '', ''],
         is_private: Boolean(isPrivate),
         updated_at: new Date().toISOString(),
       }
@@ -2031,16 +2039,82 @@ function App() {
   const addTopBook = (title) => {
     if (!title) return
     setProfileTopBooks((prev) => {
-      const next = Array.isArray(prev) ? prev.slice() : []
-      if (next.map((t) => t.toLowerCase()).includes(title.toLowerCase())) return next
-      if (next.length >= 4) return next
-      next.push(title)
+      const next = Array.isArray(prev) ? prev.slice(0, 4) : ['', '', '', '']
+      const normalized = title.toLowerCase()
+      if (next.some((t) => (t ?? '').toLowerCase() === normalized)) return next
+      const idx = next.findIndex((t) => !t)
+      if (idx === -1) return next
+      next[idx] = title
       return next
     })
   }
 
-  const removeTopBook = (title) => {
-    setProfileTopBooks((prev) => (Array.isArray(prev) ? prev.filter((t) => t !== title) : []))
+  const setTopBookSlot = (slotIndex, title) => {
+    setProfileTopBooks((prev) => {
+      const next = Array.isArray(prev) ? prev.slice(0, 4) : ['', '', '', '']
+      next[slotIndex] = title || ''
+      return next
+    })
+  }
+
+  const clearTopBookSlot = (slotIndex) => {
+    setTopBookSlot(slotIndex, '')
+  }
+
+  const openTopBookModal = (slotIndex, seed = '') => {
+    setProfileTopBookSlotIndex(slotIndex)
+    setProfileTopBookSearch(seed)
+    setProfileTopBookResults([])
+    setProfileTopBookError('')
+    setProfileTopBookLoading(false)
+    setIsProfileTopBookModalOpen(true)
+  }
+
+  const closeTopBookModal = () => {
+    setIsProfileTopBookModalOpen(false)
+    setProfileTopBookSearch('')
+    setProfileTopBookResults([])
+    setProfileTopBookError('')
+    setProfileTopBookLoading(false)
+  }
+
+  const searchTopBook = async () => {
+    const q = profileTopBookSearch.trim()
+    if (!q) return
+    setProfileTopBookLoading(true)
+    setProfileTopBookError('')
+    try {
+      const response = await fetch(
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,cover_i,isbn,first_publish_year`,
+      )
+      if (!response.ok) throw new Error('Search failed')
+      const data = await response.json()
+      const docs = Array.isArray(data?.docs) ? data.docs : []
+      setProfileTopBookResults(docs)
+    } catch (error) {
+      console.error('Top book search failed', error)
+      setProfileTopBookResults([])
+      setProfileTopBookError('Search failed.')
+    } finally {
+      setProfileTopBookLoading(false)
+    }
+  }
+
+  const selectTopBookResult = (result) => {
+    const title = (result?.title ?? '').toString().trim()
+    if (!title) return
+    const author = (result?.author_name?.[0] ?? 'Unknown author').toString()
+    const cover = result?.cover_i ? `https://covers.openlibrary.org/b/id/${result.cover_i}-M.jpg` : null
+    const isbn = result?.isbn?.[0] || null
+    const olKey = result?.key || null
+    const book = { title, author, cover, isbn, olKey }
+
+    // Ensure it exists in library so cover editing works and cover choice persists.
+    handleAddBook(book, 'to-read')
+
+    // Set it into the chosen slot.
+    setTopBookSlot(profileTopBookSlotIndex, title)
+    closeTopBookModal()
   }
 
   const startMosh = async (bookTitle, friendUsername = null) => {
@@ -3547,50 +3621,64 @@ function App() {
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
                       <div className="grid grid-cols-4 gap-2">
-                        {profileTopBooks.map((title) => {
-                          const book = tracker.find((b) => b.title === title)
+                        {profileTopBooks.map((title, idx) => {
+                          const book = title ? tracker.find((b) => b.title === title) : null
                           return (
-                            <div key={title} className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                              <div className="h-20 w-full">
-                                {book?.cover ? (
-                                  <img src={book.cover} alt={title} className="h-full w-full object-cover" />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                                )}
-                              </div>
+                            <div key={`${idx}-${title || 'empty'}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
                               <button
                                 type="button"
-                                onClick={() => removeTopBook(title)}
-                                className="absolute top-1 right-1 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/80"
+                                onClick={() => {
+                                  if (!title) {
+                                    openTopBookModal(idx)
+                                    return
+                                  }
+                                  // Default action = edit cover/details
+                                  openModal(book ?? { title, author: 'Unknown author', cover: null })
+                                }}
+                                className="relative h-20 w-full"
                               >
-                                ×
+                                {title ? (
+                                  book?.cover ? (
+                                    <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">No cover</div>
+                                  )
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-2xl text-white/50">+</div>
+                                )}
                               </button>
+
+                              {title && (
+                                <div className="grid grid-cols-3 gap-1 border-t border-white/10 bg-[#050914]/50 p-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openTopBookModal(idx, `${title}`)}
+                                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openModal(book ?? { title, author: 'Unknown author', cover: null })}
+                                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
+                                  >
+                                    Cover
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => clearTopBookSlot(idx)}
+                                    className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-300 transition hover:border-rose-500/60"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )
                         })}
                         {Array.from({ length: Math.max(0, 4 - profileTopBooks.length) }).map((_, idx) => (
                           <div key={idx} className="h-20 rounded-xl border border-dashed border-white/10 bg-white/5" />
                         ))}
-                      </div>
-
-                      <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-2">
-                        {tracker
-                          .filter((b) => !profileTopBooks.includes(b.title))
-                          .slice(0, 50)
-                          .map((b) => (
-                            <button
-                              key={b.title}
-                              type="button"
-                              onClick={() => addTopBook(b.title)}
-                              disabled={profileTopBooks.length >= 4}
-                              className="mb-2 w-full rounded-xl border border-white/10 bg-[#050914]/60 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/40 disabled:opacity-50"
-                            >
-                              {b.title}
-                            </button>
-                          ))}
-                        {tracker.length === 0 && (
-                          <p className="text-sm text-white/60">Add books to your library to pick a Top 4.</p>
-                        )}
                       </div>
                     </div>
 
@@ -4795,7 +4883,7 @@ function App() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                   <div className="grid grid-cols-4 gap-2">
-                    {(Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []).slice(0, 4).map((title) => {
+                    {(Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books.filter(Boolean) : []).slice(0, 4).map((title) => {
                       const book = (selectedFriend.books || []).find((b) => b.title === title)
                       return (
                         <div key={title} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
@@ -4977,6 +5065,85 @@ function App() {
               ) : (
                 <p className="text-sm text-white/60">No edition covers found for this mosh.</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {currentUser && isProfileTopBookModalOpen && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeTopBookModal()
+            }}
+          >
+            <div className="w-full max-w-2xl rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Favorites</p>
+                  <h2 className="text-xl font-semibold text-white">Pick a book</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeTopBookModal}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <input
+                  type="text"
+                  value={profileTopBookSearch}
+                  onChange={(e) => setProfileTopBookSearch(e.target.value)}
+                  placeholder="Search any book..."
+                  className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={searchTopBook}
+                  disabled={profileTopBookLoading}
+                  className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-60"
+                >
+                  {profileTopBookLoading ? 'Searching…' : 'Search'}
+                </button>
+              </div>
+
+              {profileTopBookError && (
+                <p className="mt-3 text-sm text-rose-200">{profileTopBookError}</p>
+              )}
+
+              <div className="mt-4 max-h-[55vh] space-y-2 overflow-auto">
+                {profileTopBookResults.map((r) => {
+                  const cover = r.cover_i ? `https://covers.openlibrary.org/b/id/${r.cover_i}-S.jpg` : null
+                  const author = r.author_name?.[0] ?? 'Unknown author'
+                  const year = r.first_publish_year ?? '—'
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => selectTopBookResult(r)}
+                      className="w-full flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-white/40"
+                    >
+                      <div className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                        {cover ? (
+                          <img src={cover} alt={r.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white line-clamp-2">{r.title}</p>
+                        <p className="text-xs text-white/60 line-clamp-1">{author}</p>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">{year}</div>
+                    </button>
+                  )
+                })}
+                {profileTopBookResults.length === 0 && !profileTopBookLoading && (
+                  <p className="text-sm text-white/60">Search for a book to add it to your favorites.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
