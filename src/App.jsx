@@ -835,6 +835,7 @@ function App() {
   const [followedLists, setFollowedLists] = useState([])
   const [publicLists, setPublicLists] = useState([])
   const [pendingListInvites, setPendingListInvites] = useState([])
+  const [outgoingListInvites, setOutgoingListInvites] = useState([])
   const [selectedList, setSelectedList] = useState(null)
   const [selectedListItems, setSelectedListItems] = useState([])
   const [selectedListItemsLoading, setSelectedListItemsLoading] = useState(false)
@@ -1088,6 +1089,24 @@ function App() {
     }
   }
 
+  const fetchOutgoingListInvites = async (listId) => {
+    if (!supabase || !currentUser || !listId) return
+    try {
+      const { data, error } = await supabase
+        .from('list_invites')
+        .select('id, list_id, inviter_id, inviter_username, invitee_id, invitee_username, status, created_at')
+        .eq('list_id', listId)
+        .eq('inviter_id', currentUser.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setOutgoingListInvites(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('Outgoing list invites fetch failed', error)
+      setOutgoingListInvites([])
+    }
+  }
+
   const fetchListItems = async (listId) => {
     if (!supabase || !currentUser || !listId) return
     setSelectedListItemsLoading(true)
@@ -1113,7 +1132,12 @@ function App() {
     setListBookSearch('')
     setListInviteUsername('')
     setListInviteError('')
+    setListsMessage('')
+    setOutgoingListInvites([])
     await fetchListItems(listRow.id)
+    if (listRow.owner_id === currentUser?.id) {
+      await fetchOutgoingListInvites(listRow.id)
+    }
   }
 
   const fetchLists = async () => {
@@ -1307,9 +1331,29 @@ function App() {
       if (inviteError) throw inviteError
       setListInviteUsername('')
       setListsMessage('Invite sent.')
+      await fetchOutgoingListInvites(selectedList.id)
     } catch (error) {
       console.error('Send list invite failed', error)
       setListInviteError(error?.message || 'Failed to send invite.')
+    }
+  }
+
+  const revokeListInvite = async (inviteId) => {
+    if (!supabase || !currentUser || !inviteId) return
+    setListsMessage('')
+    try {
+      const { error } = await supabase
+        .from('list_invites')
+        .delete()
+        .eq('id', inviteId)
+        .eq('inviter_id', currentUser.id)
+      if (error) throw error
+      if (selectedList?.id) {
+        await fetchOutgoingListInvites(selectedList.id)
+      }
+    } catch (error) {
+      console.error('Revoke invite failed', error)
+      setListsMessage(error?.message || 'Failed to revoke invite.')
     }
   }
 
@@ -1334,6 +1378,20 @@ function App() {
     if (!supabase || !currentUser || !selectedList?.id || !book?.title) return
     setListsMessage('')
     try {
+      const alreadyInList = selectedListItems.some((it) => {
+        if (book.olKey && it.ol_key) return it.ol_key === book.olKey
+        if (book.isbn && it.isbn) return it.isbn === book.isbn
+        const t1 = String(it.book_title ?? '').trim().toLowerCase()
+        const a1 = String(it.book_author ?? '').trim().toLowerCase()
+        const t2 = String(book.title ?? '').trim().toLowerCase()
+        const a2 = String(book.author ?? '').trim().toLowerCase()
+        return Boolean(t1 && t2 && t1 === t2 && a1 === a2)
+      })
+      if (alreadyInList) {
+        setListsMessage('That book is already in this list.')
+        setListBookSearch('')
+        return
+      }
       const payload = {
         list_id: selectedList.id,
         added_by: currentUser.id,
@@ -1350,6 +1408,23 @@ function App() {
     } catch (error) {
       console.error('Add book to list failed', error)
       setListsMessage(error?.message || 'Failed to add book.')
+    }
+  }
+
+  const removeListItem = async (itemId) => {
+    if (!supabase || !currentUser || !selectedList?.id || !itemId) return
+    setListsMessage('')
+    try {
+      const { error } = await supabase
+        .from('list_items')
+        .delete()
+        .eq('id', itemId)
+        .eq('list_id', selectedList.id)
+      if (error) throw error
+      await fetchListItems(selectedList.id)
+    } catch (error) {
+      console.error('Remove list item failed', error)
+      setListsMessage(error?.message || 'Failed to remove book.')
     }
   }
 
@@ -4611,6 +4686,29 @@ function App() {
                               </button>
                             </div>
                             {listInviteError && <p className="mt-2 text-sm text-rose-200">{listInviteError}</p>}
+
+                            {outgoingListInvites.length > 0 && (
+                              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-xs uppercase tracking-[0.3em] text-white/50">Pending invites</p>
+                                <div className="mt-2 space-y-2">
+                                  {outgoingListInvites.map((inv) => (
+                                    <div key={inv.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#050914]/40 px-3 py-2">
+                                      <div className="min-w-0">
+                                        <p className="text-sm text-white line-clamp-1">{inv.invitee_username}</p>
+                                        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Pending</p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => revokeListInvite(inv.id)}
+                                        className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                                      >
+                                        Uninvite
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -4671,7 +4769,20 @@ function App() {
                           ) : selectedListItems.length > 0 ? (
                             <div className="space-y-2">
                               {selectedListItems.map((it) => (
-                                <div key={it.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <button
+                                  key={it.id}
+                                  type="button"
+                                  onClick={() =>
+                                    openModal({
+                                      title: it.book_title,
+                                      author: it.book_author || 'Unknown author',
+                                      cover: it.book_cover ?? null,
+                                      olKey: it.ol_key ?? null,
+                                      isbn: it.isbn ?? null,
+                                    })
+                                  }
+                                  className="w-full flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-white/30 hover:bg-white/10"
+                                >
                                   <div className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
                                     {it.book_cover ? (
                                       <img src={it.book_cover} alt={it.book_title} className="h-full w-full object-cover" />
@@ -4683,7 +4794,19 @@ function App() {
                                     <p className="text-sm font-semibold text-white line-clamp-1">{it.book_title}</p>
                                     <p className="text-xs text-white/60 line-clamp-1">{it.book_author || '—'}</p>
                                   </div>
-                                </div>
+                                  {(selectedList.owner_id === currentUser?.id || it.added_by === currentUser?.id) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        removeListItem(it.id)
+                                      }}
+                                      className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </button>
                               ))}
                             </div>
                           ) : (
