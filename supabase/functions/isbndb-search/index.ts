@@ -6,13 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const json = (status: number, body: unknown) =>
+const json = (status, body) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-const tryFetch = async (urls: string[], headers: HeadersInit) => {
+const tryFetch = async (urls, headers) => {
   for (const url of urls) {
     try {
       const res = await fetch(url, { headers })
@@ -36,7 +36,7 @@ serve(async (req) => {
     return json(500, { error: 'Missing ISBNDB_API_KEY secret' })
   }
 
-  let payload: { q?: string; isbn?: string; pageSize?: number } = {}
+  let payload = {}
   try {
     payload = (await req.json()) ?? {}
   } catch (_) {
