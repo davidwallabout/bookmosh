@@ -1874,7 +1874,17 @@ function App() {
         : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
 
       const isbndbMapped = isbndbBooks
-        .map((b) => mapIsbndbBookToResult(b, searchLower, last1Lower, last2Lower, last3Lower, termWords))
+        .map((b) => {
+          const result = mapIsbndbBookToResult(b, searchLower, last1Lower, last2Lower, last3Lower, termWords)
+          if (!result) return null
+          // Boost English editions in relevance scoring
+          const lang = (b?.language || 'en').toLowerCase()
+          const isEnglish = lang === 'en' || lang === 'eng' || lang.includes('english')
+          if (isEnglish) {
+            result.relevance = (result.relevance || 0) + 2
+          }
+          return result
+        })
         .filter(Boolean)
         .filter((r) => (r.relevance ?? 0) >= 4)
         .sort((a, b) => {
@@ -4606,7 +4616,7 @@ function App() {
                   )}
                 </div>
                 <p className="text-sm text-white/60">
-                  {selectedAuthor ? `${searchResults.length} books by popularity` : 'Open Library · instant results'}
+                  {selectedAuthor ? `${searchResults.length} books by popularity` : 'Instant results'}
                 </p>
               </div>
 
