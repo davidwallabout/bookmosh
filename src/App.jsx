@@ -711,6 +711,7 @@ function App() {
   const [moshes, setMoshes] = useState([]) // Track book chats
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
+  const [feedDisplayCount, setFeedDisplayCount] = useState(10)
   const [activeMoshes, setActiveMoshes] = useState([])
   const [unreadByMoshId, setUnreadByMoshId] = useState({})
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
@@ -759,6 +760,9 @@ function App() {
   const [supabaseUser, setSupabaseUser] = useState(null)
   const [friendQuery, setFriendQuery] = useState('')
   const [friendMessage, setFriendMessage] = useState('')
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState([])
+  const [outgoingFriendRequests, setOutgoingFriendRequests] = useState([])
+  const [friendRequestsLoading, setFriendRequestsLoading] = useState(false)
   const [importFileType, setImportFileType] = useState('goodreads')
   const [importMessage, setImportMessage] = useState('')
 
@@ -907,6 +911,54 @@ function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker))
   }, [tracker])
+
+  const refreshCurrentUser = async () => {
+    if (!supabase || !currentUser?.id) return
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, email, friends, is_private')
+        .eq('id', currentUser.id)
+        .limit(1)
+      if (error) throw error
+      const nextUser = data?.[0]
+      if (!nextUser) return
+      setCurrentUser(nextUser)
+      localStorage.setItem('bookmosh-user', JSON.stringify(nextUser))
+    } catch (error) {
+      console.error('Failed to refresh current user', error)
+    }
+  }
+
+  const loadFriendRequests = async () => {
+    if (!supabase || !currentUser?.id) return
+    setFriendRequestsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select('id, requester_id, requester_username, recipient_id, recipient_username, status, created_at')
+        .eq('status', 'pending')
+        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const rows = Array.isArray(data) ? data : []
+      setIncomingFriendRequests(rows.filter((r) => r.recipient_id === currentUser.id))
+      setOutgoingFriendRequests(rows.filter((r) => r.requester_id === currentUser.id))
+    } catch (error) {
+      console.error('Failed to load friend requests', error)
+      setIncomingFriendRequests([])
+      setOutgoingFriendRequests([])
+    } finally {
+      setFriendRequestsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    loadFriendRequests()
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!supabase || !currentUser) return
@@ -1200,7 +1252,7 @@ function App() {
         .from('book_events')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(60)
+        .limit(50)
 
       if (feedScope === 'me') {
         query = query.eq('owner_id', currentUser.id)
@@ -1216,11 +1268,17 @@ function App() {
       const { data, error } = await query
       if (error) throw error
       setFeedItems(data ?? [])
+      setFeedDisplayCount(10)
     } catch (error) {
       console.error('Feed fetch failed', error)
       setFeedItems([])
+      setFeedDisplayCount(10)
     }
   }
+
+  useEffect(() => {
+    setFeedDisplayCount(10)
+  }, [feedScope])
 
   const fetchActiveMoshes = async () => {
     if (!supabase || !currentUser) return
@@ -1971,7 +2029,7 @@ function App() {
     event.target.value = ''
   }
 
-  const handleAddFriend = async () => {
+  const handleSendFriendInvite = async () => {
     if (!currentUser) {
       setFriendMessage('Log in to search for friends.')
       return
@@ -2015,21 +2073,45 @@ function App() {
       const exactUsername = availableMatches.find(u => (u.username ?? '').toLowerCase() === queryLower)
       const exactEmail = availableMatches.find(u => (u.email ?? '').toLowerCase() === queryLower)
       const friendToAdd = exactUsername || exactEmail || availableMatches[0]
-      const updatedFriends = [...existingFriends, friendToAdd.username]
-      
-      // Update friends in database
-      const updatedUser = await updateUserFriends(currentUser.id, updatedFriends)
 
-      if (!updatedUser) {
-        throw new Error('Unable to update friends (no data returned).')
+      const { data: existingRequests, error: existingRequestError } = await supabase
+        .from('friend_requests')
+        .select('id, status, requester_id, recipient_id')
+        .or(
+          `and(requester_id.eq.${currentUser.id},recipient_id.eq.${friendToAdd.id}),and(requester_id.eq.${friendToAdd.id},recipient_id.eq.${currentUser.id})`,
+        )
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (existingRequestError) throw existingRequestError
+
+      const existingRequest = Array.isArray(existingRequests) ? existingRequests[0] : null
+      if (existingRequest?.status === 'pending') {
+        if (existingRequest.requester_id === currentUser.id) {
+          setFriendMessage(`Invite already sent to ${friendToAdd.username}.`)
+        } else {
+          setFriendMessage(`${friendToAdd.username} already invited you — check Incoming invites below.`)
+        }
+        return
       }
-      
-      // Update current user state locally AND in localStorage
-      setCurrentUser(updatedUser)
-      localStorage.setItem('bookmosh-user', JSON.stringify(updatedUser))
-      
-      setFriendMessage(`Connected with ${friendToAdd.username}!`)
+
+      const { error: inviteError } = await supabase
+        .from('friend_requests')
+        .insert([
+          {
+            requester_id: currentUser.id,
+            requester_username: currentUser.username,
+            recipient_id: friendToAdd.id,
+            recipient_username: friendToAdd.username,
+            status: 'pending',
+          },
+        ])
+
+      if (inviteError) throw inviteError
+
+      setFriendMessage(`Invite sent to ${friendToAdd.username}.`)
       setFriendQuery('')
+      await loadFriendRequests()
     } catch (error) {
       console.error('Friend add error:', error)
       const message = String(error?.message || '')
@@ -2044,6 +2126,55 @@ function App() {
       }
     } finally {
       isUpdatingUserRef.current = false
+    }
+  }
+
+  const acceptFriendInvite = async (request) => {
+    if (!supabase || !request?.id) return
+    try {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', request.id)
+      if (error) throw error
+      await refreshCurrentUser()
+      await loadFriendRequests()
+      setFriendMessage(`Connected with ${request.requester_username}.`)
+    } catch (error) {
+      console.error('Accept friend invite failed', error)
+      setFriendMessage('Failed to accept invite.')
+    }
+  }
+
+  const declineFriendInvite = async (request) => {
+    if (!supabase || !request?.id) return
+    try {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'declined', responded_at: new Date().toISOString() })
+        .eq('id', request.id)
+      if (error) throw error
+      await loadFriendRequests()
+      setFriendMessage('Invite declined.')
+    } catch (error) {
+      console.error('Decline friend invite failed', error)
+      setFriendMessage('Failed to decline invite.')
+    }
+  }
+
+  const cancelFriendInvite = async (request) => {
+    if (!supabase || !request?.id) return
+    try {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'cancelled', responded_at: new Date().toISOString() })
+        .eq('id', request.id)
+      if (error) throw error
+      await loadFriendRequests()
+      setFriendMessage('Invite cancelled.')
+    } catch (error) {
+      console.error('Cancel friend invite failed', error)
+      setFriendMessage('Failed to cancel invite.')
     }
   }
 
@@ -2673,7 +2804,7 @@ function App() {
 
               <div className="mt-6 space-y-3">
                 {feedItems.length > 0 ? (
-                  feedItems.map((item) => {
+                  feedItems.slice(0, feedDisplayCount).map((item) => {
                     const book = mapFeedItemToBook(item)
                     return (
                       <div
@@ -2726,6 +2857,18 @@ function App() {
                   <p className="text-sm text-white/60">No feed activity yet.</p>
                 )}
               </div>
+
+              {feedItems.length > feedDisplayCount && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setFeedDisplayCount((prev) => prev + 10)}
+                    className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                  >
+                    Show 10 more
+                  </button>
+                </div>
+              )}
             </section>
 
             {/* Community */}
@@ -2805,12 +2948,84 @@ function App() {
                     />
                     <button
                       type="button"
-                      onClick={handleAddFriend}
+                      onClick={handleSendFriendInvite}
                       className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                     >
-                      Add friend
+                      Send invite
                     </button>
                     <p className="text-xs text-white/60">{friendMessage}</p>
+                  </div>
+
+                  <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invites</p>
+                      <button
+                        type="button"
+                        onClick={loadFriendRequests}
+                        className="text-[10px] uppercase tracking-[0.3em] text-white/50 hover:text-white transition"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+
+                    {friendRequestsLoading && (
+                      <p className="text-sm text-white/60">Loading invites…</p>
+                    )}
+
+                    {!friendRequestsLoading && incomingFriendRequests.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Incoming</p>
+                        {incomingFriendRequests.map((req) => (
+                          <div key={req.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white line-clamp-1">{req.requester_username}</p>
+                              <p className="text-xs text-white/50">wants to connect</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => acceptFriendInvite(req)}
+                                className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => declineFriendInvite(req)}
+                                className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!friendRequestsLoading && outgoingFriendRequests.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Outgoing</p>
+                        {outgoingFriendRequests.map((req) => (
+                          <div key={req.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white line-clamp-1">{req.recipient_username}</p>
+                              <p className="text-xs text-white/50">pending</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => cancelFriendInvite(req)}
+                              className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!friendRequestsLoading && incomingFriendRequests.length === 0 && outgoingFriendRequests.length === 0 && (
+                      <p className="text-sm text-white/60">No pending invites.</p>
+                    )}
                   </div>
                 </div>
 
