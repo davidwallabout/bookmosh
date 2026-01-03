@@ -2996,30 +2996,32 @@ function App() {
 
         {currentUser && activeMosh && isMoshAddFriendsOpen && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 closeMoshAddFriends()
               }
             }}
           >
-            <div className="w-[clamp(320px,80vw,620px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
-                  <h2 className="text-xl font-semibold text-white">Add friends</h2>
-                  <p className="text-sm text-white/60 line-clamp-1">{activeMosh.mosh_title || activeMosh.book_title}</p>
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(320px,80vw,620px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                    <h2 className="text-xl font-semibold text-white">Add friends</h2>
+                    <p className="text-sm text-white/60 line-clamp-1">{activeMosh.mosh_title || activeMosh.book_title}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeMoshAddFriends}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  >
+                    Close
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeMoshAddFriends}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                >
-                  Close
-                </button>
               </div>
 
-              <div className="mt-5 space-y-3">
+              <div className="mt-5 space-y-3 flex-1 overflow-auto">
                 {moshAddFriends.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {moshAddFriends.map((friend) => (
@@ -4069,8 +4071,8 @@ function App() {
         )}
 
         {successModal.show && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="w-[clamp(280px,90vw,400px)] rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-6 sm:p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-auto pt-[env(safe-area-inset-top)]">
               <img
                 src="/bookmosh-logo-new.png"
                 alt="BookMosh"
@@ -4271,15 +4273,16 @@ function App() {
 
         {currentUser && isMoshInviteOpen && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 closeMoshInvite()
               }
             }}
           >
-            <div className="w-[clamp(320px,80vw,620px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between">
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(320px,80vw,620px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.4em] text-white/40">Start a mosh</p>
                   <h2 className="text-xl font-semibold text-white">Invite a friend</h2>
@@ -4291,9 +4294,11 @@ function App() {
                 >
                   Close
                 </button>
+                </div>
               </div>
 
-              <div className="mt-5 flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+              <div className="mt-5 flex-1 overflow-auto space-y-5">
+                <div className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                 <div className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
                   {moshInviteBook?.cover ? (
                     <img src={moshInviteBook.cover} alt={moshInviteBook.title} className="h-full w-full object-cover" />
@@ -4305,9 +4310,9 @@ function App() {
                   <p className="text-sm font-semibold text-white line-clamp-2">{moshInviteBook?.title ?? 'Book'}</p>
                   <p className="text-sm text-white/60 line-clamp-1">{moshInviteBook?.author ?? 'Unknown author'}</p>
                 </div>
-              </div>
+                </div>
 
-              <div className="mt-5 space-y-3">
+                <div className="space-y-3">
                 <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Mosh Title (Optional)</label>
                 <input
                   type="text"
@@ -4316,9 +4321,9 @@ function App() {
                   placeholder={moshInviteBook?.title || "Custom mosh title..."}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
                 />
-              </div>
+                </div>
 
-              <div className="mt-5 space-y-3">
+                <div className="space-y-3">
                 <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Visibility</label>
                 <div className="flex gap-2">
                   <button
@@ -4408,6 +4413,7 @@ function App() {
                 </div>
 
                 <p className="text-sm text-rose-200 min-h-[1.25rem]">{moshInviteError}</p>
+                </div>
               </div>
 
               <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -4692,24 +4698,32 @@ function App() {
         )}
 
         {selectedBook && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeModal}>
-            <div className="w-[clamp(320px,90vw,600px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between mb-5">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
-                  <h2 className="text-xl font-semibold text-white">{selectedBook.title}</h2>
-                  <p className="text-sm text-white/60">{selectedBook.author}</p>
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
+            onClick={closeModal}
+          >
+            <div
+              className="w-full h-full sm:h-auto sm:w-[clamp(320px,90vw,600px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
+                    <h2 className="text-xl font-semibold text-white">{selectedBook.title}</h2>
+                    <p className="text-sm text-white/60">{selectedBook.author}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  >
+                    Close
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                >
-                  Close
-                </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 overflow-auto">
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Moshes</label>
                   {publicMoshesForBookLoading ? (
@@ -4999,9 +5013,10 @@ function App() {
 
         {/* Friend Profile Modal */}
         {selectedFriend && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-              <div className="flex items-center justify-between mb-6">
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
+            <div className="w-full h-full sm:h-auto sm:max-w-2xl rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-4 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
+                <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5 flex-shrink-0">
                     <img src={getProfileAvatarUrl(selectedFriend)} alt="Avatar" className="h-full w-full object-cover" />
@@ -5026,9 +5041,10 @@ function App() {
                     ✕
                   </button>
                 </div>
+                </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 overflow-auto">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                   <div className="grid grid-cols-4 gap-2">
@@ -5092,9 +5108,10 @@ function App() {
         )}
 
         {isAuthorModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-              <div className="flex items-center justify-between mb-6">
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
+            <div className="w-full h-full sm:h-auto sm:max-w-4xl rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-4 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
+                <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50">Author</p>
                   <h2 className="text-2xl font-semibold text-white">{authorModalName}</h2>
@@ -5111,58 +5128,62 @@ function App() {
                 >
                   ✕
                 </button>
+                </div>
               </div>
 
-              {authorModalLoading ? (
-                <p className="text-sm text-white/60">Loading books…</p>
-              ) : authorModalBooks.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {authorModalBooks.map((book) => (
-                    <div
-                      key={book.key}
-                      className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
-                      {book.cover ? (
-                        <img
-                          src={book.cover}
-                          alt={book.title}
-                          className="h-24 w-16 rounded-xl object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="flex h-24 w-16 items-center justify-center rounded-xl bg-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
-                          Cover
+              <div className="flex-1 overflow-auto">
+                {authorModalLoading ? (
+                  <p className="text-sm text-white/60">Loading books…</p>
+                ) : authorModalBooks.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {authorModalBooks.map((book) => (
+                      <div
+                        key={book.key}
+                        className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        {book.cover ? (
+                          <img
+                            src={book.cover}
+                            alt={book.title}
+                            className="h-24 w-16 rounded-xl object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="flex h-24 w-16 items-center justify-center rounded-xl bg-white/5 text-xs uppercase tracking-[0.2em] text-white/60 flex-shrink-0">
+                            Cover
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                          <p className="text-xs text-white/60">{book.year || '—'}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleAddBook(book, 'to-read')}
+                            className="mt-3 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                          >
+                            + Add
+                          </button>
                         </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
-                        <p className="text-xs text-white/60">{book.year || '—'}</p>
-                        <button
-                          type="button"
-                          onClick={() => handleAddBook(book, 'to-read')}
-                          className="mt-3 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                        >
-                          + Add
-                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-white/60">No books found for this author.</p>
-              )}
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/60">No books found for this author.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         {currentUser && activeMosh && isMoshCoverPickerOpen && (
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[70] flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) closeMoshCoverPicker()
             }}
           >
-            <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between mb-5">
+            <div className="w-full h-full sm:h-auto sm:max-w-2xl rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh Cover</p>
                   <h2 className="text-xl font-semibold text-white">Choose a cover</h2>
@@ -5175,8 +5196,10 @@ function App() {
                 >
                   Close
                 </button>
+                </div>
               </div>
 
+              <div className="flex-1 overflow-auto">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-20 w-16 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
                   {activeMosh.book_cover ? (
@@ -5214,19 +5237,21 @@ function App() {
               ) : (
                 <p className="text-sm text-white/60">No edition covers found for this mosh.</p>
               )}
+              </div>
             </div>
           </div>
         )}
 
         {currentUser && isProfileTopBookModalOpen && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[80] flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) closeTopBookModal()
             }}
           >
-            <div className="w-full max-w-2xl rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between">
+            <div className="w-full h-full sm:h-auto sm:max-w-2xl rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.4em] text-white/40">Favorites</p>
                   <h2 className="text-xl font-semibold text-white">Pick a book</h2>
@@ -5238,9 +5263,10 @@ function App() {
                 >
                   Close
                 </button>
+                </div>
               </div>
 
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex gap-2 flex-shrink-0">
                 <input
                   type="text"
                   value={profileTopBookSearch}
@@ -5262,7 +5288,7 @@ function App() {
                 <p className="mt-3 text-sm text-rose-200">{profileTopBookError}</p>
               )}
 
-              <div className="mt-4 max-h-[55vh] space-y-2 overflow-auto">
+              <div className="mt-4 flex-1 space-y-2 overflow-auto">
                 {profileTopBookResults.map((r) => {
                   const cover = r.cover_i ? `https://covers.openlibrary.org/b/id/${r.cover_i}-S.jpg` : null
                   const author = r.author_name?.[0] ?? 'Unknown author'
