@@ -1741,13 +1741,27 @@ function App() {
     }
     setIsSearching(true)
     try {
+      const trimmed = term.trim()
+      const termWithLanguage = trimmed.toLowerCase().includes('language:') ? trimmed : `${trimmed} language:eng`
+
+      const termWords = trimmed
+        .split(/\s+/)
+        .map((w) => w.trim())
+        .filter(Boolean)
+      const last1 = termWords.slice(-1).join(' ')
+      const last2 = termWords.slice(-2).join(' ')
+      const last3 = termWords.slice(-3).join(' ')
+
       // Use general search to include both title and author
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(termWithLanguage)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
       
-      const searchLower = term.toLowerCase()
+      const searchLower = trimmed.toLowerCase()
+      const last1Lower = last1.toLowerCase()
+      const last2Lower = last2.toLowerCase()
+      const last3Lower = last3.toLowerCase()
       
       // Filter and sort results for better relevance
       const mapped = data.docs
@@ -1768,12 +1782,30 @@ function App() {
           language: doc.language?.[0] || null,
           // Calculate relevance score based on title and author match
           relevance: (() => {
-            const titleMatch = doc.title.toLowerCase().includes(searchLower)
-            const authorMatch = doc.author_name?.some(a => a.toLowerCase().includes(searchLower))
-            if (titleMatch && authorMatch) return 3 // Both match
-            if (titleMatch) return 2 // Title match
-            if (authorMatch) return 1 // Author match
-            return 0
+            const titleLower = String(doc.title ?? '').toLowerCase()
+            const authorLower = (doc.author_name ?? []).map((a) => String(a ?? '').toLowerCase())
+
+            const titleMatchFull = titleLower.includes(searchLower)
+            const titleMatchLast3 = last3Lower && titleLower.includes(last3Lower)
+            const titleMatchLast2 = last2Lower && titleLower.includes(last2Lower)
+            const titleMatchLast1 = last1Lower && titleLower.includes(last1Lower)
+
+            const authorMatchAnyWord = termWords.some((w) => {
+              const wl = w.toLowerCase()
+              return wl.length >= 3 && authorLower.some((a) => a.includes(wl))
+            })
+
+            let score = 0
+            if (titleMatchFull) score += 6
+            if (titleMatchLast3) score += 6
+            else if (titleMatchLast2) score += 5
+            else if (titleMatchLast1) score += 4
+
+            if (authorMatchAnyWord) score += 2
+
+            if ((doc.language ?? []).includes('eng')) score += 1
+
+            return score
           })()
         }))
         .sort((a, b) => {
