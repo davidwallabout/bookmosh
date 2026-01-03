@@ -2267,6 +2267,49 @@ function App() {
     }
   }
 
+  const handleUnfriend = async (friendUsername) => {
+    if (!supabase || !currentUser) return
+    if (!friendUsername) return
+
+    const confirmed = window.confirm(`Unfriend ${friendUsername}?`)
+    if (!confirmed) return
+
+    setFriendMessage('')
+    try {
+      const friendId = await resolveUserId(friendUsername)
+      if (!friendId) {
+        setFriendMessage('Could not find that user.')
+        return
+      }
+
+      // Preferred: Security-definer RPC that updates both users.
+      // If it doesn't exist yet, fall back to updating current user only.
+      const { error: rpcError } = await supabase.rpc('unfriend_users', {
+        user_a: currentUser.id,
+        user_b: friendId,
+      })
+
+      if (rpcError) {
+        console.warn('[UNFRIEND] RPC unavailable or failed, falling back to local update:', rpcError)
+        const nextFriends = (Array.isArray(currentUser.friends) ? currentUser.friends : []).filter(
+          (u) => (u ?? '').toLowerCase() !== friendUsername.toLowerCase(),
+        )
+        const updatedUser = await updateUserFriends(currentUser.id, nextFriends)
+        setCurrentUser(updatedUser)
+        localStorage.setItem('bookmosh-user', JSON.stringify(updatedUser))
+        setFriendMessage('Unfriended. (Other user may still see you until server sync is added.)')
+      } else {
+        await refreshCurrentUser()
+        setFriendMessage('Unfriended.')
+      }
+
+      await loadFriendRequests()
+    } catch (error) {
+      console.error('Unfriend failed', error)
+      setFriendMessage(error?.message || 'Failed to unfriend.')
+    }
+  }
+
   const declineFriendInvite = async (request) => {
     if (!supabase || !request?.id) return
     try {
@@ -3274,13 +3317,22 @@ function App() {
                               >
                                 {friend.username}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => viewFriendProfile(friend.username)}
-                                className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition"
-                              >
-                                View
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => viewFriendProfile(friend.username)}
+                                  className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white transition"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnfriend(friend.username)}
+                                  className="text-[10px] uppercase tracking-[0.3em] text-rose-300/80 hover:text-rose-200 transition"
+                                >
+                                  Unfriend
+                                </button>
+                              </div>
                             </div>
                             {recentBooks.length > 0 && (
                               <div className="space-y-1 mt-2 pt-2 border-t border-white/10">
@@ -3863,16 +3915,23 @@ function App() {
                   <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
                   <h2 className="text-xl font-semibold text-white">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoshPanelOpen(false)
-                    setActiveMosh(null)
-                  }}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                >
-                  Close
-                </button>
+                <div className="relative">
+                  {activeMosh?.id && (unreadByMoshId[activeMosh.id] ?? 0) > 0 && (
+                    <div className="absolute -top-2 -right-2 rounded-full bg-rose-500/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                      {unreadByMoshId[activeMosh.id]}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoshPanelOpen(false)
+                      setActiveMosh(null)
+                    }}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
 
               {!activeMosh ? (
@@ -4398,13 +4457,22 @@ function App() {
                 <div>
                   <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedFriend(null)}
-                  className="text-white/60 hover:text-white transition text-2xl"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleUnfriend(selectedFriend.username)}
+                    className="rounded-full border border-rose-500/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                  >
+                    Unfriend
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFriend(null)}
+                    className="text-white/60 hover:text-white transition text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
