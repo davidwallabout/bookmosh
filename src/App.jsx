@@ -982,9 +982,19 @@ function App() {
   const [showEditionPicker, setShowEditionPicker] = useState(false)
   const [editionPickerLoading, setEditionPickerLoading] = useState(false)
   const [editionPickerEditions, setEditionPickerEditions] = useState([])
+  const brokenCoverKeysRef = useRef(new Set())
+  const [brokenCoverKeysVersion, setBrokenCoverKeysVersion] = useState(0)
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
+
+  const markCoverBroken = (key) => {
+    const k = String(key || '')
+    if (!k) return
+    if (brokenCoverKeysRef.current.has(k)) return
+    brokenCoverKeysRef.current.add(k)
+    setBrokenCoverKeysVersion((v) => v + 1)
+  }
   const isUpdatingUserRef = useRef(false)
   const [authMode, setAuthMode] = useState('login')
   const [successModal, setSuccessModal] = useState({ show: false, book: null, list: '' })
@@ -992,6 +1002,10 @@ function App() {
     setSuccessModal({ show: true, book: null, list: message, alreadyAdded: false })
     setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), timeoutMs)
   }
+
+  const [emailInvite, setEmailInvite] = useState('')
+  const [emailInviteSending, setEmailInviteSending] = useState(false)
+  const [emailInviteMessage, setEmailInviteMessage] = useState('')
 
   const openAddToList = (book) => {
     if (!book) return
@@ -3426,6 +3440,48 @@ function App() {
     }
   }
 
+  const handleSendEmailInvite = async () => {
+    if (!supabase) return
+    if (!currentUser) {
+      setEmailInviteMessage('Log in to invite a friend.')
+      return
+    }
+
+    const email = emailInvite.trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      setEmailInviteMessage('Enter a valid email.')
+      return
+    }
+
+    try {
+      setEmailInviteSending(true)
+      setEmailInviteMessage('')
+      const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.bookmosh.com'
+      const inviteUrl = 'https://www.bookmosh.com'
+
+      const { data, error } = await supabase.functions.invoke('invite-friend', {
+        body: {
+          email,
+          inviterName: currentUser.username,
+          appUrl,
+          inviteUrl,
+        },
+      })
+
+      if (error) throw error
+      if (!data?.ok) throw new Error('Invite failed to send.')
+
+      setEmailInviteMessage(`Invite sent to ${email}.`)
+      setEmailInvite('')
+    } catch (error) {
+      console.error('Email invite failed', error)
+      const msg = String(error?.message || '')
+      setEmailInviteMessage(msg || 'Failed to send invite.')
+    } finally {
+      setEmailInviteSending(false)
+    }
+  }
+
   const acceptFriendInvite = async (request) => {
     if (!supabase || !request?.id) return
     try {
@@ -5222,6 +5278,29 @@ function App() {
                     <p className="text-xs text-white/60">{friendMessage}</p>
                   </div>
 
+                  <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invite by email</p>
+                      <p className="text-sm text-white/60">Send a cute BookMosh invite.</p>
+                    </div>
+                    <input
+                      type="email"
+                      value={emailInvite}
+                      onChange={(e) => setEmailInvite(e.target.value)}
+                      placeholder="friend@email.com"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendEmailInvite}
+                      disabled={emailInviteSending}
+                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                    >
+                      {emailInviteSending ? 'Sending…' : 'Send email invite'}
+                    </button>
+                    <p className="text-xs text-white/60 min-h-[1.25rem]">{emailInviteMessage}</p>
+                  </div>
+
                   <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
                     <div className="flex items-center justify-between">
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invites</p>
@@ -6554,6 +6633,12 @@ function App() {
                         <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5">
                           <div className="divide-y divide-white/10">
                             {editionPickerEditions.map((e) => (
+                              (() => {
+                                const coverKey = `edition:${e.source}:${e.isbn}`
+                                const isBroken = brokenCoverKeysRef.current.has(coverKey)
+                                // eslint-disable-next-line no-unused-expressions
+                                brokenCoverKeysVersion
+                                return (
                               <button
                                 key={`${e.source}:${e.isbn}`}
                                 type="button"
@@ -6572,10 +6657,18 @@ function App() {
                               >
                                 <div className="flex items-start gap-3">
                                   <div className="h-16 w-11 overflow-hidden rounded-lg border border-white/10 bg-white/5 flex-shrink-0">
-                                    {e.coverUrl ? (
+                                    {e.coverUrl && !isBroken ? (
                                       <img src={e.coverUrl} alt="Edition cover" className="h-full w-full object-cover" />
                                     ) : (
                                       <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/50">No cover</div>
+                                    )}
+                                    {e.coverUrl && !isBroken && (
+                                      <img
+                                        src={e.coverUrl}
+                                        alt=""
+                                        className="hidden"
+                                        onError={() => markCoverBroken(coverKey)}
+                                      />
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
@@ -6587,6 +6680,8 @@ function App() {
                                   </div>
                                 </div>
                               </button>
+                                )
+                              })()
                             ))}
                           </div>
                         </div>
@@ -6604,8 +6699,15 @@ function App() {
                         <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
                           <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
                             {coverPickerCovers.map((c) => (
+                              (() => {
+                                const coverKey = `cover:${c.key || `${c.coverId}-${c.editionKey ?? ''}`}`
+                                const isBroken = brokenCoverKeysRef.current.has(coverKey)
+                                // eslint-disable-next-line no-unused-expressions
+                                brokenCoverKeysVersion
+                                if (isBroken) return null
+                                return (
                               <button
-                                key={`${c.coverId}-${c.editionKey ?? ''}`}
+                                key={c.key || `${c.coverId}-${c.editionKey ?? ''}`}
                                 type="button"
                                 onClick={() => {
                                   updateBook(selectedBook.title, { cover: c.urlM, isbn: c.isbn ?? selectedBook.isbn, olKey: selectedBook.olKey ?? null })
@@ -6615,8 +6717,15 @@ function App() {
                                 }}
                                 className="h-20 w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/40"
                               >
-                                <img src={c.urlS} alt="Edition cover" className="h-full w-full object-cover" />
+                                <img
+                                  src={c.urlS}
+                                  alt="Edition cover"
+                                  className="h-full w-full object-cover"
+                                  onError={() => markCoverBroken(coverKey)}
+                                />
                               </button>
+                                )
+                              })()
                             ))}
                           </div>
                         </div>
