@@ -209,20 +209,41 @@ const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lowe
   const date = String(b.date_published ?? '')
   const year = date ? Number(date.slice(0, 4)) || null : null
 
-  // ISBNdb sometimes returns the original-language title in `title` and the English title in `title_long`.
-  // When we have search terms, pick whichever title matches the query better.
   let title = fallbackTitle
   let score = computeMeaningfulRelevance(title, author, termWords)
+
+  const asciiRatio = (value) => {
+    const s = String(value ?? '')
+    if (!s) return 0
+    const ascii = s.replace(/[^\x00-\x7F]/g, '').length
+    return ascii / s.length
+  }
+
+  const queryAscii = (() => {
+    const joined = (Array.isArray(termWords) ? termWords : []).join(' ')
+    return joined ? joined === joined.replace(/[^\x00-\x7F]/g, '') : true
+  })()
+
   if (Array.isArray(termWords) && termWords.length > 0 && titlePrimary && titleLong && titlePrimary !== titleLong) {
     const scorePrimary = computeMeaningfulRelevance(titlePrimary, author, termWords)
     const scoreLong = computeMeaningfulRelevance(titleLong, author, termWords)
-    if (scoreLong > scorePrimary) {
+
+    const primaryAscii = asciiRatio(titlePrimary)
+    const longAscii = asciiRatio(titleLong)
+
+    const longClearlyMoreAscii = queryAscii && longAscii >= 0.9 && primaryAscii <= 0.75
+
+    if (longClearlyMoreAscii || scoreLong > scorePrimary) {
       title = titleLong
       score = scoreLong
     } else {
       title = titlePrimary
       score = scorePrimary
     }
+  }
+
+  if (queryAscii && asciiRatio(title) < 0.6) {
+    score -= 2
   }
 
   return {
@@ -1896,9 +1917,22 @@ function App() {
 
       // Primary provider: ISBNdb (via Edge Function)
       const isbndbData = await invokeIsbndbSearch({ q: normalizedForQuery, pageSize: Math.min(50, limit) })
-      const isbndbBooks = Array.isArray(isbndbData?.books)
+      let isbndbBooks = Array.isArray(isbndbData?.books)
         ? isbndbData.books
         : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
+
+      if (termWords.length >= 4) {
+        const titleOnlyQuery = termWords.slice(0, Math.max(2, termWords.length - 2)).join(' ').trim()
+        if (titleOnlyQuery && titleOnlyQuery.toLowerCase() !== normalizedForQuery.toLowerCase()) {
+          const extraData = await invokeIsbndbSearch({ q: titleOnlyQuery, pageSize: Math.min(50, limit) })
+          const extraBooks = Array.isArray(extraData?.books)
+            ? extraData.books
+            : (Array.isArray(extraData?.data) ? extraData.data : [])
+          if (Array.isArray(extraBooks) && extraBooks.length > 0) {
+            isbndbBooks = [...isbndbBooks, ...extraBooks]
+          }
+        }
+      }
 
       const isbndbMapped = isbndbBooks
         .map((b) => {
