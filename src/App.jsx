@@ -2293,10 +2293,40 @@ function App() {
     }
   }
 
+  const setMoshUrlState = ({ isOpen, moshId } = {}) => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (isOpen) params.set('mosh', '1')
+    else params.delete('mosh')
+    if (moshId) params.set('moshId', String(moshId))
+    else params.delete('moshId')
+    const qs = params.toString()
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+    window.history.replaceState({}, '', next)
+  }
+
+  const closeMoshPanel = () => {
+    setIsMoshPanelOpen(false)
+    setActiveMosh(null)
+    setActiveMoshMessages([])
+    setMoshDraft('')
+    setShowMentionDropdown(false)
+    setMoshUrlState({ isOpen: false, moshId: null })
+  }
+
+  const backToMoshes = () => {
+    setActiveMosh(null)
+    setActiveMoshMessages([])
+    setMoshDraft('')
+    setShowMentionDropdown(false)
+    setMoshUrlState({ isOpen: true, moshId: null })
+  }
+
   const openMosh = async (mosh) => {
     if (!supabase || !currentUser) return
     setActiveMosh(mosh)
     setIsMoshPanelOpen(true)
+    setMoshUrlState({ isOpen: true, moshId: mosh?.id ?? null })
     try {
       const { data } = await supabase
         .from('mosh_messages')
@@ -2320,6 +2350,62 @@ function App() {
       console.error('Open mosh failed', error)
     }
   }
+
+  const openMoshById = async (moshId) => {
+    if (!supabase || !currentUser) return
+    const id = String(moshId ?? '').trim()
+    if (!id) return
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .select('*')
+        .eq('id', id)
+        .limit(1)
+      if (error) throw error
+      const mosh = Array.isArray(data) ? data[0] : null
+      if (mosh) {
+        await openMosh(mosh)
+      } else {
+        setIsMoshPanelOpen(true)
+        setActiveMosh(null)
+        setMoshUrlState({ isOpen: true, moshId: null })
+      }
+    } catch (error) {
+      console.error('Open mosh by id failed', error)
+      setIsMoshPanelOpen(true)
+      setActiveMosh(null)
+      setMoshUrlState({ isOpen: true, moshId: null })
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const moshId = (params.get('moshId') ?? '').trim()
+    const moshOpen = (params.get('mosh') ?? '').trim()
+    if (!moshId && !moshOpen) return
+    if (!currentUser || !supabase) return
+    if (isMoshPanelOpen) return
+
+    ;(async () => {
+      if (moshId) {
+        await openMoshById(moshId)
+      } else {
+        setIsMoshPanelOpen(true)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, supabase])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (!isMoshPanelOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isMoshPanelOpen])
 
   const handleMoshDraftChange = (value) => {
     setMoshDraft(value)
@@ -4216,7 +4302,7 @@ function App() {
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10">
         {currentUser && (
-        <header className="flex flex-col items-center justify-center gap-4">
+          <header className="flex flex-col items-center justify-center gap-4">
           <div className="relative">
             <button
               onClick={() => {
@@ -4268,7 +4354,7 @@ function App() {
               </button>
             ))}
           </div>
-        </header>
+          </header>
         )}
 
         {currentUser && activeMosh && isMoshAddFriendsOpen && (
@@ -6242,36 +6328,48 @@ function App() {
         )}
 
         {currentUser && isMoshPanelOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4">
-            <div className="w-full h-full sm:h-auto sm:w-[clamp(320px,80vw,900px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
-              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
-                <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
-                  <h2 className="text-xl font-semibold text-white">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
-                </div>
-                <div className="relative">
-                  {activeMosh?.id && (unreadByMoshId[activeMosh.id] ?? 0) > 0 && (
-                    <div className="absolute -top-2 -right-2 rounded-full bg-rose-500/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                      {unreadByMoshId[activeMosh.id]}
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-[#0b1225]/95 overflow-hidden pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-5xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                      <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
+                      {activeMosh?.id && (
+                        <p className="text-xs text-white/50 break-words">{activeMosh.mosh_title || activeMosh.book_title}</p>
+                      )}
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMoshPanelOpen(false)
-                      setActiveMosh(null)
-                    }}
-                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  >
-                    Close
-                  </button>
-                </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {activeMosh?.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof window === 'undefined') return
+                            const url = window.location.href
+                            if (navigator?.clipboard?.writeText) {
+                              navigator.clipboard.writeText(url)
+                            }
+                          }}
+                          className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                        >
+                          Copy link
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={closeMoshPanel}
+                        className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {!activeMosh ? (
-                <div className="mt-5 space-y-4 flex-1 overflow-auto pr-0 sm:pr-0">
+                <div className="mx-auto w-full max-w-5xl px-4 py-6 overflow-auto h-[calc(100vh-80px)]">
                   <div className="flex gap-2 justify-center">
                     <button
                       type="button"
@@ -6369,84 +6467,86 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr] flex-1 overflow-auto">
-                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4 flex flex-col">
-                    <div className="flex-1 min-h-0 space-y-3 overflow-auto pr-2">
-                      {activeMoshMessages.map((msg) => (
-                        <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/50">{msg.sender_username}</p>
-                          <p className="text-sm text-white">{msg.body}</p>
-                        </div>
-                      ))}
-                      {activeMoshMessages.length === 0 && (
-                        <p className="text-sm text-white/60">No messages yet.</p>
-                      )}
-                    </div>
-                    <div className="mt-4 relative">
-                      {/* Mention dropdown */}
-                      {showMentionDropdown && (
-                        <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-white/10 bg-[#0b1225]/95 p-2 shadow-lg">
-                          {(activeMosh?.participants_usernames || [])
-                            .filter(u => u.toLowerCase().includes(moshMentionQuery))
-                            .map((username) => (
-                              <button
-                                key={username}
-                                type="button"
-                                onClick={() => insertMention(username)}
-                                className="w-full rounded-xl px-3 py-2 text-left text-sm text-white transition hover:bg-white/10"
-                              >
-                                @{username}
-                              </button>
-                            ))}
-                        </div>
-                      )}
-                      
-                      <div className="flex gap-2">
-                        <input
-                          value={moshDraft}
-                          onChange={(e) => handleMoshDraftChange(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              if (showMentionDropdown) {
-                                // Select first matching participant
-                                const matches = (activeMosh?.participants_usernames || [])
-                                  .filter(u => u.toLowerCase().includes(moshMentionQuery))
-                                if (matches.length > 0) {
-                                  insertMention(matches[0])
+                <div className="mx-auto w-full max-w-5xl px-4 py-6 h-[calc(100vh-80px)] overflow-hidden">
+                  <div className="grid gap-4 lg:grid-cols-[2fr_1fr] h-full overflow-hidden">
+                    <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4 flex flex-col min-h-0 overflow-hidden">
+                      <div className="flex-1 min-h-0 space-y-3 overflow-auto pr-2">
+                        {activeMoshMessages.map((msg) => (
+                          <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <p className="text-xs uppercase tracking-[0.3em] text-white/50">{msg.sender_username}</p>
+                            <p className="text-sm text-white">{msg.body}</p>
+                          </div>
+                        ))}
+                        {activeMoshMessages.length === 0 && (
+                          <p className="text-sm text-white/60">No messages yet.</p>
+                        )}
+                      </div>
+
+                      <div className="mt-4 relative">
+                        {showMentionDropdown && (
+                          <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-white/10 bg-[#0b1225]/95 p-2 shadow-lg">
+                            {(activeMosh?.participants_usernames || [])
+                              .filter((u) => u.toLowerCase().includes(moshMentionQuery))
+                              .map((username) => (
+                                <button
+                                  key={username}
+                                  type="button"
+                                  onClick={() => insertMention(username)}
+                                  className="w-full rounded-xl px-3 py-2 text-left text-sm text-white transition hover:bg-white/10"
+                                >
+                                  @{username}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          <input
+                            value={moshDraft}
+                            onChange={(e) => handleMoshDraftChange(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                if (showMentionDropdown) {
+                                  const matches = (activeMosh?.participants_usernames || []).filter((u) =>
+                                    u.toLowerCase().includes(moshMentionQuery),
+                                  )
+                                  if (matches.length > 0) {
+                                    insertMention(matches[0])
+                                  }
+                                } else {
+                                  sendMoshMessage()
                                 }
-                              } else {
-                                sendMoshMessage()
                               }
-                            }
-                          }}
-                          placeholder="Type a message… (use @ to mention)"
-                          className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={sendMoshMessage}
-                          className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                        >
-                          Send
-                        </button>
+                            }}
+                            placeholder="Type a message… (use @ to mention)"
+                            className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={sendMoshMessage}
+                            className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                          >
+                            Send
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <button
-                      type="button"
-                      onClick={() => setActiveMosh(null)}
-                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
-                    >
-                      ← Back to moshes
-                    </button>
-                    
-                    {/* Participants */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Participants</p>
-                      <div className="space-y-2">
-                        {(activeMosh?.participants_usernames || []).map((username) => (
+
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 overflow-auto">
+                      <button
+                        type="button"
+                        onClick={backToMoshes}
+                        className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                      >
+                        ← Back to moshes
+                      </button>
+                     
+                     {/* Participants */}
+                     <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                       <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Participants</p>
+                       <div className="space-y-2">
+                         {(activeMosh?.participants_usernames || []).map((username) => (
                           <div key={username} className="flex items-center gap-2">
                             <div className="h-2 w-2 rounded-full bg-green-400"></div>
                             <p className="text-sm text-white">{username}</p>
@@ -6496,6 +6596,7 @@ function App() {
                     </button>
                   </div>
                 </div>
+              </div>
               )}
             </div>
           </div>
