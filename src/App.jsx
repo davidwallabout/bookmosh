@@ -802,6 +802,8 @@ function App() {
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalMood, setModalMood] = useState('')
+  const [modalDescription, setModalDescription] = useState('')
+  const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
   const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
@@ -2611,7 +2613,46 @@ function App() {
     setModalProgress(book.progress ?? 0)
     setModalStatus(normalized.status ?? statusOptions[0])
     setModalMood(book.mood ?? '')
+    setModalDescription('')
+    setModalDescriptionLoading(false)
   }
+
+  useEffect(() => {
+    if (!selectedBook) return
+    let canceled = false
+    setModalDescriptionLoading(true)
+    setModalDescription('')
+
+    ;(async () => {
+      try {
+        const workKey = await resolveOpenLibraryWorkKey(selectedBook)
+        if (!workKey) {
+          if (!canceled) setModalDescription('')
+          return
+        }
+
+        const res = await fetch(`https://openlibrary.org${workKey}.json`)
+        if (!res.ok) {
+          if (!canceled) setModalDescription('')
+          return
+        }
+
+        const data = await res.json()
+        const raw = data?.description
+        const desc = typeof raw === 'string' ? raw : (raw?.value ?? '')
+        if (!canceled) setModalDescription((desc ?? '').toString().trim())
+      } catch (error) {
+        console.error('Failed to load book description', error)
+        if (!canceled) setModalDescription('')
+      } finally {
+        if (!canceled) setModalDescriptionLoading(false)
+      }
+    })()
+
+    return () => {
+      canceled = true
+    }
+  }, [selectedBook])
 
   useEffect(() => {
     if (!supabase || !selectedBook) return
@@ -2791,6 +2832,8 @@ function App() {
     setShowCoverPicker(false)
     setCoverPickerLoading(false)
     setCoverPickerCovers([])
+    setModalDescription('')
+    setModalDescriptionLoading(false)
   }
 
   const handleModalSave = () => {
@@ -4607,6 +4650,17 @@ function App() {
                         </div>
                       )}
                     </>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Description</label>
+                  {modalDescriptionLoading ? (
+                    <p className="text-sm text-white/60">Loading description…</p>
+                  ) : modalDescription ? (
+                    <p className="text-sm text-white/70 whitespace-pre-wrap">{modalDescription}</p>
+                  ) : (
+                    <p className="text-sm text-white/60">No description found.</p>
                   )}
                 </div>
 
