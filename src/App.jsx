@@ -2325,7 +2325,8 @@ function App() {
     else params.delete('moshId')
     const qs = params.toString()
     const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
-    window.history.replaceState({}, '', next)
+    // Use pushState instead of replaceState so back button works
+    window.history.pushState({}, '', next)
   }
 
   const closeMoshPanel = () => {
@@ -2790,6 +2791,37 @@ function App() {
     if (!supabase || !currentUser) return
     fetchActiveMoshes()
   }, [currentUser, moshArchiveFilter])
+
+  // Handle browser back/forward button
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const moshParam = params.get('mosh')
+      const moshIdParam = params.get('moshId')
+
+      // If no mosh params in URL, close the pit panel
+      if (!moshParam) {
+        setIsMoshPanelOpen(false)
+        setActiveMosh(null)
+        setActiveMoshMessages([])
+        setMoshDraft('')
+        setShowMentionDropdown(false)
+      } else if (moshParam && !moshIdParam) {
+        // Show pit list
+        setIsMoshPanelOpen(true)
+        setActiveMosh(null)
+        setActiveMoshMessages([])
+      } else if (moshIdParam) {
+        // Open specific pit
+        openMoshById(moshIdParam)
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const setBookStatusTag = (title, nextStatus) => {
     const current = tracker.find((b) => b.title === title)
@@ -7481,52 +7513,56 @@ function App() {
         )}
 
         {currentUser && isProfileTopBookModalOpen && (
-          <div
-            className="fixed inset-0 z-[80] flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeTopBookModal()
-            }}
-          >
-            <div className="w-full h-full sm:h-auto sm:max-w-2xl rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
-              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
-                <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Favorites</p>
-                  <h2 className="text-xl font-semibold text-white">Pick a book</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeTopBookModal}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                >
-                  Close
-                </button>
+          <div className="fixed inset-0 z-[80] bg-[#0b1225] overflow-hidden">
+            <div className="h-full w-full flex flex-col">
+              <div className="flex-shrink-0 border-b border-white/10 bg-[#0b1225] px-4 py-4">
+                <div className="mx-auto w-full max-w-4xl">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Favorites</p>
+                      <h2 className="text-xl font-semibold text-white">Pick a book</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeTopBookModal}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-2 flex-shrink-0">
-                <input
-                  type="text"
-                  value={profileTopBookSearch}
-                  onChange={(e) => setProfileTopBookSearch(e.target.value)}
-                  placeholder="Search any book..."
-                  className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={searchTopBook}
-                  disabled={profileTopBookLoading}
-                  className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-60"
-                >
-                  {profileTopBookLoading ? 'Searching…' : 'Search'}
-                </button>
+              <div className="flex-shrink-0 border-b border-white/10 bg-[#0b1225] px-4 py-4">
+                <div className="mx-auto w-full max-w-4xl flex gap-2">
+                  <input
+                    type="text"
+                    value={profileTopBookSearch}
+                    onChange={(e) => setProfileTopBookSearch(e.target.value)}
+                    placeholder="Search any book..."
+                    className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={searchTopBook}
+                    disabled={profileTopBookLoading}
+                    className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-60"
+                  >
+                    {profileTopBookLoading ? 'Searching…' : 'Search'}
+                  </button>
+                </div>
               </div>
 
               {profileTopBookError && (
-                <p className="mt-3 text-sm text-rose-200">{profileTopBookError}</p>
+                <div className="flex-shrink-0 px-4 py-2 bg-rose-500/10 border-b border-rose-500/20">
+                  <div className="mx-auto w-full max-w-4xl">
+                    <p className="text-sm text-rose-200">{profileTopBookError}</p>
+                  </div>
+                </div>
               )}
 
-              <div className="mt-4 flex-1 space-y-2 overflow-auto">
+              <div className="flex-1 overflow-auto px-4 py-4">
+                <div className="mx-auto w-full max-w-4xl space-y-2">
                 {profileTopBookResults.map((r) => {
                   const cover = r.cover_i ? `https://covers.openlibrary.org/b/id/${r.cover_i}-S.jpg` : null
                   const author = r.author_name?.[0] ?? 'Unknown author'
@@ -7556,6 +7592,7 @@ function App() {
                 {profileTopBookResults.length === 0 && !profileTopBookLoading && (
                   <p className="text-sm text-white/60">Search for a book to add it to your favorites.</p>
                 )}
+                </div>
               </div>
             </div>
           </div>
