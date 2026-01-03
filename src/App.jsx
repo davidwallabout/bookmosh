@@ -845,6 +845,12 @@ function App() {
   const [listBookSearch, setListBookSearch] = useState('')
   const [listInviteUsername, setListInviteUsername] = useState('')
   const [listInviteError, setListInviteError] = useState('')
+  const [isAddToListOpen, setIsAddToListOpen] = useState(false)
+  const [addToListBook, setAddToListBook] = useState(null)
+  const [addToListSearch, setAddToListSearch] = useState('')
+  const [addToListLoading, setAddToListLoading] = useState(false)
+  const [addToListStatusByListId, setAddToListStatusByListId] = useState({})
+  const [addToListPendingByListId, setAddToListPendingByListId] = useState({})
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
   const [feedDisplayCount, setFeedDisplayCount] = useState(10)
@@ -894,6 +900,24 @@ function App() {
   const showSuccessMessage = (message, timeoutMs = 2500) => {
     setSuccessModal({ show: true, book: null, list: message, alreadyAdded: false })
     setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), timeoutMs)
+  }
+
+  const openAddToList = (book) => {
+    if (!book) return
+    setAddToListBook(book)
+    setAddToListSearch('')
+    setAddToListStatusByListId({})
+    setAddToListPendingByListId({})
+    setIsAddToListOpen(true)
+  }
+
+  const closeAddToList = () => {
+    setIsAddToListOpen(false)
+    setAddToListBook(null)
+    setAddToListSearch('')
+    setAddToListLoading(false)
+    setAddToListStatusByListId({})
+    setAddToListPendingByListId({})
   }
   const [authIdentifier, setAuthIdentifier] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -1400,7 +1424,7 @@ function App() {
         return Boolean(t1 && t2 && t1 === t2 && a1 === a2)
       })
       if (alreadyInList) {
-        showSuccessMessage('That book is already in this list.')
+        setListsMessage('That book is already in this list.')
         setListBookSearch('')
         return
       }
@@ -1417,11 +1441,106 @@ function App() {
       if (error) throw error
       setListBookSearch('')
       await fetchListItems(selectedList.id)
-      showSuccessMessage(`Added to ${selectedList.title}`)
+      setListsMessage(`Added to ${selectedList.title}`)
     } catch (error) {
       console.error('Add book to list failed', error)
       setListsMessage(error?.message || 'Failed to add book.')
     }
+  }
+
+  const addBookToSpecificList = async (listRow, book) => {
+    if (!supabase || !currentUser || !listRow?.id || !book?.title) return
+    setAddToListPendingByListId((prev) => ({ ...prev, [listRow.id]: true }))
+    setAddToListStatusByListId((prev) => {
+      const next = { ...prev }
+      delete next[listRow.id]
+      return next
+    })
+    try {
+      const olKey = book.olKey ?? book.key ?? null
+      const isbn = book.isbn ?? null
+      const title = book.title
+      const author = book.author ?? null
+
+      let exists = false
+      if (olKey) {
+        const { data, error } = await supabase
+          .from('list_items')
+          .select('id')
+          .eq('list_id', listRow.id)
+          .eq('ol_key', olKey)
+          .limit(1)
+        if (error) throw error
+        exists = Array.isArray(data) && data.length > 0
+      } else if (isbn) {
+        const { data, error } = await supabase
+          .from('list_items')
+          .select('id')
+          .eq('list_id', listRow.id)
+          .eq('isbn', isbn)
+          .limit(1)
+        if (error) throw error
+        exists = Array.isArray(data) && data.length > 0
+      } else {
+        const { data, error } = await supabase
+          .from('list_items')
+          .select('id')
+          .eq('list_id', listRow.id)
+          .eq('book_title', title)
+          .eq('book_author', author)
+          .limit(1)
+        if (error) throw error
+        exists = Array.isArray(data) && data.length > 0
+      }
+
+      if (exists) {
+        setAddToListStatusByListId((prev) => ({ ...prev, [listRow.id]: 'exists' }))
+        return
+      }
+
+      const payload = {
+        list_id: listRow.id,
+        added_by: currentUser.id,
+        book_title: title,
+        book_author: author,
+        book_cover: book.cover ?? null,
+        ol_key: olKey,
+        isbn,
+      }
+
+      const { error } = await supabase.from('list_items').insert(payload)
+      if (error) throw error
+
+      setAddToListStatusByListId((prev) => ({ ...prev, [listRow.id]: 'added' }))
+
+      if (selectedList?.id === listRow.id) {
+        await fetchListItems(listRow.id)
+      }
+    } catch (error) {
+      console.error('Add book to specific list failed', error)
+      setAddToListStatusByListId((prev) => ({ ...prev, [listRow.id]: 'error' }))
+    } finally {
+      setAddToListPendingByListId((prev) => {
+        const next = { ...prev }
+        delete next[listRow.id]
+        return next
+      })
+      setAddToListLoading(false)
+    }
+  }
+
+  const resolveOpenLibraryWorkKey = async (book) => {
+    if (!book?.olKey) return null
+    try {
+      const response = await fetch(`https://openlibrary.org${book.olKey}.json`)
+      if (response.ok) {
+        const data = await response.json()
+        return data.key
+      }
+    } catch (error) {
+      console.error('Failed to resolve work key', error)
+    }
+    return null
   }
 
   const removeListItem = async (itemId) => {
@@ -3651,6 +3770,17 @@ function App() {
                             + Read
                           </button>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openAddToList(book)
+                          }}
+                          className="w-full rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
+                        >
+                          Add to list
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -3669,6 +3799,92 @@ function App() {
                 </div>
               )}
             </section>
+
+            {isAddToListOpen && addToListBook && (
+              <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm">
+                <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+                  <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                    <div className="mx-auto w-full max-w-2xl px-4 py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-xs uppercase tracking-[0.4em] text-white/40">Add to list</p>
+                          <h2 className="text-lg font-semibold text-white break-words">{addToListBook.title}</h2>
+                          <p className="text-sm text-white/60 break-words">{addToListBook.author}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeAddToList}
+                          className="flex-shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                        >
+                          Close
+                        </button>
+                      </div>
+
+                      <div className="mt-4">
+                        <input
+                          value={addToListSearch}
+                          onChange={(e) => setAddToListSearch(e.target.value)}
+                          placeholder="Search your lists…"
+                          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mx-auto w-full max-w-2xl px-4 py-6">
+                    <div className="space-y-3">
+                      {[...ownedLists, ...followedLists]
+                        .filter((l) => {
+                          const q = addToListSearch.trim().toLowerCase()
+                          if (!q) return true
+                          return (
+                            String(l.title ?? '').toLowerCase().includes(q) ||
+                            String(l.owner_username ?? '').toLowerCase().includes(q)
+                          )
+                        })
+                        .map((l) => (
+                          (() => {
+                            const status = addToListStatusByListId?.[l.id] ?? null
+                            const pending = Boolean(addToListPendingByListId?.[l.id])
+                            const disabled = pending || status === 'added' || status === 'exists'
+                            const cta = pending
+                              ? 'Adding…'
+                              : status === 'added'
+                                ? '✓ Added'
+                                : status === 'exists'
+                                  ? '✓ Already'
+                                  : status === 'error'
+                                    ? 'Retry'
+                                    : 'Add'
+
+                            return (
+                              <button
+                                key={l.id}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => addBookToSpecificList(l, addToListBook)}
+                                className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-white/30 hover:bg-white/10 disabled:opacity-60"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
+                                  <p className="text-xs text-white/60 line-clamp-1">by {l.owner_username}</p>
+                                </div>
+                                <div className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+                                  {cta}
+                                </div>
+                              </button>
+                            )
+                          })()
+                        ))}
+
+                      {[...ownedLists, ...followedLists].length === 0 && (
+                        <p className="text-sm text-white/60">No lists yet. Create one in the Lists section first.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Library */}
             <section id="library" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
@@ -3876,6 +4092,13 @@ function App() {
                             className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                           >
                             Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAddToList(book)}
+                            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
+                          >
+                            Add to list
                           </button>
                           <button
                             type="button"
@@ -4661,7 +4884,7 @@ function App() {
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     {!selectedList ? (
-                      <p className="text-sm text-white/60">Open a list to view and add books.</p>
+                      <p className="text-sm text-white/60">Create or open a list, then use the search below to add books from your library.</p>
                     ) : (
                       <>
                         <div className="flex items-start justify-between gap-3">
@@ -5465,32 +5688,29 @@ function App() {
         )}
 
         {selectedBook && (
-          <div
-            className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4"
-            onClick={closeModal}
-          >
-            <div
-              className="w-full h-full sm:h-auto sm:w-[clamp(320px,90vw,600px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
-                    <h2 className="text-xl font-semibold text-white">{selectedBook.title}</h2>
-                    <p className="text-sm text-white/60">{selectedBook.author}</p>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-3xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
+                      <h2 className="text-xl font-semibold text-white break-words">{selectedBook.title}</h2>
+                      <p className="text-sm text-white/60 break-words">{selectedBook.author}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="flex-shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                    >
+                      Close
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                  >
-                    Close
-                  </button>
                 </div>
               </div>
 
-              <div className="space-y-4 flex-1 overflow-auto">
+              <div className="mx-auto w-full max-w-3xl px-4 py-6">
+                <div className="space-y-4">
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Moshes</label>
                   {publicMoshesForBookLoading ? (
@@ -5773,6 +5993,7 @@ function App() {
                     </button>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </div>
@@ -5922,13 +6143,22 @@ function App() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
                           <p className="text-xs text-white/60">{book.year || '—'}</p>
-                          <button
-                            type="button"
-                            onClick={() => handleAddBook(book, 'to-read')}
-                            className="mt-3 rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                          >
-                            + Add
-                          </button>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAddBook(book, 'to-read')}
+                              className="rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                            >
+                              + Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openAddToList(book)}
+                              className="rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
+                            >
+                              Add to list
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
