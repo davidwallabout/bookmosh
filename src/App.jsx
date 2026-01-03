@@ -4456,18 +4456,23 @@ function App() {
             {[
               { id: 'discovery', label: 'Discovery' },
               { id: 'library', label: 'Library' },
-              { id: 'moshes', label: 'Moshes' },
+              { id: 'moshes', label: 'Pits', badge: totalUnreadMoshes },
               { id: 'feed', label: 'Feed' },
-              { id: 'community', label: 'Community' },
+              { id: 'community', label: 'Community', badge: incomingFriendRequests.length },
               { id: 'lists', label: 'Lists' },
             ].map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => scrollToSection(item.id)}
-                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white"
+                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white relative"
               >
                 {item.label}
+                {item.badge > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
