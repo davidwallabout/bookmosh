@@ -3560,7 +3560,6 @@ function App() {
   }
 
   const handleSendEmailInvite = async () => {
-    if (!supabase) return
     if (!currentUser) {
       setEmailInviteMessage('Log in to invite a friend.')
       return
@@ -3578,33 +3577,25 @@ function App() {
       const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.bookmosh.com'
       const inviteUrl = 'https://www.bookmosh.com'
 
-      const { data, error } = await supabase.functions.invoke('invite-friend', {
-        body: {
+      const response = await fetch('/api/invite-friend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email,
           inviterName: currentUser.username,
           appUrl,
           inviteUrl,
-        },
+        }),
       })
 
-      if (error) {
-        const status = error?.context?.status
-        const body = error?.context?.body
-        const bodyError = body?.error ? String(body.error) : ''
-        const bodyDetails = body?.details ? JSON.stringify(body.details) : ''
-        const combined = [
-          status ? `HTTP ${status}` : '',
-          error?.message ? String(error.message) : '',
-          bodyError,
-          bodyDetails,
-        ]
-          .filter(Boolean)
-          .join(' - ')
-        throw new Error(combined || 'Invite failed to send.')
-      }
+      const data = await response.json()
 
-      if (!data?.ok) {
-        const combined = [data?.error, data?.details ? JSON.stringify(data.details) : '']
+      if (!response.ok) {
+        const combined = [
+          `HTTP ${response.status}`,
+          data?.error,
+          data?.details ? JSON.stringify(data.details) : '',
+        ]
           .filter(Boolean)
           .join(' - ')
         throw new Error(combined || 'Invite failed to send.')
@@ -4237,6 +4228,7 @@ function App() {
 
   const loadEditionsForSelectedBook = async () => {
     if (!selectedBook) return
+    console.log('[EDITIONS] Loading editions for:', selectedBook.title)
     setEditionPickerLoading(true)
     setEditionPickerEditions([])
 
@@ -4249,15 +4241,18 @@ function App() {
       }
 
       const workKey = await resolveOpenLibraryWorkKey(selectedBook)
+      console.log('[EDITIONS] Work key:', workKey)
       if (workKey) {
         updateBook(selectedBook.title, { olKey: workKey })
         setSelectedBook((prev) => (prev ? { ...prev, olKey: workKey } : prev))
 
         const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=200`
+        console.log('[EDITIONS] Fetching from:', editionsUrl)
         const response = await fetch(editionsUrl)
         if (response.ok) {
           const data = await response.json()
           const entries = Array.isArray(data?.entries) ? data.entries : []
+          console.log('[EDITIONS] Open Library entries:', entries.length)
           for (const edition of entries) {
             const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
             if (!isbn) continue
@@ -4278,11 +4273,13 @@ function App() {
       const title = (selectedBook.title ?? '').toString().trim()
       const author = (selectedBook.author ?? '').toString().trim()
       const q = `${title} ${author}`.trim()
+      console.log('[EDITIONS] ISBNdb query:', q)
       if (q) {
         const isbndbData = await invokeIsbndbSearch({ q, pageSize: 50 })
         const isbndbBooks = Array.isArray(isbndbData?.books)
           ? isbndbData.books
           : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
+        console.log('[EDITIONS] ISBNdb results:', isbndbBooks.length)
         for (const b of isbndbBooks) {
           const isbn13 = b?.isbn13 ?? null
           const isbn10 = b?.isbn10 ?? null
@@ -4312,6 +4309,7 @@ function App() {
         return String(a.isbn).localeCompare(String(b.isbn))
       })
 
+      console.log('[EDITIONS] Total unique editions found:', editions.length)
       setEditionPickerEditions(editions)
     } catch (error) {
       console.error('Failed to load editions', error)

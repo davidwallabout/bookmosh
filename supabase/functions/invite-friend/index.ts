@@ -112,7 +112,7 @@ serve(async (req: Request) => {
   const logoUrl = String(body?.logoUrl ?? '').trim() || `${appUrl.replace(/\/$/, '')}/og-image.png`
 
   const payload = {
-    from: 'BookMosh <invites@bookmosh.com>',
+    from: 'BookMosh <onboarding@resend.dev>',  // Temporary: use Resend's test sender until invites@bookmosh.com is verified
     to: [toEmail],
     subject: `${inviterName ? `${inviterName} invited you to BookMosh` : "You're invited to BookMosh"}`,
     html: buildInviteHtml({ inviterName, inviteUrl, logoUrl }),
