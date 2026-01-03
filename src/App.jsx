@@ -4279,8 +4279,15 @@ function App() {
       const byIsbn = new Map()
       const pushEdition = (e) => {
         const isbn = (e?.isbn ?? '').toString().trim()
-        if (!isbn) return
-        if (!byIsbn.has(isbn)) byIsbn.set(isbn, e)
+        // Use ISBN as primary key, but fall back to editionKey or generated key
+        const key = isbn || e?.editionKey || `${e?.source}-${e?.publisher}-${e?.publishDate}`
+        if (!key || key === '--') {
+          console.log('[EDITIONS] Skipping edition with no identifier:', e)
+          return
+        }
+        if (!byIsbn.has(key)) {
+          byIsbn.set(key, { ...e, isbn: isbn || 'No ISBN' })
+        }
       }
 
       const workKey = await resolveOpenLibraryWorkKey(selectedBook)
@@ -4298,7 +4305,6 @@ function App() {
           console.log('[EDITIONS] Open Library entries:', entries.length)
           for (const edition of entries) {
             const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
-            if (!isbn) continue
             const coverId = Array.isArray(edition?.covers) ? edition.covers[0] : null
             const coverUrl = coverId ? openLibraryCoverIdUrl(coverId, 'L') : openLibraryIsbnCoverUrl(isbn, 'L')
             pushEdition({
@@ -4327,7 +4333,6 @@ function App() {
           const isbn13 = b?.isbn13 ?? null
           const isbn10 = b?.isbn10 ?? null
           const isbn = (isbn13 || isbn10 || b?.isbn || null)?.toString?.() ?? null
-          if (!isbn) continue
           let url = b?.image || b?.image_url || b?.image_original || b?.image_large || b?.image_small || null
           if (typeof url === 'string' && url.startsWith('http://')) {
             url = `https://${url.slice('http://'.length)}`
@@ -4930,10 +4935,11 @@ function App() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation()
                             openAuthorModal(book.author)
                           }}
-                          className="text-sm text-white/60 line-clamp-1 hover:text-white hover:underline transition text-left"
+                          className="text-sm text-white/60 line-clamp-1 hover:text-white hover:underline transition text-left cursor-pointer"
                         >
                           {book.author}
                         </button>
