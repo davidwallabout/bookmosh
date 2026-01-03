@@ -107,17 +107,6 @@ const getProfileAvatarUrl = (user) => {
   return iconDataUrl(icon.svg)
 }
 
-const normalizeOpenLibraryPersonOrTitle = (value) => {
-  const raw = (value ?? '').toString().trim()
-  if (!raw) return ''
-  return raw
-    .replace(/[\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\.,:;!?()\[\]{}]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 const curatedRecommendations = []
 
 const initialTracker = []
@@ -135,249 +124,6 @@ const resolveOpenLibraryWorkKey = async (book) => {
         const workKey = edition?.works?.[0]?.key
         if (typeof workKey === 'string' && workKey.startsWith('/works/')) return workKey
       }
-
-  const fetchLists = async () => {
-    if (!supabase || !currentUser) return
-    setListsLoading(true)
-    setListsMessage('')
-    try {
-      const { data: mine, error: mineError } = await supabase
-        .from('lists')
-        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
-        .eq('owner_id', currentUser.id)
-        .order('updated_at', { ascending: false })
-      if (mineError) throw mineError
-      setOwnedLists(Array.isArray(mine) ? mine : [])
-
-      const { data: follows, error: followsError } = await supabase
-        .from('list_follows')
-        .select('list_id')
-        .eq('user_id', currentUser.id)
-      if (followsError) throw followsError
-      const followIds = (Array.isArray(follows) ? follows : []).map((f) => f.list_id).filter(Boolean)
-      if (followIds.length) {
-        const { data: followed, error: followedError } = await supabase
-          .from('lists')
-          .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
-          .in('id', followIds)
-          .order('updated_at', { ascending: false })
-        if (followedError) throw followedError
-        setFollowedLists((Array.isArray(followed) ? followed : []).filter((l) => l.owner_id !== currentUser.id))
-      } else {
-        setFollowedLists([])
-      }
-
-      const { data: pub, error: pubError } = await supabase
-        .from('lists')
-        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
-        .eq('is_public', true)
-        .order('updated_at', { ascending: false })
-        .limit(50)
-      if (pubError) throw pubError
-      const pubLists = Array.isArray(pub) ? pub : []
-      const followedSet = new Set(followIds)
-      setPublicLists(pubLists.filter((l) => l.owner_id !== currentUser.id && !followedSet.has(l.id)))
-
-      const { data: invites, error: invitesError } = await supabase
-        .from('list_invites')
-        .select('id, list_id, inviter_id, inviter_username, invitee_id, invitee_username, status, created_at')
-        .eq('invitee_id', currentUser.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-      if (invitesError) throw invitesError
-      setPendingListInvites(Array.isArray(invites) ? invites : [])
-    } catch (error) {
-      console.error('Lists fetch failed', error)
-      setListsMessage(error?.message || 'Failed to load lists.')
-      setOwnedLists([])
-      setFollowedLists([])
-      setPublicLists([])
-      setPendingListInvites([])
-    } finally {
-      setListsLoading(false)
-    }
-  }
-
-  const fetchListItems = async (listId) => {
-    if (!supabase || !currentUser || !listId) return
-    setSelectedListItemsLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('list_items')
-        .select('id, list_id, added_by, book_title, book_author, book_cover, ol_key, isbn, created_at')
-        .eq('list_id', listId)
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      setSelectedListItems(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('List items fetch failed', error)
-      setSelectedListItems([])
-    } finally {
-      setSelectedListItemsLoading(false)
-    }
-  }
-
-  const openList = async (listRow) => {
-    setSelectedList(listRow)
-    await fetchListItems(listRow?.id)
-  }
-
-  const createList = async () => {
-    if (!supabase || !currentUser) return
-    const title = newListTitle.trim()
-    if (!title) {
-      setListsMessage('Add a title for your list.')
-      return
-    }
-    setListsLoading(true)
-    setListsMessage('')
-    try {
-      const payload = {
-        owner_id: currentUser.id,
-        owner_username: currentUser.username,
-        title,
-        description: newListDescription.trim() || null,
-        is_public: Boolean(newListIsPublic),
-      }
-      const { data, error } = await supabase
-        .from('lists')
-        .insert(payload)
-        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
-        .limit(1)
-      if (error) throw error
-      const created = data?.[0]
-      setNewListTitle('')
-      setNewListDescription('')
-      setNewListIsPublic(true)
-      await fetchLists()
-      if (created) {
-        setListsTab('mine')
-        await openList(created)
-      }
-    } catch (error) {
-      console.error('Create list failed', error)
-      setListsMessage(error?.message || 'Failed to create list.')
-    } finally {
-      setListsLoading(false)
-    }
-  }
-
-  const followList = async (listId) => {
-    if (!supabase || !currentUser || !listId) return
-    setListsMessage('')
-    try {
-      const { error } = await supabase.from('list_follows').insert({ list_id: listId, user_id: currentUser.id })
-      if (error) throw error
-      await fetchLists()
-    } catch (error) {
-      console.error('Follow list failed', error)
-      setListsMessage(error?.message || 'Failed to follow list.')
-    }
-  }
-
-  const unfollowList = async (listId) => {
-    if (!supabase || !currentUser || !listId) return
-    setListsMessage('')
-    try {
-      const { error } = await supabase.from('list_follows').delete().eq('list_id', listId).eq('user_id', currentUser.id)
-      if (error) throw error
-      if (selectedList?.id === listId) {
-        setSelectedList(null)
-        setSelectedListItems([])
-      }
-      await fetchLists()
-    } catch (error) {
-      console.error('Unfollow list failed', error)
-      setListsMessage(error?.message || 'Failed to unfollow list.')
-    }
-  }
-
-  const sendListInvite = async () => {
-    if (!supabase || !currentUser || !selectedList?.id) return
-    const username = listInviteSearch.trim()
-    if (!username) return
-    setListInviteError('')
-    try {
-      const { data: rows, error: userError } = await supabase
-        .from('users')
-        .select('id, username')
-        .eq('username', username)
-        .limit(1)
-      if (userError) throw userError
-      const friend = rows?.[0]
-      if (!friend) {
-        setListInviteError('User not found.')
-        return
-      }
-      if (friend.id === currentUser.id) {
-        setListInviteError("You can't invite yourself.")
-        return
-      }
-
-      const payload = {
-        list_id: selectedList.id,
-        inviter_id: currentUser.id,
-        inviter_username: currentUser.username,
-        invitee_id: friend.id,
-        invitee_username: friend.username,
-        status: 'pending',
-      }
-      const { error: inviteError } = await supabase.from('list_invites').insert(payload)
-      if (inviteError) throw inviteError
-      setIsListInviteOpen(false)
-      setListInviteSearch('')
-      await fetchLists()
-      setListsMessage('Invite sent.')
-    } catch (error) {
-      console.error('Send list invite failed', error)
-      setListInviteError(error?.message || 'Failed to send invite.')
-    }
-  }
-
-  const respondToListInvite = async (inviteId, status) => {
-    if (!supabase || !currentUser || !inviteId) return
-    setListsMessage('')
-    try {
-      const { error } = await supabase
-        .from('list_invites')
-        .update({ status })
-        .eq('id', inviteId)
-        .eq('invitee_id', currentUser.id)
-      if (error) throw error
-      await fetchLists()
-    } catch (error) {
-      console.error('Invite response failed', error)
-      setListsMessage(error?.message || 'Failed to respond to invite.')
-    }
-  }
-
-  const addBookToList = async (book) => {
-    if (!supabase || !currentUser || !selectedList?.id || !book?.title) return
-    setListsMessage('')
-    try {
-      const payload = {
-        list_id: selectedList.id,
-        added_by: currentUser.id,
-        book_title: book.title,
-        book_author: book.author ?? null,
-        book_cover: book.cover ?? null,
-        ol_key: book.olKey ?? null,
-        isbn: book.isbn ?? null,
-      }
-      const { error } = await supabase.from('list_items').insert(payload)
-      if (error) throw error
-      setListBookSearch('')
-      await fetchListItems(selectedList.id)
-    } catch (error) {
-      console.error('Add book to list failed', error)
-      setListsMessage(error?.message || 'Failed to add book.')
-    }
-  }
-
-  useEffect(() => {
-    if (!currentUser) return
-    fetchLists()
-  }, [currentUser?.id])
     } catch (error) {
       console.error('Failed to resolve work key from ISBN', error)
     }
@@ -456,85 +202,646 @@ const createUser = async (userData) => {
     if (error) throw error
     return data[0]
   } catch (error) {
-    }
-    await fetchLists()
-  } catch (error) {
-    console.error('Unfollow list failed', error)
-    setListsMessage(error?.message || 'Failed to unfollow list.')
+    console.error('Error creating user:', error)
+    throw error
   }
 }
 
-const sendListInvite = async () => {
-  if (!supabase || !currentUser || !selectedList?.id) return
-  const username = listInviteSearch.trim()
-  if (!username) return
-  setListInviteError('')
+const updateUserFriends = async (userId, friends) => {
+  if (!supabase) throw new Error('Supabase not configured')
+  
   try {
-    const { data: rows, error: userError } = await supabase
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      console.warn('Unable to read Supabase auth user:', authError)
+    }
+    const authUser = authData?.user ?? null
+
+    const orFilters = []
+    if (userId) orFilters.push(`id.eq.${userId}`)
+    if (authUser?.id) orFilters.push(`id.eq.${authUser.id}`)
+    if (authUser?.email) orFilters.push(`email.eq.${authUser.email}`)
+    const filter = orFilters.join(',')
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ friends, updated_at: new Date().toISOString() })
+      .or(filter)
+      .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
+    
+    if (error) throw error
+
+    const updated = Array.isArray(data) ? data[0] : data
+    if (updated) return updated
+
+    // No row returned. This usually means either the row didn't match filters (id mismatch)
+    // or RLS blocked the update/return.
+    const { data: visibleRows, error: visibleError } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .or(filter)
+      .limit(1)
+
+    if (visibleError) {
+      throw visibleError
+    }
+
+    if (!visibleRows || visibleRows.length === 0) {
+      throw new Error('Unable to find your user profile row to update (account id mismatch).')
+    }
+
+    throw new Error('Update blocked by Row Level Security (RLS).')
+  } catch (error) {
+    console.error('Error updating friends:', error)
+    throw error
+  }
+}
+
+const searchUsers = async (query) => {
+  if (!supabase) return []
+  
+  try {
+    const normalized = query.trim()
+    const { data: exactData, error: exactError } = await supabase
       .from('users')
       .select('id, username')
-      .eq('username', username)
-      .limit(1)
-    if (userError) throw userError
-    const friend = rows?.[0]
-    if (!friend) {
-      setListInviteError('User not found.')
-      return
-    }
-    if (friend.id === currentUser.id) {
-      setListInviteError("You can't invite yourself.")
-      return
-    }
+      .or(`username.ilike.${normalized},email.ilike.${normalized}`)
+      .limit(5)
+    
+    if (exactError) throw exactError
 
-    const payload = {
-      list_id: selectedList.id,
-      inviter_id: currentUser.id,
-      inviter_username: currentUser.username,
-      invitee_id: friend.id,
-      invitee_username: friend.username,
-      status: 'pending',
-    }
-    const { error: inviteError } = await supabase.from('list_invites').insert(payload)
-    if (inviteError) throw inviteError
-    setIsListInviteOpen(false)
-    setListInviteSearch('')
-    await fetchLists()
-    setListsMessage('Invite sent.')
-  } catch (error) {
-    console.error('Send list invite failed', error)
-    setListInviteError(error?.message || 'Failed to send invite.')
-  }
-}
+    if (Array.isArray(exactData) && exactData.length > 0) return exactData
 
-const respondToListInvite = async (inviteId, status) => {
-  if (!supabase || !currentUser || !inviteId) return
-  setListsMessage('')
-  try {
-    const { error } = await supabase
-      .from('list_invites')
-      .update({ status })
-      .eq('id', inviteId)
-      .eq('invitee_id', currentUser.id)
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username')
+      .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%`)
+      .limit(10)
+
     if (error) throw error
-    await fetchLists()
+    return data || []
   } catch (error) {
-    console.error('Invite response failed', error)
-    setListsMessage(error?.message || 'Failed to respond to invite.')
+    console.error('Error searching users:', error)
+    return []
   }
 }
 
-const addBookToList = async (book) => {
-  if (!supabase || !currentUser || !selectedList?.id || !book?.title) return
-  setListsMessage('')
+// Fetch friend's reading data
+const fetchFriendBooks = async (username) => {
+  if (!supabase) return []
+  
   try {
-    const payload = {
-      list_id: selectedList.id,
-      added_by: currentUser.id,
-      book_title: book.title,
-      book_author: book.author ?? null,
-      book_cover: book.cover ?? null,
-      ol_key: book.olKey ?? null,
-      isbn: book.isbn ?? null,
+    const { data, error } = await supabase
+      .from('bookmosh_books')
+      .select('*')
+      .eq('owner', username)
+    
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching friend books:', error)
+    return []
+  }
+}
+
+const statusOptions = ['Reading', 'to-read', 'Read']
+const statusTags = ['to-read', 'Reading', 'Read']
+const allTags = ['to-read', 'Reading', 'Read', 'Owned']
+
+const defaultUsers = []
+
+const matchesIdentifier = (user, identifier) => {
+  if (!identifier) return false
+  const normalized = identifier.trim().toLowerCase()
+  return (
+    user.username.toLowerCase() === normalized ||
+    user.email.toLowerCase() === normalized
+  )
+}
+
+const splitCSV = (line) =>
+  line
+    .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+    .map((value) => value.replace(/^"|"$/g, '').trim())
+
+const normalizeStatus = (status, progress = 0) => {
+  const lower = (status ?? '').toLowerCase()
+  if (lower.includes('read')) return 'Read'
+  if (lower.includes('currently') || lower.includes('reading')) return 'Reading'
+  if (lower.includes('want') || lower.includes('queue') || lower.includes('wish')) {
+    return 'to-read'
+  }
+  if (progress >= 100) return 'Read'
+  if (progress > 0) return 'Reading'
+  return 'to-read'
+}
+
+const buildBookEntry = (book) => {
+  const progress =
+    Number(book.progress ?? book.percent ?? book.percentComplete ?? 0) || 0
+  const status = normalizeStatus(book.status ?? book.shelf, progress)
+  const entry = {
+    title: book.title ?? book.name ?? 'Untitled',
+    author:
+      book.author ??
+      book.authors?.[0] ??
+      (Array.isArray(book.authors) ? book.authors[0] : null) ??
+      'Unknown author',
+    status,
+    tags: [status],
+    progress,
+    mood: book.mood ?? book.tag ?? 'Imported',
+    rating: Number(book.rating ?? book.score ?? 0) || 0,
+  }
+  return entry
+}
+
+const parseGoodreadsCSV = (text) => {
+  const rows = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (rows.length <= 1) return []
+  const header = splitCSV(rows[0]).map((value) => value.toLowerCase())
+  const getIndex = (key) => header.findIndex((column) => column.includes(key))
+  const titleIdx = getIndex('title')
+  const authorIdx = getIndex('author')
+  const shelfIdx = getIndex('shelf')
+  const exclusiveShelfIdx = getIndex('exclusive')
+  const progressIdx = getIndex('percent')
+  const moodIdx = getIndex('review')
+  const ratingIdx = getIndex('rating')
+
+  return rows.slice(1).reduce((acc, row) => {
+    const values = splitCSV(row)
+    if (!values.length) return acc
+    const title = titleIdx >= 0 ? values[titleIdx] : values[0] ?? 'Untitled'
+    const author =
+      (authorIdx >= 0 ? values[authorIdx] : null) ?? 'Unknown author'
+    const status = (exclusiveShelfIdx >= 0 ? values[exclusiveShelfIdx] : null) ?? (shelfIdx >= 0 ? values[shelfIdx] : '')
+    const progress =
+      progressIdx >= 0 ? Number(values[progressIdx]) || 0 : 0
+    const mood =
+      (moodIdx >= 0 ? values[moodIdx] : '') || 'Imported from Goodreads'
+    const rating = ratingIdx >= 0 ? Number(values[ratingIdx]) || 0 : 0
+    acc.push(buildBookEntry({ title, author, status, progress, mood, rating }))
+    return acc
+  }, [])
+}
+
+const parseStoryGraphCSV = (text) => {
+  // Proper CSV parser that handles quoted fields with commas
+  const parseCSVLine = (line) => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      const nextChar = line[i + 1]
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    result.push(current.trim())
+    return result
+  }
+  
+  const lines = text.split('\n').filter((line) => line.trim())
+  if (lines.length < 2) return []
+  
+  const headers = parseCSVLine(lines[0])
+  const dataRows = lines.slice(1)
+  
+  return dataRows
+    .map((line) => {
+      const values = parseCSVLine(line)
+      if (values.length === 0) return null
+      
+      const obj = {}
+      headers.forEach((header, index) => {
+        obj[header] = values[index] || ''
+      })
+      
+      return obj
+    })
+    .filter(Boolean)
+    .map((item) => {
+      // Map Storygraph status to our status
+      let status = 'to-read'
+      const readStatus = (item['Read Status'] || item.readStatus || '').toLowerCase()
+      if (readStatus.includes('read') && !readStatus.includes('to-read') && !readStatus.includes('currently')) {
+        status = 'Read'
+      } else if (readStatus.includes('currently') || readStatus.includes('reading')) {
+        status = 'Reading'
+      } else if (readStatus.includes('to-read') || readStatus.includes('want')) {
+        status = 'to-read'
+      }
+      
+      // Check if book is owned (Storygraph uses "Owned?" as column name)
+      const owned = (item['Owned?'] || item.Owned || item.owned || '').toLowerCase()
+      const isOwned = owned === 'true' || owned === 'yes' || owned === '1' || owned === 'owned'
+      
+      // Build tags array with status and owned
+      const tags = [status]
+      if (isOwned) {
+        tags.push('Owned')
+      }
+      
+      return {
+        title: item.Title || item.title || '',
+        author: item.Authors || item.Author || item.author || '',
+        status: status,
+        tags: tags,
+        rating: parseInt(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
+        progress: parseInt(item['Read Progress'] || item.progress) || 0,
+        mood: item.Review || item.Notes || item.Mood || item.mood || '',
+      }
+    })
+    .filter(book => book.title && book.author)
+}
+
+const parseStoryGraphJSON = (text) => {
+  const data = JSON.parse(text)
+  if (!Array.isArray(data)) {
+    throw new Error('JSON data is not an array')
+  }
+  return data.map((item) => ({
+    title: item.title || '',
+    author: item.author || '',
+    status: item.readStatus || 'to-read',
+    rating: item.rating || 0,
+    progress: item.progress || 0,
+    mood: item.mood || '',
+  }))
+}
+
+const matchBookInBackground = async (book, setTracker) => {
+  try {
+    const searchQuery = `${book.title} ${book.author}`.trim()
+    const response = await fetch(
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1&fields=key,title,author_name,cover_i,isbn`
+    )
+    const data = await response.json()
+    
+    if (data.docs && data.docs.length > 0) {
+      const match = data.docs[0]
+      const cover = match.cover_i 
+        ? `https://covers.openlibrary.org/b/id/${match.cover_i}-M.jpg`
+        : null
+      const isbn = match.isbn?.[0] || null
+      
+      if (cover || isbn) {
+        setTracker((prev) => 
+          prev.map((b) => 
+            b.title === book.title && b.author === book.author
+              ? { ...b, cover: cover || b.cover, isbn: isbn || b.isbn }
+              : b
+          )
+        )
+      }
+    }
+  } catch (error) {
+    console.error('[IMPORT] Background match failed:', book.title, error)
+  }
+}
+
+const startBackgroundMatching = (books, setTracker, username, setMatchingProgress) => {
+  const queueKey = `bookmosh-match-queue-${username}`
+  
+  // Save queue to localStorage
+  const booksToMatch = books.filter(b => !b.cover).map(b => ({ title: b.title, author: b.author }))
+  if (booksToMatch.length > 0) {
+    localStorage.setItem(queueKey, JSON.stringify(booksToMatch))
+  }
+  
+  const totalBooks = booksToMatch.length
+  let index = 0
+  
+  // Set initial progress
+  if (setMatchingProgress && totalBooks > 0) {
+    setMatchingProgress({ active: true, current: 0, total: totalBooks, currentBook: null })
+  }
+  
+  const matchNext = () => {
+    // Get current queue from localStorage
+    const queueData = localStorage.getItem(queueKey)
+    if (!queueData) {
+      if (setMatchingProgress) {
+        setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+      }
+      return
+    }
+    
+    const queue = JSON.parse(queueData)
+    if (index < queue.length) {
+      const book = queue[index]
+      
+      // Update progress with current book
+      if (setMatchingProgress) {
+        setMatchingProgress({ 
+          active: true, 
+          current: totalBooks - queue.length + 1, 
+          total: totalBooks, 
+          currentBook: book.title 
+        })
+      }
+      
+      matchBookInBackground(book, setTracker).then(() => {
+        // Remove matched book from queue
+        queue.splice(index, 1)
+        if (queue.length > 0) {
+          localStorage.setItem(queueKey, JSON.stringify(queue))
+        } else {
+          localStorage.removeItem(queueKey)
+          if (setMatchingProgress) {
+            setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+          }
+        }
+      })
+      index++
+      setTimeout(matchNext, 2000) // Wait 2 seconds between requests
+    } else {
+      localStorage.removeItem(queueKey)
+      if (setMatchingProgress) {
+        setMatchingProgress({ active: false, current: 0, total: 0, currentBook: null })
+      }
+    }
+  }
+
+  const openAuthorModal = async (authorName) => {
+    const name = (authorName ?? '').trim()
+    if (!name || name === 'Unknown author') return
+
+    setIsAuthorModalOpen(true)
+    setAuthorModalName(name)
+    setAuthorModalBooks([])
+    setAuthorModalLoading(true)
+
+    try {
+      const response = await fetch(
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(name)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+      )
+      const data = await response.json()
+
+      const authorLower = name.toLowerCase()
+
+      const mapped = (data.docs || [])
+        .filter((doc) => {
+          if (!doc.title) return false
+          const title = doc.title.toLowerCase()
+          if (
+            title.includes('best of') ||
+            title.includes('anthology') ||
+            title.includes('collection') ||
+            title.includes('complete works') ||
+            title.includes('selected works')
+          ) {
+            return false
+          }
+          if (doc.author_name?.some((a) => a.toLowerCase().includes(authorLower))) return true
+          return true
+        })
+        .map((doc) => ({
+          key: doc.key,
+          title: doc.title,
+          author: doc.author_name?.[0] ?? name,
+          year: doc.first_publish_year,
+          cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+          editionCount: doc.edition_count || 0,
+          rating: doc.ratings_average || 0,
+          subjects: doc.subject?.slice(0, 3) || [],
+          isbn: doc.isbn?.[0] || null,
+          publisher: doc.publisher?.[0] || null,
+          language: doc.language?.[0] || null,
+        }))
+        .sort((a, b) => {
+          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
+          return (b.year || 0) - (a.year || 0)
+        })
+
+      setAuthorModalBooks(mapped)
+    } catch (error) {
+      console.error('Author modal search failed', error)
+    } finally {
+      setAuthorModalLoading(false)
+    }
+  }
+  setTimeout(matchNext, 1000) // Start after 1 second
+}
+
+const mergeImportedBooks = (books, setMessage, setTracker) => {
+  setTracker((prev) => {
+    const seen = new Set(
+      prev.map(
+        (book) =>
+          `${book.title.trim().toLowerCase()}|${(book.author ?? '').trim().toLowerCase()}`,
+      ),
+    )
+    const unique = []
+    for (const entry of books) {
+      const key = `${entry.title.trim().toLowerCase()}|${(entry.author ?? '').trim().toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      unique.push(entry)
+    }
+    if (!unique.length) {
+      setMessage('No new titles were added from this import.')
+      return prev
+    }
+    setMessage(`Imported ${unique.length} new title${unique.length === 1 ? '' : 's'}. Matching covers in background...`)
+    
+    return [...unique, ...prev]
+  })
+}
+
+const SUPABASE_TABLE = 'bookmosh_books'
+
+const deriveStatusFromTags = (tags = [], fallback = 'to-read') => {
+  if (tags.includes('Reading')) return 'Reading'
+  if (tags.includes('Read')) return 'Read'
+  if (tags.includes('to-read')) return 'to-read'
+  return fallback
+}
+
+const normalizeBookTags = (book) => {
+  const existingTags = Array.isArray(book.tags) ? book.tags : []
+  const status = book.status ?? deriveStatusFromTags(existingTags, 'to-read')
+  const owned = existingTags.includes('Owned')
+  const nextTags = Array.from(
+    new Set([status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
+  )
+  return {
+    ...book,
+    status,
+    tags: nextTags,
+  }
+}
+
+const mapSupabaseRow = (row) => ({
+  title: row.title ?? 'Untitled',
+  author: row.author ?? 'Unknown author',
+  cover: row.cover ?? row.cover_url ?? null,
+  tags: Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
+  status: deriveStatusFromTags(
+    Array.isArray(row.tags) && row.tags.length ? row.tags : [row.status ?? 'to-read'],
+    row.status ?? 'to-read',
+  ),
+  progress: Number(row.progress ?? 0) || 0,
+  mood: row.mood ?? 'Supabase sync',
+  rating: Number(row.rating ?? 0) || 0,
+})
+
+const buildSupabasePayload = (book, owner) => ({
+  owner,
+  title: book.title,
+  author: book.author,
+  cover: book.cover ?? null,
+  status: book.status,
+  tags: Array.isArray(book.tags) ? book.tags : undefined,
+  progress: book.progress,
+  mood: book.mood,
+  rating: book.rating,
+})
+
+const loadSupabaseBooks = async (owner) => {
+  if (!supabase || !owner) return []
+  try {
+    const { data, error } = await supabase
+      .from(SUPABASE_TABLE)
+      .select('*')
+      .eq('owner', owner)
+      .order('updated_at', { ascending: false })
+    if (error) {
+      console.error('Supabase fetch failed', error)
+      return []
+    }
+    return (data ?? []).map(mapSupabaseRow)
+  } catch (error) {
+    console.error('Supabase fetch failed', error)
+    return []
+  }
+}
+
+const persistTrackerToSupabase = async (owner, books) => {
+  console.log('[LIBRARY] persistTrackerToSupabase called:', { owner, bookCount: books.length })
+  if (!supabase) {
+    console.error('[LIBRARY] No supabase client')
+    return
+  }
+  if (!owner) {
+    console.error('[LIBRARY] No owner provided')
+    return
+  }
+  if (!books.length) {
+    console.log('[LIBRARY] No books to persist')
+    return
+  }
+  try {
+    const payload = books.map((book) => buildSupabasePayload(book, owner))
+    console.log('[LIBRARY] Upserting books to Supabase:', payload.length)
+    const { error } = await supabase
+      .from(SUPABASE_TABLE)
+      .upsert(payload, {
+        onConflict: ['owner', 'title'],
+      })
+    if (error) {
+      console.error('[LIBRARY] Upsert error:', error)
+      // Backwards compat: if the table doesn't have a tags column yet, retry without it.
+      const message = String(error.message ?? '')
+      if (message.toLowerCase().includes('tags') && message.toLowerCase().includes('column')) {
+        const fallbackPayload = payload.map(({ tags, ...rest }) => rest)
+        const { error: fallbackError } = await supabase
+          .from(SUPABASE_TABLE)
+          .upsert(fallbackPayload, { onConflict: ['owner', 'title'] })
+        if (fallbackError) {
+          console.error('[LIBRARY] Fallback upsert failed', fallbackError)
+        } else {
+          console.log('[LIBRARY] Fallback upsert succeeded')
+        }
+        return
+      }
+      console.error('[LIBRARY] Supabase upsert failed', error)
+    } else {
+      console.log('[LIBRARY] Books saved successfully to Supabase')
+    }
+  } catch (error) {
+    console.error('[LIBRARY] Supabase upsert exception:', error)
+  }
+}
+
+const deriveUsernameFromSupabase = (email = '', metadata = {}) => {
+  if (metadata.username) return metadata.username
+  if (!email) return 'reader'
+  return email.split('@')[0]
+}
+
+const getOwnerId = (user) => user?.id ?? user?.username
+
+function App() {
+  const [tracker, setTracker] = useState(initialTracker)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [showAllResults, setShowAllResults] = useState(false)
+  const [searchDebounce, setSearchDebounce] = useState(null)
+  const [selectedBook, setSelectedBook] = useState(null)
+  const [modalRating, setModalRating] = useState(0)
+  const [modalProgress, setModalProgress] = useState(0)
+  const [modalStatus, setModalStatus] = useState(statusOptions[0])
+  const [modalMood, setModalMood] = useState('')
+  const [modalReview, setModalReview] = useState('')
+  const [modalDescription, setModalDescription] = useState('')
+  const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
+  const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
+  const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
+  const [libraryFilterTags, setLibraryFilterTags] = useState([])
+  const [selectedAuthor, setSelectedAuthor] = useState(null)
+  const [isAuthorModalOpen, setIsAuthorModalOpen] = useState(false)
+  const [authorModalName, setAuthorModalName] = useState('')
+  const [authorModalBooks, setAuthorModalBooks] = useState([])
+  const [authorModalLoading, setAuthorModalLoading] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [selectedFriend, setSelectedFriend] = useState(null)
+  const [profileAvatarIcon, setProfileAvatarIcon] = useState('pixel_book_1')
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
+  const [profileTopBooks, setProfileTopBooks] = useState(['', '', '', ''])
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
+  const [isProfileTopBookModalOpen, setIsProfileTopBookModalOpen] = useState(false)
+  const [profileTopBookSlotIndex, setProfileTopBookSlotIndex] = useState(0)
+  const [profileTopBookSearch, setProfileTopBookSearch] = useState('')
+  const [profileTopBookResults, setProfileTopBookResults] = useState([])
+  const [profileTopBookLoading, setProfileTopBookLoading] = useState(false)
+  const [profileTopBookError, setProfileTopBookError] = useState('')
+  const [moshes, setMoshes] = useState([]) // Track book chats
+  const [feedScope, setFeedScope] = useState('friends')
+  const [feedItems, setFeedItems] = useState([])
+  const [feedDisplayCount, setFeedDisplayCount] = useState(10)
+  const [activeMoshes, setActiveMoshes] = useState([])
+  const [unreadByMoshId, setUnreadByMoshId] = useState({})
+  const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
+  const [activeMosh, setActiveMosh] = useState(null)
+  const [activeMoshMessages, setActiveMoshMessages] = useState([])
+  const [isMoshCoverPickerOpen, setIsMoshCoverPickerOpen] = useState(false)
+  const [moshCoverPickerLoading, setMoshCoverPickerLoading] = useState(false)
+  const [moshCoverPickerCovers, setMoshCoverPickerCovers] = useState([])
+  const [moshDraft, setMoshDraft] = useState('')
+  const [moshMentionQuery, setMoshMentionQuery] = useState('')
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false)
   const [isMoshInviteOpen, setIsMoshInviteOpen] = useState(false)
   const [moshInviteBook, setMoshInviteBook] = useState(null)
   const [moshInviteFriends, setMoshInviteFriends] = useState([])
@@ -941,7 +1248,7 @@ const addBookToList = async (book) => {
     try {
       // Use general search to include both title and author
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(`${term} language:eng`)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
       
@@ -1825,7 +2132,7 @@ const addBookToList = async (book) => {
     setProfileTopBookError('')
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(`${q} language:eng`)}&limit=10&fields=key,title,author_name,cover_i,isbn,first_publish_year,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,cover_i,isbn,first_publish_year`,
       )
       if (!response.ok) throw new Error('Search failed')
       const data = await response.json()
@@ -3811,296 +4118,17 @@ const addBookToList = async (book) => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Lists</p>
-                  <h3 className="text-2xl font-semibold text-white">Share your book lists</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={fetchLists}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {listsMessage && <p className="mt-3 text-sm text-rose-200">{listsMessage}</p>}
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Create a list</p>
-                    <div className="mt-3 space-y-3">
-                      <input
-                        value={newListTitle}
-                        onChange={(e) => setNewListTitle(e.target.value)}
-                        placeholder="List title"
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                      />
-                      <textarea
-                        value={newListDescription}
-                        onChange={(e) => setNewListDescription(e.target.value)}
-                        placeholder="Description (optional)"
-                        rows={3}
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setNewListIsPublic(true)}
-                          className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                            newListIsPublic ? 'border-white/60 bg-white/10 text-white' : 'border-white/20 text-white/70 hover:border-white/60'
-                          }`}
-                        >
-                          Public
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewListIsPublic(false)}
-                          className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                            !newListIsPublic ? 'border-white/60 bg-white/10 text-white' : 'border-white/20 text-white/70 hover:border-white/60'
-                          }`}
-                        >
-                          Private
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={createList}
-                        disabled={listsLoading}
-                        className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
-                      >
-                        {listsLoading ? 'Creating…' : 'Create list'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {pendingListInvites.length > 0 && (
-                    <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invites</p>
-                      <div className="mt-3 space-y-2">
-                        {pendingListInvites.map((inv) => (
-                          <div key={inv.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                            <p className="text-sm text-white">
-                              <span className="text-white/60">From</span> {inv.inviter_username}
-                            </p>
-                            <p className="text-xs text-white/50">List ID: {inv.list_id}</p>
-                            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                              <button
-                                type="button"
-                                onClick={() => respondToListInvite(inv.id, 'accepted')}
-                                className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => respondToListInvite(inv.id, 'declined')}
-                                className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/50"
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Browse</p>
-                      <div className="flex gap-2">
-                        {[
-                          { id: 'mine', label: 'Mine' },
-                          { id: 'following', label: 'Following' },
-                          { id: 'public', label: 'Public' },
-                        ].map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setListsTab(t.id)}
-                            className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
-                              listsTab === t.id
-                                ? 'bg-white/10 border border-white/40 text-white'
-                                : 'border border-white/10 text-white/60 hover:border-white/30'
-                            }`}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 space-y-2">
-                      {(listsTab === 'mine' ? ownedLists : listsTab === 'following' ? followedLists : publicLists).map((l) => (
-                        <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                          <button
-                            type="button"
-                            onClick={() => openList(l)}
-                            className="w-full text-left"
-                          >
-                            <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
-                            <p className="text-xs text-white/60 line-clamp-1">by {l.owner_username}</p>
-                            {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
-                          </button>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {listsTab === 'mine' ? (
-                              <>
-                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
-                                  {l.is_public ? 'Public' : 'Private'}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedList(l)
-                                    setIsListInviteOpen(true)
-                                    setListInviteSearch('')
-                                    setListInviteError('')
-                                  }}
-                                  className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                                >
-                                  Invite
-                                </button>
-                              </>
-                            ) : listsTab === 'following' ? (
-                              <button
-                                type="button"
-                                onClick={() => unfollowList(l.id)}
-                                className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
-                              >
-                                Unfollow
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => followList(l.id)}
-                                className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                              >
-                                Follow
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      {(listsTab === 'mine' ? ownedLists : listsTab === 'following' ? followedLists : publicLists).length === 0 && (
-                        <p className="text-sm text-white/60">{listsLoading ? 'Loading…' : 'Nothing here yet.'}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    {!selectedList ? (
-                      <p className="text-sm text-white/60">Open a list to view and add books.</p>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Selected list</p>
-                            <h4 className="text-xl font-semibold text-white">{selectedList.title}</h4>
-                            <p className="text-sm text-white/60">by {selectedList.owner_username}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedList(null)
-                              setSelectedListItems([])
-                            }}
-                            className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                          >
-                            Close
-                          </button>
-                        </div>
-
-                        <div className="mt-4">
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Add a book from your library</p>
-                          <input
-                            value={listBookSearch}
-                            onChange={(e) => setListBookSearch(e.target.value)}
-                            placeholder="Search your library…"
-                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                          />
-                          {listBookSearch.trim() && (
-                            <div className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-[#0b1225]/40 p-2">
-                              {tracker
-                                .filter((b) => {
-                                  const q = listBookSearch.toLowerCase()
-                                  return (
-                                    (b.title || '').toLowerCase().includes(q) ||
-                                    (b.author || '').toLowerCase().includes(q)
-                                  )
-                                })
-                                .slice(0, 25)
-                                .map((b) => (
-                                  <button
-                                    key={`${b.title}-${b.author}`}
-                                    type="button"
-                                    onClick={() => addBookToList(b)}
-                                    className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
-                                  >
-                                    <div className="h-12 w-9 overflow-hidden rounded-lg border border-white/10 bg-white/5 flex-shrink-0">
-                                      {b.cover ? (
-                                        <img src={b.cover} alt={b.title} className="h-full w-full object-cover" />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                                      )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-semibold line-clamp-1">{b.title}</p>
-                                      <p className="text-xs text-white/60 line-clamp-1">{b.author}</p>
-                                    </div>
-                                  </button>
-                                ))}
-                              {tracker.filter((b) => {
-                                const q = listBookSearch.toLowerCase()
-                                return (
-                                  (b.title || '').toLowerCase().includes(q) ||
-                                  (b.author || '').toLowerCase().includes(q)
-                                )
-                              }).length === 0 && <p className="p-3 text-sm text-white/60">No matches.</p>}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-6">
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Books</p>
-                          {selectedListItemsLoading ? (
-                            <p className="text-sm text-white/60">Loading…</p>
-                          ) : selectedListItems.length > 0 ? (
-                            <div className="space-y-2">
-                              {selectedListItems.map((it) => (
-                                <div key={it.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                                  <div className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
-                                    {it.book_cover ? (
-                                      <img src={it.book_cover} alt={it.book_title} className="h-full w-full object-cover" />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-semibold text-white line-clamp-1">{it.book_title}</p>
-                                    <p className="text-xs text-white/60 line-clamp-1">{it.book_author || '—'}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-white/60">No books yet.</p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <h3 className="text-2xl font-semibold text-white">Coming soon</h3>
                 </div>
               </div>
+              <p className="mt-4 text-sm text-white/60">Create and follow shareable lists (in progress).</p>
             </section>
           </>
         )}
 
         {successModal.show && (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
-            <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-6 sm:p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-auto pt-[env(safe-area-inset-top)]">
               <img
                 src="/bookmosh-logo-new.png"
                 alt="BookMosh"
@@ -4579,7 +4607,7 @@ const addBookToList = async (book) => {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
+                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.mosh_title || mosh.book_title}</p>
                           <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
                           <p className="text-xs text-white/40 line-clamp-1">with {(mosh.participants_usernames || []).filter(u => u !== currentUser?.username).join(', ')}</p>
                         </div>
@@ -4971,7 +4999,7 @@ const addBookToList = async (book) => {
                             setFindMatchLoading(true)
                             try {
                               const response = await fetch(
-                                `https://openlibrary.org/search.json?q=${encodeURIComponent(`${findMatchQuery} language:eng`)}&limit=5&fields=key,title,author_name,cover_i,isbn,language`,
+                                `https://openlibrary.org/search.json?q=${encodeURIComponent(findMatchQuery)}&limit=5&fields=key,title,author_name,cover_i,isbn`
                               )
                               const data = await response.json()
                               setFindMatchResults(data.docs || [])
