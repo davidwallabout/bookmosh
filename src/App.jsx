@@ -3600,16 +3600,26 @@ function App() {
       try {
         const data = await invokeIsbndbSearch({ isbn })
         const b = data?.book ?? null
-        let cover = b?.image || b?.image_url || b?.image_original || null
+        let cover =
+          b?.image ||
+          b?.image_url ||
+          b?.image_original ||
+          b?.image_large ||
+          b?.image_small ||
+          null
         if (typeof cover === 'string' && cover.startsWith('http://')) {
           cover = `https://${cover.slice('http://'.length)}`
         }
         if (!canceled && cover) {
           updateBook(selectedBook.title, { cover })
           setSelectedBook((prev) => (prev ? { ...prev, cover } : prev))
+        } else {
+          // allow retry later
+          isbndbCoverLookupRef.current.delete(isbn)
         }
       } catch (error) {
         console.error('Failed to load ISBNdb cover', error)
+        isbndbCoverLookupRef.current.delete(isbn)
       }
     })()
 
