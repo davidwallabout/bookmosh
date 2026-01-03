@@ -4572,19 +4572,6 @@ function App() {
                 className="h-48 w-auto"
               />
             </button>
-
-            {totalUnreadMoshes > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMoshPanelOpen(true)
-                }}
-                className="absolute right-0 top-0 rounded-full bg-rose-500/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white shadow"
-                title="Unread messages"
-              >
-                {totalUnreadMoshes}
-              </button>
-            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -7365,9 +7352,30 @@ function App() {
                         const safeTitle = title ? String(title) : ''
                         const book = safeTitle ? (friendBooks || []).find((b) => b.title === safeTitle) : null
                         const cover = book?.cover ?? null
+                        const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
 
                         return (
-                          <div key={`${safeTitle || 'empty'}-${idx}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                          <button
+                            key={`${safeTitle || 'empty'}-${idx}`}
+                            type="button"
+                            disabled={!safeTitle}
+                            title={hoverLabel || undefined}
+                            onClick={() => {
+                              if (!safeTitle) return
+                              const payload = {
+                                title: safeTitle,
+                                author: book?.author ?? selectedFriend.username,
+                                cover: cover ?? null,
+                                year: book?.year ?? null,
+                                isbn: book?.isbn ?? null,
+                                olKey: book?.olKey ?? book?.key ?? null,
+                              }
+                              // Ensure it exists in your library so you can tag it right away.
+                              handleAddBook(payload, 'to-read')
+                              openModal(payload)
+                            }}
+                            className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/5 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
                             <div className="w-full aspect-[2/3]">
                               {cover ? (
                                 <img src={cover} alt={safeTitle || 'Top book'} className="h-full w-full object-cover" />
@@ -7375,7 +7383,13 @@ function App() {
                                 <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
                               )}
                             </div>
-                          </div>
+                            {safeTitle && (
+                              <div className="pointer-events-none absolute inset-x-1 bottom-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                <div className="line-clamp-2">{safeTitle}</div>
+                                {book?.author && <div className="mt-0.5 line-clamp-1 text-white/70">{book.author}</div>}
+                              </div>
+                            )}
+                          </button>
                         )
                       })
                     })()}
@@ -7478,6 +7492,46 @@ function App() {
                                 {book.progress > 0 && (
                                   <span className="text-[10px] text-white/50">{book.progress}%</span>
                                 )}
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {(() => {
+                                  const libraryMatch = (Array.isArray(tracker) ? tracker : []).find((b) => {
+                                    const t1 = String(b?.title ?? '').trim().toLowerCase()
+                                    const a1 = String(b?.author ?? '').trim().toLowerCase()
+                                    const t2 = String(book?.title ?? '').trim().toLowerCase()
+                                    const a2 = String(book?.author ?? '').trim().toLowerCase()
+                                    return Boolean(t1 && t2 && t1 === t2 && a1 && a2 && a1 === a2)
+                                  })
+
+                                  const payload = {
+                                    title: book.title,
+                                    author: book.author,
+                                    cover: book.cover ?? null,
+                                    year: book.year ?? null,
+                                    isbn: book.isbn ?? null,
+                                    olKey: book.olKey ?? book.key ?? null,
+                                  }
+
+                                  return [
+                                    { id: 'to-read', label: 'To Read' },
+                                    { id: 'Reading', label: 'Reading' },
+                                    { id: 'Read', label: 'Read' },
+                                  ].map((opt) => (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      onClick={() => applyFeedQuickStatus(payload, opt.id)}
+                                      className={`rounded-full border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                                        (libraryMatch?.status ?? null) === opt.id
+                                          ? 'border-white/60 bg-white/10 text-white'
+                                          : 'border-white/20 text-white/70 hover:border-white/60 hover:text-white'
+                                      }`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))
+                                })()}
                               </div>
                             </div>
                           </div>
