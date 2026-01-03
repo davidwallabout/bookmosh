@@ -397,10 +397,22 @@ const searchUsers = async (query) => {
   
   try {
     const normalized = query.trim()
+    const normalizedLower = normalized.toLowerCase()
+
+    // Exact match first (fast path)
+    const { data: eqData, error: eqError } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .or(`username.eq.${normalized},email.eq.${normalized},username.eq.${normalizedLower},email.eq.${normalizedLower}`)
+      .limit(5)
+
+    if (eqError) throw eqError
+    if (Array.isArray(eqData) && eqData.length > 0) return eqData
+
     const { data: exactData, error: exactError } = await supabase
       .from('users')
       .select('id, username, email')
-      .or(`username.ilike.${normalized},email.ilike.${normalized}`)
+      .or(`username.ilike.${normalized},email.ilike.${normalized},username.ilike.${normalizedLower},email.ilike.${normalizedLower}`)
       .limit(5)
     
     if (exactError) throw exactError
@@ -410,7 +422,7 @@ const searchUsers = async (query) => {
     const { data, error } = await supabase
       .from('users')
       .select('id, username, email')
-      .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%`)
+      .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%,username.ilike.%${normalizedLower}%,email.ilike.%${normalizedLower}%`)
       .limit(10)
 
     if (error) throw error
@@ -3569,8 +3581,28 @@ function App() {
         },
       })
 
-      if (error) throw error
-      if (!data?.ok) throw new Error('Invite failed to send.')
+      if (error) {
+        const status = error?.context?.status
+        const body = error?.context?.body
+        const bodyError = body?.error ? String(body.error) : ''
+        const bodyDetails = body?.details ? JSON.stringify(body.details) : ''
+        const combined = [
+          status ? `HTTP ${status}` : '',
+          error?.message ? String(error.message) : '',
+          bodyError,
+          bodyDetails,
+        ]
+          .filter(Boolean)
+          .join(' - ')
+        throw new Error(combined || 'Invite failed to send.')
+      }
+
+      if (!data?.ok) {
+        const combined = [data?.error, data?.details ? JSON.stringify(data.details) : '']
+          .filter(Boolean)
+          .join(' - ')
+        throw new Error(combined || 'Invite failed to send.')
+      }
 
       setEmailInviteMessage(`Invite sent to ${email}.`)
       setEmailInvite('')
