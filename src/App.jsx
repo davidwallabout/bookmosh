@@ -3458,7 +3458,6 @@ function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Community</p>
-                  <h3 className="text-2xl font-semibold text-white">{currentUser?.friends?.length ?? 0}</h3>
                 </div>
                 <button
                   type="button"
@@ -3471,6 +3470,130 @@ function App() {
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
                 <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Profile</p>
+                        <p className="text-sm text-white/60">Customize your avatar + top books</p>
+                      </div>
+                      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                        <img
+                          src={getProfileAvatarUrl({ avatar_icon: profileAvatarIcon, avatar_url: profileAvatarUrl })}
+                          alt="Avatar"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Pick an icon</p>
+                      <div className="grid grid-cols-6 gap-2">
+                        {PROFILE_ICONS.map((icon) => (
+                          <button
+                            key={icon.id}
+                            type="button"
+                            onClick={() => {
+                              setProfileAvatarIcon(icon.id)
+                              setProfileAvatarUrl('')
+                            }}
+                            className={`h-10 w-10 overflow-hidden rounded-xl border bg-white/5 transition ${
+                              profileAvatarUrl
+                                ? 'border-white/10 opacity-60'
+                                : profileAvatarIcon === icon.id
+                                  ? 'border-white/60'
+                                  : 'border-white/10 hover:border-white/40'
+                            }`}
+                          >
+                            <img src={iconDataUrl(icon.svg)} alt={icon.id} className="h-full w-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Or upload</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          onProfileUpload(f)
+                          e.target.value = ''
+                        }}
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white"
+                      />
+                      {profileAvatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setProfileAvatarUrl('')}
+                          className="mt-2 w-full rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                        >
+                          Use icon instead
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {profileTopBooks.map((title) => {
+                          const book = tracker.find((b) => b.title === title)
+                          return (
+                            <div key={title} className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                              <div className="h-20 w-full">
+                                {book?.cover ? (
+                                  <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeTopBook(title)}
+                                className="absolute top-1 right-1 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/80"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )
+                        })}
+                        {Array.from({ length: Math.max(0, 4 - profileTopBooks.length) }).map((_, idx) => (
+                          <div key={idx} className="h-20 rounded-xl border border-dashed border-white/10 bg-white/5" />
+                        ))}
+                      </div>
+
+                      <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-2">
+                        {tracker
+                          .filter((b) => !profileTopBooks.includes(b.title))
+                          .slice(0, 50)
+                          .map((b) => (
+                            <button
+                              key={b.title}
+                              type="button"
+                              onClick={() => addTopBook(b.title)}
+                              disabled={profileTopBooks.length >= 4}
+                              className="mb-2 w-full rounded-xl border border-white/10 bg-[#050914]/60 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/40 disabled:opacity-50"
+                            >
+                              {b.title}
+                            </button>
+                          ))}
+                        {tracker.length === 0 && (
+                          <p className="text-sm text-white/60">Add books to your library to pick a Top 4.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={saveProfile}
+                      disabled={profileSaving}
+                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                    >
+                      {profileSaving ? 'Saving…' : 'Save Profile'}
+                    </button>
+                    <p className="text-xs text-white/60 min-h-[1.25rem]">{profileMessage}</p>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
@@ -3621,130 +3744,6 @@ function App() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Profile</p>
-                        <p className="text-sm text-white/60">Customize your avatar + top books</p>
-                      </div>
-                      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-                        <img
-                          src={getProfileAvatarUrl({ avatar_icon: profileAvatarIcon, avatar_url: profileAvatarUrl })}
-                          alt="Avatar"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Pick an icon</p>
-                      <div className="grid grid-cols-6 gap-2">
-                        {PROFILE_ICONS.map((icon) => (
-                          <button
-                            key={icon.id}
-                            type="button"
-                            onClick={() => {
-                              setProfileAvatarIcon(icon.id)
-                              setProfileAvatarUrl('')
-                            }}
-                            className={`h-10 w-10 overflow-hidden rounded-xl border bg-white/5 transition ${
-                              profileAvatarUrl
-                                ? 'border-white/10 opacity-60'
-                                : profileAvatarIcon === icon.id
-                                  ? 'border-white/60'
-                                  : 'border-white/10 hover:border-white/40'
-                            }`}
-                          >
-                            <img src={iconDataUrl(icon.svg)} alt={icon.id} className="h-full w-full object-cover" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Or upload</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0]
-                          onProfileUpload(f)
-                          e.target.value = ''
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white"
-                      />
-                      {profileAvatarUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setProfileAvatarUrl('')}
-                          className="mt-2 w-full rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                        >
-                          Use icon instead
-                        </button>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
-                      <div className="grid grid-cols-4 gap-2">
-                        {profileTopBooks.map((title) => {
-                          const book = tracker.find((b) => b.title === title)
-                          return (
-                            <div key={title} className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                              <div className="h-20 w-full">
-                                {book?.cover ? (
-                                  <img src={book.cover} alt={title} className="h-full w-full object-cover" />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeTopBook(title)}
-                                className="absolute top-1 right-1 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/80"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          )
-                        })}
-                        {Array.from({ length: Math.max(0, 4 - profileTopBooks.length) }).map((_, idx) => (
-                          <div key={idx} className="h-20 rounded-xl border border-dashed border-white/10 bg-white/5" />
-                        ))}
-                      </div>
-
-                      <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-2">
-                        {tracker
-                          .filter((b) => !profileTopBooks.includes(b.title))
-                          .slice(0, 50)
-                          .map((b) => (
-                            <button
-                              key={b.title}
-                              type="button"
-                              onClick={() => addTopBook(b.title)}
-                              disabled={profileTopBooks.length >= 4}
-                              className="mb-2 w-full rounded-xl border border-white/10 bg-[#050914]/60 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/40 disabled:opacity-50"
-                            >
-                              {b.title}
-                            </button>
-                          ))}
-                        {tracker.length === 0 && (
-                          <p className="text-sm text-white/60">Add books to your library to pick a Top 4.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={saveProfile}
-                      disabled={profileSaving}
-                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
-                    >
-                      {profileSaving ? 'Saving…' : 'Save Profile'}
-                    </button>
-                    <p className="text-xs text-white/60 min-h-[1.25rem]">{profileMessage}</p>
-                  </div>
-
                   <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <div className="flex items-center justify-between">
                       <div>
