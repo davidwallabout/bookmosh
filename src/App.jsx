@@ -4307,13 +4307,18 @@ function App() {
             const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
             const coverId = Array.isArray(edition?.covers) ? edition.covers[0] : null
             const coverUrl = coverId ? openLibraryCoverIdUrl(coverId, 'L') : openLibraryIsbnCoverUrl(isbn, 'L')
+            const languages = Array.isArray(edition?.languages) ? edition.languages.map(l => l.key || l).join(', ') : null
+            const isEnglish = languages?.includes('eng') || edition?.title?.match(/[a-zA-Z]/) !== null
             pushEdition({
               source: 'openlibrary',
               isbn,
+              title: edition?.title || selectedBook.title,
               editionKey: typeof edition?.key === 'string' ? edition.key : null,
               publisher: Array.isArray(edition?.publishers) ? edition.publishers[0] : null,
               publishDate: edition?.publish_date ?? null,
               coverUrl,
+              language: languages || 'Unknown',
+              isEnglish,
             })
           }
         }
@@ -4337,23 +4342,33 @@ function App() {
           if (typeof url === 'string' && url.startsWith('http://')) {
             url = `https://${url.slice('http://'.length)}`
           }
+          const lang = b?.language || 'en'
+          const isEnglish = lang === 'en' || lang === 'eng' || lang.toLowerCase().includes('english')
           pushEdition({
             source: 'isbndb',
             isbn,
+            title: b?.title || b?.title_long || selectedBook.title,
             publisher: (Array.isArray(b?.publisher) ? b.publisher[0] : b?.publisher) ?? null,
             publishDate: b?.date_published ?? null,
             coverUrl: url || null,
+            language: lang,
+            isEnglish,
           })
         }
       }
 
       const editions = Array.from(byIsbn.values()).sort((a, b) => {
+        // Prioritize English editions
+        if (a.isEnglish !== b.isEnglish) return a.isEnglish ? -1 : 1
+        // Then prioritize editions with covers
         const aHasCover = Boolean(a.coverUrl)
         const bHasCover = Boolean(b.coverUrl)
         if (aHasCover !== bHasCover) return aHasCover ? -1 : 1
+        // Then prefer ISBNdb (usually better metadata)
         const as = String(a.source ?? '')
         const bs = String(b.source ?? '')
         if (as !== bs) return as === 'isbndb' ? -1 : 1
+        // Finally sort by ISBN
         return String(a.isbn).localeCompare(String(b.isbn))
       })
 
@@ -6846,12 +6861,15 @@ function App() {
                                 type="button"
                                 onClick={() => {
                                   const nextCover = e.coverUrl || selectedBook.cover || null
+                                  const nextTitle = e.title || selectedBook.title
+                                  // Update the book in library with new title, ISBN, and cover
                                   updateBook(selectedBook.title, {
+                                    title: nextTitle,
                                     isbn: e.isbn,
                                     cover: nextCover,
                                     olKey: selectedBook.olKey ?? null,
                                   })
-                                  setSelectedBook({ ...selectedBook, isbn: e.isbn, cover: nextCover, olKey: selectedBook.olKey ?? null })
+                                  setSelectedBook({ ...selectedBook, title: nextTitle, isbn: e.isbn, cover: nextCover, olKey: selectedBook.olKey ?? null })
                                   setShowEditionPicker(false)
                                   setEditionPickerEditions([])
                                 }}
@@ -6874,10 +6892,13 @@ function App() {
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-xs uppercase tracking-[0.3em] text-white/40">{e.source}</p>
-                                    <p className="text-sm font-semibold text-white break-words">ISBN {e.isbn}</p>
+                                    <p className="text-xs uppercase tracking-[0.3em] text-white/40">{e.source} {e.isEnglish && '🇬🇧'}</p>
+                                    <p className="text-sm font-semibold text-white break-words">{e.title}</p>
                                     <p className="text-xs text-white/60">
-                                      {[e.publisher, e.publishDate].filter(Boolean).join(' • ') || '—'}
+                                      ISBN {e.isbn}
+                                    </p>
+                                    <p className="text-xs text-white/50">
+                                      {[e.publisher, e.publishDate, e.language].filter(Boolean).join(' • ') || '—'}
                                     </p>
                                   </div>
                                 </div>
