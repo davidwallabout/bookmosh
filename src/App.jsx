@@ -802,6 +802,7 @@ function App() {
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalMood, setModalMood] = useState('')
+  const [modalReview, setModalReview] = useState('')
   const [modalDescription, setModalDescription] = useState('')
   const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
@@ -892,6 +893,9 @@ function App() {
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false)
   const [importFileType, setImportFileType] = useState('goodreads')
   const [importMessage, setImportMessage] = useState('')
+
+  const [hoverRatingTitle, setHoverRatingTitle] = useState('')
+  const [hoverRatingValue, setHoverRatingValue] = useState(0)
 
   const totalUnreadMoshes = useMemo(() => {
     const values = Object.values(unreadByMoshId || {})
@@ -2624,6 +2628,7 @@ function App() {
     setModalProgress(book.progress ?? 0)
     setModalStatus(normalized.status ?? statusOptions[0])
     setModalMood(book.mood ?? '')
+    setModalReview(book.review ?? '')
     setModalDescription('')
     setModalDescriptionLoading(false)
   }
@@ -2853,8 +2858,10 @@ function App() {
       progress: modalProgress,
       status: modalStatus,
       mood: modalMood,
+      review: modalReview,
       rating: modalRating,
     })
+    logBookEvent(selectedBook, 'updated')
     closeModal()
   }
 
@@ -3390,7 +3397,13 @@ function App() {
                           {book.author}
                         </button>
                         
-                        <div className="mt-1 flex items-center gap-1">
+                        <div
+                          className="mt-1 flex items-center gap-1"
+                          onMouseLeave={() => {
+                            setHoverRatingTitle('')
+                            setHoverRatingValue(0)
+                          }}
+                        >
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
                               key={star}
@@ -3399,7 +3412,15 @@ function App() {
                                 e.stopPropagation()
                                 updateBook(book.title, { rating: star })
                               }}
-                              className={`text-sm transition hover:scale-110 ${star <= (book.rating || 0) ? 'text-yellow-400' : 'text-white/20 hover:text-yellow-400/50'}`}
+                              onMouseEnter={() => {
+                                setHoverRatingTitle(book.title)
+                                setHoverRatingValue(star)
+                              }}
+                              className={`text-sm transition hover:scale-110 ${
+                                star <= (hoverRatingTitle === book.title ? hoverRatingValue : (book.rating || 0))
+                                  ? 'text-yellow-400'
+                                  : 'text-white/20 hover:text-yellow-400/50'
+                              }`}
                             >
                               ★
                             </button>
@@ -4836,6 +4857,17 @@ function App() {
                     placeholder="How did this book make you feel?"
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
                     rows="3"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Review</label>
+                  <textarea
+                    value={modalReview}
+                    onChange={(e) => setModalReview(e.target.value)}
+                    placeholder="Write your review..."
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                    rows="5"
                   />
                 </div>
 
