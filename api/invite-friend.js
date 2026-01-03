@@ -77,7 +77,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'BookMosh <onboarding@resend.dev>',
+        from: 'BookMosh <invites@bookmosh.com>',  // Change this after verifying bookmosh.com domain in Resend
         to: [email],
         subject: inviterName ? `${inviterName} invited you to BookMosh` : "You're invited to BookMosh",
         html,
