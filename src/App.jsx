@@ -4281,7 +4281,7 @@ function App() {
 
   const loadEditionsForSelectedBook = async () => {
     if (!selectedBook) return
-    console.log('[EDITIONS] Loading editions for:', selectedBook.title)
+    console.log('[EDITIONS] Loading editions for:', selectedBook.title, 'by', selectedBook.author)
     setEditionPickerLoading(true)
     setEditionPickerEditions([])
 
@@ -4318,11 +4318,13 @@ function App() {
             const coverId = Array.isArray(edition?.covers) ? edition.covers[0] : null
             const coverUrl = coverId ? openLibraryCoverIdUrl(coverId, 'L') : openLibraryIsbnCoverUrl(isbn, 'L')
             const languages = Array.isArray(edition?.languages) ? edition.languages.map(l => l.key || l).join(', ') : null
-            const isEnglish = languages?.includes('eng') || edition?.title?.match(/[a-zA-Z]/) !== null
+            const isEnglish = languages?.includes('eng') || languages?.includes('/languages/eng') || !languages
+            const editionTitle = edition?.title || selectedBook.title
+            console.log('[EDITIONS] OL edition:', { title: editionTitle, isbn, lang: languages, isEnglish })
             pushEdition({
               source: 'openlibrary',
               isbn,
-              title: edition?.title || selectedBook.title,
+              title: editionTitle,
               editionKey: typeof edition?.key === 'string' ? edition.key : null,
               publisher: Array.isArray(edition?.publishers) ? edition.publishers[0] : null,
               publishDate: edition?.publish_date ?? null,
@@ -7398,8 +7400,9 @@ function App() {
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-2">{book.title} — {book.author}</p>
-                          <p className="text-xs text-white/60">{book.year || '—'}</p>
+                          <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                          <p className="text-xs text-white/60">{book.author}</p>
+                          <p className="text-xs text-white/50">{book.year || '—'}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               type="button"
