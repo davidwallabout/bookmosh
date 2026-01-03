@@ -110,9 +110,34 @@ const getProfileAvatarUrl = (user) => {
 const computeMeaningfulRelevance = (title, author, termWords) => {
   const titleLower = String(title ?? '').toLowerCase()
   const authorLower = String(author ?? '').toLowerCase()
+  const stopwords = new Set([
+    'a',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'by',
+    'for',
+    'from',
+    'in',
+    'into',
+    'is',
+    'it',
+    'of',
+    'on',
+    'or',
+    'the',
+    'to',
+    'was',
+    'were',
+    'with',
+  ])
   const tokens = (Array.isArray(termWords) ? termWords : [])
     .map((w) => String(w ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ''))
     .filter((w) => w.length >= 2) // Allow 2-char tokens like "mr"
+    .filter((w) => !stopwords.has(w))
 
   if (tokens.length === 0) return 0
 
