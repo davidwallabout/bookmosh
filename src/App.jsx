@@ -828,6 +828,22 @@ function App() {
   const [profileTopBookLoading, setProfileTopBookLoading] = useState(false)
   const [profileTopBookError, setProfileTopBookError] = useState('')
   const [moshes, setMoshes] = useState([]) // Track book chats
+  const [listsTab, setListsTab] = useState('mine')
+  const [listsLoading, setListsLoading] = useState(false)
+  const [listsMessage, setListsMessage] = useState('')
+  const [ownedLists, setOwnedLists] = useState([])
+  const [followedLists, setFollowedLists] = useState([])
+  const [publicLists, setPublicLists] = useState([])
+  const [pendingListInvites, setPendingListInvites] = useState([])
+  const [selectedList, setSelectedList] = useState(null)
+  const [selectedListItems, setSelectedListItems] = useState([])
+  const [selectedListItemsLoading, setSelectedListItemsLoading] = useState(false)
+  const [newListTitle, setNewListTitle] = useState('')
+  const [newListDescription, setNewListDescription] = useState('')
+  const [newListIsPublic, setNewListIsPublic] = useState(true)
+  const [listBookSearch, setListBookSearch] = useState('')
+  const [listInviteUsername, setListInviteUsername] = useState('')
+  const [listInviteError, setListInviteError] = useState('')
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
   const [feedDisplayCount, setFeedDisplayCount] = useState(10)
@@ -1071,6 +1087,276 @@ function App() {
       console.error('Failed to refresh current user', error)
     }
   }
+
+  const fetchListItems = async (listId) => {
+    if (!supabase || !currentUser || !listId) return
+    setSelectedListItemsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('list_items')
+        .select('id, list_id, added_by, book_title, book_author, book_cover, ol_key, isbn, created_at')
+        .eq('list_id', listId)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setSelectedListItems(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('List items fetch failed', error)
+      setSelectedListItems([])
+    } finally {
+      setSelectedListItemsLoading(false)
+    }
+  }
+
+  const openList = async (listRow) => {
+    if (!listRow?.id) return
+    setSelectedList(listRow)
+    setListBookSearch('')
+    setListInviteUsername('')
+    setListInviteError('')
+    await fetchListItems(listRow.id)
+  }
+
+  const fetchLists = async () => {
+    if (!supabase || !currentUser) return
+    setListsLoading(true)
+    setListsMessage('')
+    try {
+      const { data: mine, error: mineError } = await supabase
+        .from('lists')
+        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+        .eq('owner_id', currentUser.id)
+        .order('updated_at', { ascending: false })
+      if (mineError) throw mineError
+      setOwnedLists(Array.isArray(mine) ? mine : [])
+
+      const { data: follows, error: followsError } = await supabase
+        .from('list_follows')
+        .select('list_id')
+        .eq('user_id', currentUser.id)
+      if (followsError) throw followsError
+      const followIds = (Array.isArray(follows) ? follows : []).map((f) => f.list_id).filter(Boolean)
+
+      if (followIds.length) {
+        const { data: followed, error: followedError } = await supabase
+          .from('lists')
+          .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+          .in('id', followIds)
+          .order('updated_at', { ascending: false })
+        if (followedError) throw followedError
+        setFollowedLists((Array.isArray(followed) ? followed : []).filter((l) => l.owner_id !== currentUser.id))
+      } else {
+        setFollowedLists([])
+      }
+
+      const { data: pub, error: pubError } = await supabase
+        .from('lists')
+        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+        .eq('is_public', true)
+        .order('updated_at', { ascending: false })
+        .limit(50)
+      if (pubError) throw pubError
+      const pubLists = Array.isArray(pub) ? pub : []
+      const followedSet = new Set(followIds)
+      setPublicLists(pubLists.filter((l) => l.owner_id !== currentUser.id && !followedSet.has(l.id)))
+
+      const { data: invites, error: invitesError } = await supabase
+        .from('list_invites')
+        .select('id, list_id, inviter_id, inviter_username, invitee_id, invitee_username, status, created_at')
+        .eq('invitee_id', currentUser.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      if (invitesError) throw invitesError
+
+      const inviteRows = Array.isArray(invites) ? invites : []
+      const inviteListIds = Array.from(new Set(inviteRows.map((i) => i.list_id).filter(Boolean)))
+      if (inviteListIds.length) {
+        const { data: inviteLists, error: inviteListsError } = await supabase
+          .from('lists')
+          .select('id, title, owner_username')
+          .in('id', inviteListIds)
+        if (inviteListsError) throw inviteListsError
+        const mapById = new Map((Array.isArray(inviteLists) ? inviteLists : []).map((l) => [l.id, l]))
+        setPendingListInvites(
+          inviteRows.map((inv) => {
+            const meta = mapById.get(inv.list_id)
+            return { ...inv, list_title: meta?.title ?? 'List', list_owner_username: meta?.owner_username ?? null }
+          }),
+        )
+      } else {
+        setPendingListInvites([])
+      }
+    } catch (error) {
+      console.error('Lists fetch failed', error)
+      setListsMessage(error?.message || 'Failed to load lists.')
+      setOwnedLists([])
+      setFollowedLists([])
+      setPublicLists([])
+      setPendingListInvites([])
+    } finally {
+      setListsLoading(false)
+    }
+  }
+
+  const createList = async () => {
+    if (!supabase || !currentUser) return
+    const title = newListTitle.trim()
+    if (!title) {
+      setListsMessage('Add a title for your list.')
+      return
+    }
+    setListsLoading(true)
+    setListsMessage('')
+    try {
+      const payload = {
+        owner_id: currentUser.id,
+        owner_username: currentUser.username,
+        title,
+        description: newListDescription.trim() || null,
+        is_public: Boolean(newListIsPublic),
+      }
+      const { data, error } = await supabase
+        .from('lists')
+        .insert(payload)
+        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+        .limit(1)
+      if (error) throw error
+      const created = data?.[0]
+      setNewListTitle('')
+      setNewListDescription('')
+      setNewListIsPublic(true)
+      await fetchLists()
+      if (created) {
+        setListsTab('mine')
+        await openList(created)
+      }
+    } catch (error) {
+      console.error('Create list failed', error)
+      setListsMessage(error?.message || 'Failed to create list.')
+    } finally {
+      setListsLoading(false)
+    }
+  }
+
+  const followList = async (listId) => {
+    if (!supabase || !currentUser || !listId) return
+    setListsMessage('')
+    try {
+      const { error } = await supabase
+        .from('list_follows')
+        .insert({ list_id: listId, user_id: currentUser.id })
+      if (error) throw error
+      await fetchLists()
+    } catch (error) {
+      console.error('Follow list failed', error)
+      setListsMessage(error?.message || 'Failed to follow list.')
+    }
+  }
+
+  const unfollowList = async (listId) => {
+    if (!supabase || !currentUser || !listId) return
+    setListsMessage('')
+    try {
+      const { error } = await supabase
+        .from('list_follows')
+        .delete()
+        .eq('list_id', listId)
+        .eq('user_id', currentUser.id)
+      if (error) throw error
+      if (selectedList?.id === listId) {
+        setSelectedList(null)
+        setSelectedListItems([])
+      }
+      await fetchLists()
+    } catch (error) {
+      console.error('Unfollow list failed', error)
+      setListsMessage(error?.message || 'Failed to unfollow list.')
+    }
+  }
+
+  const sendListInvite = async () => {
+    if (!supabase || !currentUser || !selectedList?.id) return
+    const username = listInviteUsername.trim()
+    if (!username) return
+    setListInviteError('')
+    try {
+      const { data: rows, error: userError } = await supabase
+        .from('users')
+        .select('id, username')
+        .eq('username', username)
+        .limit(1)
+      if (userError) throw userError
+      const friend = rows?.[0]
+      if (!friend) {
+        setListInviteError('User not found.')
+        return
+      }
+      if (friend.id === currentUser.id) {
+        setListInviteError("You can't invite yourself.")
+        return
+      }
+
+      const payload = {
+        list_id: selectedList.id,
+        inviter_id: currentUser.id,
+        inviter_username: currentUser.username,
+        invitee_id: friend.id,
+        invitee_username: friend.username,
+        status: 'pending',
+      }
+      const { error: inviteError } = await supabase.from('list_invites').insert(payload)
+      if (inviteError) throw inviteError
+      setListInviteUsername('')
+      setListsMessage('Invite sent.')
+    } catch (error) {
+      console.error('Send list invite failed', error)
+      setListInviteError(error?.message || 'Failed to send invite.')
+    }
+  }
+
+  const respondToListInvite = async (inviteId, status) => {
+    if (!supabase || !currentUser || !inviteId) return
+    setListsMessage('')
+    try {
+      const { error } = await supabase
+        .from('list_invites')
+        .update({ status })
+        .eq('id', inviteId)
+        .eq('invitee_id', currentUser.id)
+      if (error) throw error
+      await fetchLists()
+    } catch (error) {
+      console.error('Invite response failed', error)
+      setListsMessage(error?.message || 'Failed to respond to invite.')
+    }
+  }
+
+  const addBookToList = async (book) => {
+    if (!supabase || !currentUser || !selectedList?.id || !book?.title) return
+    setListsMessage('')
+    try {
+      const payload = {
+        list_id: selectedList.id,
+        added_by: currentUser.id,
+        book_title: book.title,
+        book_author: book.author ?? null,
+        book_cover: book.cover ?? null,
+        ol_key: book.olKey ?? null,
+        isbn: book.isbn ?? null,
+      }
+      const { error } = await supabase.from('list_items').insert(payload)
+      if (error) throw error
+      setListBookSearch('')
+      await fetchListItems(selectedList.id)
+    } catch (error) {
+      console.error('Add book to list failed', error)
+      setListsMessage(error?.message || 'Failed to add book.')
+    }
+  }
+
+  useEffect(() => {
+    if (!currentUser) return
+    fetchLists()
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!currentUser) return
@@ -4118,10 +4404,297 @@ function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Lists</p>
-                  <h3 className="text-2xl font-semibold text-white">Coming soon</h3>
+                  <h3 className="text-2xl font-semibold text-white">Share your book lists</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchLists}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {listsMessage && <p className="mt-3 text-sm text-rose-200">{listsMessage}</p>}
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Create a list</p>
+                    <div className="mt-3 space-y-3">
+                      <input
+                        value={newListTitle}
+                        onChange={(e) => setNewListTitle(e.target.value)}
+                        placeholder="List title"
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                      />
+                      <textarea
+                        value={newListDescription}
+                        onChange={(e) => setNewListDescription(e.target.value)}
+                        placeholder="Description (optional)"
+                        rows={3}
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewListIsPublic(true)}
+                          className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                            newListIsPublic
+                              ? 'border-white/60 bg-white/10 text-white'
+                              : 'border-white/20 text-white/70 hover:border-white/60'
+                          }`}
+                        >
+                          Public
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewListIsPublic(false)}
+                          className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                            !newListIsPublic
+                              ? 'border-white/60 bg-white/10 text-white'
+                              : 'border-white/20 text-white/70 hover:border-white/60'
+                          }`}
+                        >
+                          Private
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={createList}
+                        disabled={listsLoading}
+                        className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                      >
+                        {listsLoading ? 'Creating…' : 'Create list'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {pendingListInvites.length > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invites</p>
+                      <div className="mt-3 space-y-2">
+                        {pendingListInvites.map((inv) => (
+                          <div key={inv.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <p className="text-sm text-white">
+                              <span className="text-white/60">From</span> {inv.inviter_username}
+                            </p>
+                            <p className="text-xs text-white/50 line-clamp-1">{inv.list_title}</p>
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                              <button
+                                type="button"
+                                onClick={() => respondToListInvite(inv.id, 'accepted')}
+                                className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => respondToListInvite(inv.id, 'declined')}
+                                className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/50"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Browse</p>
+                      <div className="flex gap-2">
+                        {[
+                          { id: 'mine', label: 'Mine' },
+                          { id: 'following', label: 'Following' },
+                          { id: 'public', label: 'Public' },
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setListsTab(t.id)}
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                              listsTab === t.id
+                                ? 'bg-white/10 border border-white/40 text-white'
+                                : 'border border-white/10 text-white/60 hover:border-white/30'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {(listsTab === 'mine' ? ownedLists : listsTab === 'following' ? followedLists : publicLists).map((l) => (
+                        <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <button type="button" onClick={() => openList(l)} className="w-full text-left">
+                            <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
+                            <p className="text-xs text-white/60 line-clamp-1">by {l.owner_username}</p>
+                            {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
+                          </button>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {listsTab === 'mine' ? (
+                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                {l.is_public ? 'Public' : 'Private'}
+                              </span>
+                            ) : listsTab === 'following' ? (
+                              <button
+                                type="button"
+                                onClick={() => unfollowList(l.id)}
+                                className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                              >
+                                Unfollow
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => followList(l.id)}
+                                className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                              >
+                                Follow
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {(listsTab === 'mine' ? ownedLists : listsTab === 'following' ? followedLists : publicLists).length === 0 && (
+                        <p className="text-sm text-white/60">{listsLoading ? 'Loading…' : 'Nothing here yet.'}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    {!selectedList ? (
+                      <p className="text-sm text-white/60">Open a list to view and add books.</p>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Selected list</p>
+                            <h4 className="text-xl font-semibold text-white">{selectedList.title}</h4>
+                            <p className="text-sm text-white/60">by {selectedList.owner_username}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedList(null)
+                              setSelectedListItems([])
+                            }}
+                            className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                          >
+                            Close
+                          </button>
+                        </div>
+
+                        {selectedList.owner_id === currentUser?.id && (
+                          <div className="mt-5">
+                            <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Invite a friend</p>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <input
+                                value={listInviteUsername}
+                                onChange={(e) => setListInviteUsername(e.target.value)}
+                                placeholder="Friend username"
+                                className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={sendListInvite}
+                                className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                              >
+                                Send invite
+                              </button>
+                            </div>
+                            {listInviteError && <p className="mt-2 text-sm text-rose-200">{listInviteError}</p>}
+                          </div>
+                        )}
+
+                        <div className="mt-6">
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Add a book from your library</p>
+                          <input
+                            value={listBookSearch}
+                            onChange={(e) => setListBookSearch(e.target.value)}
+                            placeholder="Search your library…"
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                          />
+                          {listBookSearch.trim() && (
+                            <div className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-[#0b1225]/40 p-2">
+                              {tracker
+                                .filter((b) => {
+                                  const q = listBookSearch.toLowerCase()
+                                  return (
+                                    (b.title || '').toLowerCase().includes(q) ||
+                                    (b.author || '').toLowerCase().includes(q)
+                                  )
+                                })
+                                .slice(0, 25)
+                                .map((b) => (
+                                  <button
+                                    key={`${b.title}-${b.author}`}
+                                    type="button"
+                                    onClick={() => addBookToList(b)}
+                                    className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
+                                  >
+                                    <div className="h-12 w-9 overflow-hidden rounded-lg border border-white/10 bg-white/5 flex-shrink-0">
+                                      {b.cover ? (
+                                        <img src={b.cover} alt={b.title} className="h-full w-full object-cover" />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-semibold line-clamp-1">{b.title}</p>
+                                      <p className="text-xs text-white/60 line-clamp-1">{b.author}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                              {tracker.filter((b) => {
+                                const q = listBookSearch.toLowerCase()
+                                return (
+                                  (b.title || '').toLowerCase().includes(q) ||
+                                  (b.author || '').toLowerCase().includes(q)
+                                )
+                              }).length === 0 && <p className="p-3 text-sm text-white/60">No matches.</p>}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-6">
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Books</p>
+                          {selectedListItemsLoading ? (
+                            <p className="text-sm text-white/60">Loading…</p>
+                          ) : selectedListItems.length > 0 ? (
+                            <div className="space-y-2">
+                              {selectedListItems.map((it) => (
+                                <div key={it.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <div className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                                    {it.book_cover ? (
+                                      <img src={it.book_cover} alt={it.book_title} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-white line-clamp-1">{it.book_title}</p>
+                                    <p className="text-xs text-white/60 line-clamp-1">{it.book_author || '—'}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-white/60">No books yet.</p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              <p className="mt-4 text-sm text-white/60">Create and follow shareable lists (in progress).</p>
             </section>
           </>
         )}
