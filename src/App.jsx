@@ -193,8 +193,10 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
 
 const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lower, termWords) => {
   if (!b) return null
-  const title = b.title ?? b.title_long ?? null
-  if (!title) return null
+  const titlePrimary = b.title ?? null
+  const titleLong = b.title_long ?? null
+  const fallbackTitle = titlePrimary ?? titleLong ?? null
+  if (!fallbackTitle) return null
 
   const authors = Array.isArray(b.authors) ? b.authors : []
   const author = authors[0] ?? b.author ?? 'Unknown author'
@@ -207,7 +209,21 @@ const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lowe
   const date = String(b.date_published ?? '')
   const year = date ? Number(date.slice(0, 4)) || null : null
 
-  const score = computeMeaningfulRelevance(title, author, termWords)
+  // ISBNdb sometimes returns the original-language title in `title` and the English title in `title_long`.
+  // When we have search terms, pick whichever title matches the query better.
+  let title = fallbackTitle
+  let score = computeMeaningfulRelevance(title, author, termWords)
+  if (Array.isArray(termWords) && termWords.length > 0 && titlePrimary && titleLong && titlePrimary !== titleLong) {
+    const scorePrimary = computeMeaningfulRelevance(titlePrimary, author, termWords)
+    const scoreLong = computeMeaningfulRelevance(titleLong, author, termWords)
+    if (scoreLong > scorePrimary) {
+      title = titleLong
+      score = scoreLong
+    } else {
+      title = titlePrimary
+      score = scorePrimary
+    }
+  }
 
   return {
     key: `isbndb:${isbn ?? title}`,
