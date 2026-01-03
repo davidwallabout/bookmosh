@@ -113,6 +113,117 @@ const openLibraryIsbnCoverUrl = (isbn, size = 'M') => {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(clean)}-${size}.jpg`
 }
 
+const GOOGLE_BOOKS_API_KEY = import.meta.env?.VITE_GOOGLE_BOOKS_API_KEY
+
+const fetchGoogleBooks = async (query, maxResults = 20) => {
+  const q = (query ?? '').toString().trim()
+  if (!q) return []
+  try {
+    const url = new URL('https://www.googleapis.com/books/v1/volumes')
+    url.searchParams.set('q', q)
+    url.searchParams.set('maxResults', String(Math.min(40, Math.max(1, maxResults))))
+    if (GOOGLE_BOOKS_API_KEY) url.searchParams.set('key', GOOGLE_BOOKS_API_KEY)
+    const res = await fetch(url.toString())
+    if (!res.ok) return []
+    const data = await res.json()
+    const items = Array.isArray(data?.items) ? data.items : []
+    return items
+  } catch (error) {
+    console.error('Google Books search failed', error)
+    return []
+  }
+}
+
+const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
+  if (!supabase) return null
+  try {
+    if (supabase.functions?.invoke) {
+      const { data, error } = await supabase.functions.invoke('isbndb-search', {
+        body: { q, isbn, pageSize },
+      })
+      if (error) throw error
+      return data
+    }
+
+    const baseUrl = import.meta.env.VITE_SUPABASE_URL
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    if (!baseUrl || !anonKey) return null
+
+    const headers = {
+      'Content-Type': 'application/json',
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+    }
+
+    const res = await fetch(`${baseUrl}/functions/v1/isbndb-search`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ q, isbn, pageSize }),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch (error) {
+    console.error('ISBNdb search invoke failed', error)
+    return null
+  }
+}
+
+const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lower, termWords) => {
+  if (!b) return null
+  const title = b.title ?? b.title_long ?? null
+  if (!title) return null
+
+  const authors = Array.isArray(b.authors) ? b.authors : []
+  const author = authors[0] ?? b.author ?? 'Unknown author'
+  const isbn13 = b.isbn13 ?? null
+  const isbn = isbn13 || b.isbn || b.isbn10 || null
+  const cover = b.image || b.image_url || b.image_original || null
+  const date = String(b.date_published ?? '')
+  const year = date ? Number(date.slice(0, 4)) || null : null
+
+  const titleLower = String(title).toLowerCase()
+  const authorLower = String(author).toLowerCase()
+
+  let score = 0
+  if (titleLower.includes(searchLower)) score += 6
+  if (last3Lower && titleLower.includes(last3Lower)) score += 6
+  else if (last2Lower && titleLower.includes(last2Lower)) score += 5
+  else if (last1Lower && titleLower.includes(last1Lower)) score += 4
+  if (termWords.some((w) => w.length >= 3 && authorLower.includes(w.toLowerCase()))) score += 2
+
+  return {
+    key: `isbndb:${isbn ?? title}`,
+    source: 'isbndb',
+    title,
+    author,
+    year,
+    cover,
+    editionCount: 0,
+    rating: 0,
+    subjects: Array.isArray(b.subjects) ? b.subjects.slice(0, 3) : [],
+    isbn,
+    publisher: b.publisher ?? null,
+    language: b.language ?? null,
+    relevance: score,
+    synopsis: b.synopsis ?? b.overview ?? null,
+  }
+}
+
+const fetchGoogleVolume = async (volumeId) => {
+  const id = (volumeId ?? '').toString().trim()
+  if (!id) return null
+  try {
+    const url = new URL(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(id)}`)
+    if (GOOGLE_BOOKS_API_KEY) url.searchParams.set('key', GOOGLE_BOOKS_API_KEY)
+    const res = await fetch(url.toString())
+    if (!res.ok) return null
+    return await res.json()
+  } catch (error) {
+    console.error('Google Books volume fetch failed', error)
+    return null
+  }
+}
+
 const curatedRecommendations = []
 
 const initialTracker = []
@@ -1763,17 +1874,32 @@ function App() {
       const last2 = termWords.slice(-2).join(' ')
       const last3 = termWords.slice(-3).join(' ')
 
-      // Use general search to include both title and author
-      const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(termWithLanguage)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
-      )
-      const data = await response.json()
-      
       const searchLower = normalizedForQuery.toLowerCase()
       const last1Lower = last1.toLowerCase()
       const last2Lower = last2.toLowerCase()
       const last3Lower = last3.toLowerCase()
-      
+
+      // Primary provider: ISBNdb (via Edge Function)
+      const isbndbData = await invokeIsbndbSearch({ q: normalizedForQuery, pageSize: Math.min(50, limit) })
+      const isbndbBooks = Array.isArray(isbndbData?.books)
+        ? isbndbData.books
+        : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
+
+      const isbndbMapped = isbndbBooks
+        .map((b) => mapIsbndbBookToResult(b, searchLower, last1Lower, last2Lower, last3Lower, termWords))
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (b.relevance !== a.relevance) return b.relevance - a.relevance
+          return (b.year || 0) - (a.year || 0)
+        })
+        .slice(0, limit)
+
+      // Fallback provider: Open Library
+      const response = await fetch(
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(termWithLanguage)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+      )
+      const data = await response.json()
+
       // Filter and sort results for better relevance
       const mapped = data.docs
         .filter(doc => doc.title) // Only books with titles
@@ -1893,6 +2019,19 @@ function App() {
           console.error('Open Library fallback search failed', error)
         }
       }
+
+      // Final merge: ISBNdb primary + Open Library fallback results.
+      const byKey = new Map()
+      for (const r of [...isbndbMapped, ...merged]) {
+        const k = r.isbn ? `isbn:${r.isbn}` : (r.key || `${r.title}|${r.author}`)
+        if (!byKey.has(k)) byKey.set(k, r)
+      }
+      merged = Array.from(byKey.values())
+        .sort((a, b) => {
+          if (b.relevance !== a.relevance) return b.relevance - a.relevance
+          return (b.editionCount ?? 0) - (a.editionCount ?? 0)
+        })
+        .slice(0, limit)
       
       setSearchResults(merged)
       setHasSearched(true)
@@ -1935,7 +2074,17 @@ function App() {
 
   const handleAddBook = (book, status = 'to-read') => {
     setTracker((prev) => {
-      if (prev.some((item) => item.title === book.title)) {
+      const incomingIsbn = (book?.isbn ?? '').toString().trim()
+      const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
+      const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
+      const already = prev.some((item) => {
+        const existingIsbn = (item?.isbn ?? '').toString().trim()
+        if (incomingIsbn && existingIsbn && incomingIsbn === existingIsbn) return true
+        const t1 = String(item?.title ?? '').trim().toLowerCase()
+        const a1 = String(item?.author ?? '').trim().toLowerCase()
+        return Boolean(incomingTitle && t1 && incomingTitle === t1 && incomingAuthor && a1 && incomingAuthor === a1)
+      })
+      if (already) {
         setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
         setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
         return prev
@@ -3343,12 +3492,15 @@ function App() {
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      const olKey = normalized?.olKey ?? normalized?.key ?? null
+      const source = normalized?.source ?? null
+      const olKey = source === 'isbndb' ? null : (normalized?.olKey ?? normalized?.key ?? null)
       const isbn = normalized?.isbn ?? null
       if (olKey) params.set('olKey', olKey)
       else params.delete('olKey')
       if (isbn) params.set('isbn', isbn)
       else params.delete('isbn')
+      if (source) params.set('source', source)
+      else params.delete('source')
       params.set('bookTitle', normalized?.title ?? '')
       params.set('bookAuthor', normalized?.author ?? '')
       const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
@@ -3589,6 +3741,7 @@ function App() {
       const params = new URLSearchParams(window.location.search)
       params.delete('olKey')
       params.delete('isbn')
+      params.delete('source')
       params.delete('bookTitle')
       params.delete('bookAuthor')
       const qs = params.toString()
@@ -3604,11 +3757,36 @@ function App() {
     const bookAuthor = (params.get('bookAuthor') ?? '').trim()
     const olKey = (params.get('olKey') ?? '').trim()
     const isbn = (params.get('isbn') ?? '').trim()
+    const source = (params.get('source') ?? '').trim()
     if (!bookTitle) return
     if (selectedBook) return
+
+    if (source === 'isbndb' && isbn) {
+      ;(async () => {
+        const data = await invokeIsbndbSearch({ isbn })
+        const book = data?.book ?? null
+        if (!book) {
+          openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' })
+          return
+        }
+        const mapped = mapIsbndbBookToResult(book, bookTitle.toLowerCase(), '', '', '', [])
+        openModal(mapped || { title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' })
+      })()
+      return
+    }
+
     openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', olKey: olKey || null, isbn: isbn || null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!selectedBook) return
+    if ((selectedBook.source ?? null) !== 'isbndb') return
+    const synopsis = (selectedBook.synopsis ?? '').toString().trim()
+    if (synopsis) {
+      setModalDescription(synopsis)
+    }
+  }, [selectedBook?.source, selectedBook?.synopsis])
 
   const loadEditionCoversForSelectedBook = async () => {
     if (!selectedBook) return
