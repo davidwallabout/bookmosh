@@ -4531,6 +4531,25 @@ function App() {
     })
   }
 
+  const applyFeedQuickStatus = (book, nextStatus) => {
+    if (!book?.title) return
+    const incomingTitle = String(book.title ?? '').trim().toLowerCase()
+    const incomingAuthor = String(book.author ?? '').trim().toLowerCase()
+
+    const existing = (Array.isArray(tracker) ? tracker : []).find((b) => {
+      const t1 = String(b?.title ?? '').trim().toLowerCase()
+      const a1 = String(b?.author ?? '').trim().toLowerCase()
+      return Boolean(incomingTitle && t1 && incomingTitle === t1 && incomingAuthor && a1 && incomingAuthor === a1)
+    })
+
+    if (!existing) {
+      handleAddBook(book, nextStatus)
+      return
+    }
+
+    setBookStatusTag(existing.title, nextStatus)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10">
@@ -5291,6 +5310,13 @@ function App() {
                 {feedItems.length > 0 ? (
                   feedItems.slice(0, feedDisplayCount).map((item) => {
                     const book = mapFeedItemToBook(item)
+                    const libraryMatch = (Array.isArray(tracker) ? tracker : []).find((b) => {
+                      const t1 = String(b?.title ?? '').trim().toLowerCase()
+                      const a1 = String(b?.author ?? '').trim().toLowerCase()
+                      const t2 = String(book?.title ?? '').trim().toLowerCase()
+                      const a2 = String(book?.author ?? '').trim().toLowerCase()
+                      return Boolean(t1 && t2 && t1 === t2 && a1 && a2 && a1 === a2)
+                    })
                     return (
                       <div
                         key={item.id}
@@ -5318,6 +5344,28 @@ function App() {
                               </span>
                             ))}
                           </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {[
+                              { id: 'to-read', label: 'To Read' },
+                              { id: 'Reading', label: 'Reading' },
+                              { id: 'Read', label: 'Read' },
+                            ].map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => applyFeedQuickStatus(book, opt.id)}
+                                className={`rounded-full border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                                  (libraryMatch?.status ?? null) === opt.id
+                                    ? 'border-white/60 bg-white/10 text-white'
+                                    : 'border-white/20 text-white/70 hover:border-white/60 hover:text-white'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
                               type="button"
