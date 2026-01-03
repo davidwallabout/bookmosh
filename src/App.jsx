@@ -1658,13 +1658,8 @@ function App() {
       
       if (authError) {
         setAuthMessage('Invalid password')
-        // Sign out immediately to not create session
-        await supabase.auth.signOut({ scope: 'local' })
         return
       }
-      
-      // Sign out immediately - we don't want Supabase sessions
-      await supabase.auth.signOut({ scope: 'local' })
       
       // Store user profile directly in localStorage
       console.log('[AUTH] Login successful, storing user:', user.username)
@@ -1724,9 +1719,6 @@ function App() {
         console.error('Profile creation failed:', profileError)
         // Continue anyway - profile might already exist
       }
-      
-      // Sign out from Supabase (we manage sessions locally)
-      await supabase.auth.signOut({ scope: 'local' })
       
       // Log user in immediately
       localStorage.setItem('bookmosh-user', JSON.stringify(userProfile))
@@ -1968,8 +1960,12 @@ function App() {
     } catch (error) {
       console.error('Friend add error:', error)
       const message = String(error?.message || '')
-      if (message.toLowerCase().includes('row-level security') || message.toLowerCase().includes('permission')) {
+      const details = String(error?.details || error?.hint || '')
+      const combined = [message, details].filter(Boolean).join(' - ')
+      if (combined.toLowerCase().includes('row-level security') || combined.toLowerCase().includes('permission') || combined.toLowerCase().includes('not allowed')) {
         setFriendMessage('Unable to add friend (database permission denied).')
+      } else if (combined) {
+        setFriendMessage(`Failed to add friend: ${combined}`)
       } else {
         setFriendMessage('Failed to add friend. Please try again.')
       }
