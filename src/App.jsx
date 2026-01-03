@@ -2011,11 +2011,48 @@ function App() {
       )
       const data = await response.json()
 
+      const primaryDocs = Array.isArray(data?.docs) ? data.docs : []
+      let structuredDocs = []
+      if (termWords.length >= 3) {
+        const last1Word = String(termWords[termWords.length - 1] ?? '').trim()
+        const last2Words = termWords.slice(-2).join(' ').trim()
+        const titleGuess1 = termWords.slice(0, Math.max(1, termWords.length - 1)).join(' ').trim()
+        const titleGuess2 = termWords.slice(0, Math.max(1, termWords.length - 2)).join(' ').trim()
+
+        const queries = []
+        if (titleGuess1 && last1Word && titleGuess1.toLowerCase() !== normalizedForQuery.toLowerCase()) {
+          queries.push({ title: titleGuess1, author: last1Word })
+        }
+        if (titleGuess2 && last2Words && titleGuess2.toLowerCase() !== normalizedForQuery.toLowerCase()) {
+          queries.push({ title: titleGuess2, author: last2Words })
+        }
+
+        if (queries.length > 0) {
+          const structuredResults = await Promise.all(
+            queries.map(async ({ title, author }) => {
+              try {
+                const url = `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`
+                const res = await fetch(url)
+                if (!res.ok) return []
+                const json = await res.json()
+                return Array.isArray(json?.docs) ? json.docs : []
+              } catch {
+                return []
+              }
+            }),
+          )
+          structuredDocs = structuredResults.flat()
+        }
+      }
+
+      const openLibraryDocs = [...primaryDocs, ...structuredDocs]
+
       // Filter and sort results for better relevance
-      const mapped = data.docs
+      const mapped = openLibraryDocs
         .filter(doc => doc.title) // Only books with titles
         .map((doc) => ({
           key: doc.key,
+          source: 'openlibrary',
           title: doc.title,
           author: doc.author_name?.[0] ?? 'Unknown author',
           year: doc.first_publish_year,
@@ -2123,6 +2160,79 @@ function App() {
           return (b.editionCount ?? 0) - (a.editionCount ?? 0)
         })
         .slice(0, limit)
+
+      const queryAscii = normalizedForQuery === normalizedForQuery.replace(/[^\x00-\x7F]/g, '')
+      const asciiRatio = (value) => {
+        const s = String(value ?? '')
+        if (!s) return 0
+        const ascii = s.replace(/[^\x00-\x7F]/g, '').length
+        return ascii / s.length
+      }
+
+      if (queryAscii) {
+        const head = merged.slice(0, Math.min(6, merged.length))
+        const tail = merged.slice(Math.min(6, merged.length))
+
+        const upgradedHead = await Promise.all(
+          head.map(async (r) => {
+            if (r?.source !== 'openlibrary') return r
+            const workKey = String(r?.key ?? '')
+            if (!workKey.startsWith('/works/')) return r
+            if (asciiRatio(r.title) >= 0.8) return r
+
+            try {
+              const url = `https://openlibrary.org${workKey}/editions.json?limit=50`
+              const res = await fetch(url)
+              if (!res.ok) return r
+              const data = await res.json()
+              const entries = Array.isArray(data?.entries) ? data.entries : []
+              if (entries.length === 0) return r
+
+              let best = { score: r.relevance ?? 0, title: r.title, isbn: r.isbn ?? null }
+              for (const e of entries) {
+                const t = String(e?.title ?? '').trim()
+                if (!t) continue
+
+                const languages = Array.isArray(e?.languages) ? e.languages : []
+                const langKeys = languages.map((l) => String(l?.key ?? '')).filter(Boolean)
+                const isEnglish = langKeys.some((k) => k.includes('/languages/eng'))
+
+                let s = computeMeaningfulRelevance(t, r.author ?? '', termWords)
+                if (isEnglish) s += 2
+                if (asciiRatio(t) >= 0.9) s += 1
+
+                if (s > best.score) {
+                  const isbn =
+                    (Array.isArray(e?.isbn_13) ? e.isbn_13[0] : null) ||
+                    (Array.isArray(e?.isbn_10) ? e.isbn_10[0] : null) ||
+                    null
+                  best = { score: s, title: t, isbn }
+                }
+              }
+
+              if (best.title && best.title !== r.title) {
+                const next = { ...r, title: best.title, relevance: Math.max(r.relevance ?? 0, best.score) }
+                if (best.isbn) {
+                  next.isbn = best.isbn
+                  next.cover = openLibraryIsbnCoverUrl(best.isbn, 'M')
+                }
+                return next
+              }
+            } catch {
+              return r
+            }
+
+            return r
+          }),
+        )
+
+        merged = [...upgradedHead, ...tail]
+          .sort((a, b) => {
+            if (b.relevance !== a.relevance) return b.relevance - a.relevance
+            return (b.editionCount ?? 0) - (a.editionCount ?? 0)
+          })
+          .slice(0, limit)
+      }
       
       setSearchResults(merged)
       setHasSearched(true)
