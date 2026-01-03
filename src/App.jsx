@@ -112,7 +112,7 @@ const computeMeaningfulRelevance = (title, author, termWords) => {
   const authorLower = String(author ?? '').toLowerCase()
   const tokens = (Array.isArray(termWords) ? termWords : [])
     .map((w) => String(w ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ''))
-    .filter((w) => w.length >= 3)
+    .filter((w) => w.length >= 2) // Allow 2-char tokens like "mr"
 
   if (tokens.length === 0) return 0
 
@@ -120,8 +120,8 @@ const computeMeaningfulRelevance = (title, author, termWords) => {
   const authorHits = tokens.filter((t) => authorLower.includes(t)).length
 
   let score = 0
-  score += Math.min(3, titleHits) * 3
-  if (authorHits > 0) score += 4
+  score += Math.min(3, titleHits) * 2 // Title match: 2 points each
+  if (authorHits > 0) score += 3 // Author match: 3 points
   return score
 }
 
@@ -1886,7 +1886,7 @@ function App() {
           return result
         })
         .filter(Boolean)
-        .filter((r) => (r.relevance ?? 0) >= 4)
+        .filter((r) => (r.relevance ?? 0) >= 2)
         .sort((a, b) => {
           if (b.relevance !== a.relevance) return b.relevance - a.relevance
           return (b.year || 0) - (a.year || 0)
@@ -1923,7 +1923,7 @@ function App() {
             return score
           })()
         }))
-        .filter((r) => (r.relevance ?? 0) >= 4)
+        .filter((r) => (r.relevance ?? 0) >= 2)
         .sort((a, b) => {
           // Sort by relevance first, then by edition count
           if (b.relevance !== a.relevance) return b.relevance - a.relevance
