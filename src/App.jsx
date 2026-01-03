@@ -746,6 +746,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [showAllResults, setShowAllResults] = useState(false)
+  const [discoveryDisplayCount, setDiscoveryDisplayCount] = useState(6)
   const [searchDebounce, setSearchDebounce] = useState(null)
   const [selectedBook, setSelectedBook] = useState(null)
   const [modalRating, setModalRating] = useState(0)
@@ -1649,8 +1650,9 @@ function App() {
     }
     
     if (searchQuery.trim()) {
+      setDiscoveryDisplayCount(6)
       const newDebounce = setTimeout(() => {
-        fetchResults(searchQuery.trim(), showAllResults ? 100 : 6)
+        fetchResults(searchQuery.trim(), 60)
       }, 300)
       setSearchDebounce(newDebounce)
     } else {
@@ -1752,6 +1754,10 @@ function App() {
         ? normalizedForQuery
         : `${normalizedForQuery} language:eng`
 
+      const termWithoutLanguage = normalizedForQuery
+        .replace(/\blanguage\s*:\s*\w+/gi, '')
+        .trim()
+
       const termWords = normalizedWordsForQuery
       const last1 = termWords.slice(-1).join(' ')
       const last2 = termWords.slice(-2).join(' ')
@@ -1819,8 +1825,76 @@ function App() {
           return b.editionCount - a.editionCount
         })
         .slice(0, limit) // Take only the requested limit after sorting
+
+      // If English-bias yields very few hits, retry without language and merge.
+      let merged = mapped
+      if (merged.length < Math.min(12, limit) && termWithoutLanguage) {
+        try {
+          const fallbackRes = await fetch(
+            `https://openlibrary.org/search.json?q=${encodeURIComponent(termWithoutLanguage)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+          )
+          const fallbackData = await fallbackRes.json()
+          const fallbackMapped = (fallbackData.docs || [])
+            .filter((doc) => doc.title)
+            .map((doc) => ({
+              key: doc.key,
+              title: doc.title,
+              author: doc.author_name?.[0] ?? 'Unknown author',
+              year: doc.first_publish_year,
+              cover: doc.cover_i
+                ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+                : (doc.isbn?.[0] ? openLibraryIsbnCoverUrl(doc.isbn?.[0], 'M') : null),
+              editionCount: doc.edition_count || 0,
+              rating: doc.ratings_average || 0,
+              subjects: doc.subject?.slice(0, 3) || [],
+              isbn: doc.isbn?.[0] || null,
+              publisher: doc.publisher?.[0] || null,
+              language: doc.language?.[0] || null,
+              relevance: (() => {
+                const titleLower = String(doc.title ?? '').toLowerCase()
+                const authorLower = (doc.author_name ?? []).map((a) => String(a ?? '').toLowerCase())
+
+                const titleMatchFull = titleLower.includes(searchLower)
+                const titleMatchLast3 = last3Lower && titleLower.includes(last3Lower)
+                const titleMatchLast2 = last2Lower && titleLower.includes(last2Lower)
+                const titleMatchLast1 = last1Lower && titleLower.includes(last1Lower)
+
+                const authorMatchAnyWord = termWords.some((w) => {
+                  const wl = w.toLowerCase()
+                  return wl.length >= 3 && authorLower.some((a) => a.includes(wl))
+                })
+
+                let score = 0
+                if (titleMatchFull) score += 6
+                if (titleMatchLast3) score += 6
+                else if (titleMatchLast2) score += 5
+                else if (titleMatchLast1) score += 4
+
+                if (authorMatchAnyWord) score += 2
+
+                if ((doc.language ?? []).includes('eng')) score += 1
+
+                return score
+              })(),
+            }))
+
+          const byKey = new Map()
+          for (const r of [...merged, ...fallbackMapped]) {
+            const k = r.key || `${r.title}|${r.author}`
+            if (!byKey.has(k)) byKey.set(k, r)
+          }
+          merged = Array.from(byKey.values())
+            .sort((a, b) => {
+              if (b.relevance !== a.relevance) return b.relevance - a.relevance
+              return b.editionCount - a.editionCount
+            })
+            .slice(0, limit)
+        } catch (error) {
+          console.error('Open Library fallback search failed', error)
+        }
+      }
       
-      setSearchResults(mapped)
+      setSearchResults(merged)
       setHasSearched(true)
     } catch (err) {
       console.error('Open Library search failed', err)
@@ -3853,7 +3927,7 @@ function App() {
               {hasSearched && searchResults.length > 0 && (
                 <div className="mt-6">
                   <div className="grid gap-4 md:grid-cols-2">
-                    {(selectedAuthor || showAllResults ? searchResults : searchResults.slice(0, 6)).map((book) => (
+                    {(selectedAuthor || showAllResults ? searchResults : searchResults.slice(0, discoveryDisplayCount)).map((book) => (
                       <div
                         key={book.key}
                         className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#141b2d]/70 p-4 transition hover:border-white/40 cursor-pointer"
@@ -3931,14 +4005,14 @@ function App() {
                     ))}
                   </div>
 
-                  {!selectedAuthor && searchResults.length > 6 && (
+                  {!selectedAuthor && !showAllResults && discoveryDisplayCount < searchResults.length && (
                     <div className="mt-6 flex justify-center">
                       <button
                         type="button"
-                        onClick={() => setShowAllResults(!showAllResults)}
-                        className="rounded-2xl bg-gradient-to-r from-aurora/80 to-white/60 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-aurora hover:to-white/80 shadow-lg"
+                        onClick={() => setDiscoveryDisplayCount((prev) => Math.min(searchResults.length, prev + 20))}
+                        className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
                       >
-                        {showAllResults ? '← Show Less' : `Show All ${searchResults.length} Results →`}
+                        Show 20 more ({searchResults.length - discoveryDisplayCount} remaining)
                       </button>
                     </div>
                   )}
