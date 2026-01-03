@@ -5002,9 +5002,6 @@ function App() {
                               </div>
 
                               <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
-                                  {l.item_count ?? 0}
-                                </span>
                                 <div className="flex items-center">
                                   {Array.from({ length: Math.min(4, (l.preview_covers ?? []).length || 0) }).map((_, idx) => {
                                     const cover = l.preview_covers[idx]
@@ -5027,25 +5024,40 @@ function App() {
                           </button>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {listsTab === 'mine' ? (
-                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
-                                {l.is_public ? 'Public' : 'Private'}
-                              </span>
+                              <>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.is_public ? 'Public' : 'Private'}
+                                </span>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.item_count ?? 0}
+                                </span>
+                              </>
                             ) : listsTab === 'following' ? (
-                              <button
-                                type="button"
-                                onClick={() => unfollowList(l.id)}
-                                className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
-                              >
-                                Unfollow
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => unfollowList(l.id)}
+                                  className="rounded-full border border-rose-500/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                                >
+                                  Unfollow
+                                </button>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.item_count ?? 0}
+                                </span>
+                              </>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => followList(l.id)}
-                                className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                              >
-                                Follow
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => followList(l.id)}
+                                  className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                                >
+                                  Follow
+                                </button>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.item_count ?? 0}
+                                </span>
+                              </>
                             )}
                           </div>
                         </div>
