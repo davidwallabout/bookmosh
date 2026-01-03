@@ -6033,38 +6033,42 @@ function App() {
 
         {/* Friend Profile Modal */}
         {selectedFriend && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
-            <div className="w-full h-full sm:h-auto sm:max-w-2xl rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col pt-[env(safe-area-inset-top)]">
-              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-4 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
-                <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5 flex-shrink-0">
-                    <img src={getProfileAvatarUrl(selectedFriend)} alt="Avatar" className="h-full w-full object-cover" />
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-3xl px-4 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5 flex-shrink-0">
+                        <img src={getProfileAvatarUrl(selectedFriend)} alt="Avatar" className="h-full w-full object-cover" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.4em] text-white/40">Friend</p>
+                        <h2 className="text-2xl font-semibold text-white break-words">{selectedFriend.username}</h2>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleUnfriend(selectedFriend.username)}
+                        className="rounded-full border border-rose-500/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
+                      >
+                        Unfriend
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFriend(null)}
+                        className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleUnfriend(selectedFriend.username)}
-                    className="rounded-full border border-rose-500/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
-                  >
-                    Unfriend
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFriend(null)}
-                    className="text-white/60 hover:text-white transition text-2xl"
-                  >
-                    ✕
-                  </button>
-                </div>
                 </div>
               </div>
 
-              <div className="space-y-4 flex-1 overflow-auto">
+              <div className="mx-auto w-full max-w-3xl px-4 py-6">
+                <div className="space-y-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                   <div className="grid grid-cols-4 gap-2">
@@ -6121,6 +6125,7 @@ function App() {
                   ) : (
                     <p className="text-sm text-white/60">No books in library yet</p>
                   )}
+                </div>
                 </div>
               </div>
             </div>
