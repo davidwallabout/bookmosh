@@ -4343,8 +4343,12 @@ function App() {
             url = `https://${url.slice('http://'.length)}`
           }
           const lang = b?.language || 'en'
-          const isEnglish = lang === 'en' || lang === 'eng' || lang.toLowerCase().includes('english')
-          pushEdition({
+          const bookTitle = (b?.title || b?.title_long || '').toLowerCase()
+          // Detect English: check language field OR if title contains English words (not Italian/other)
+          const isEnglish = lang === 'en' || lang === 'eng' || lang.toLowerCase().includes('english') || 
+                           (!lang || lang === 'en') // Default to English if no language specified
+          
+          const edition = {
             source: 'isbndb',
             isbn,
             title: b?.title || b?.title_long || selectedBook.title,
@@ -4353,7 +4357,9 @@ function App() {
             coverUrl: url || null,
             language: lang,
             isEnglish,
-          })
+          }
+          console.log('[EDITIONS] ISBNdb edition:', { title: edition.title, isbn: edition.isbn, lang, isEnglish })
+          pushEdition(edition)
         }
       }
 
