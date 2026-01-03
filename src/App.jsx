@@ -997,6 +997,7 @@ function App() {
   const brokenCoverKeysRef = useRef(new Set())
   const [brokenCoverKeysVersion, setBrokenCoverKeysVersion] = useState(0)
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
+  const messagesEndRef = useRef(null)
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
 
@@ -2501,6 +2502,11 @@ function App() {
         console.log('[MOSH] Updated messages count:', updated.length)
         return updated
       })
+      
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
       
       await supabase
         .from('mosh_reads')
@@ -6512,6 +6518,7 @@ function App() {
                         {activeMoshMessages.length === 0 && (
                           <p className="text-sm text-white/60">No messages yet.</p>
                         )}
+                        <div ref={messagesEndRef} />
                       </div>
 
                       <div className="mt-4 relative">
