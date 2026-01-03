@@ -107,6 +107,24 @@ const getProfileAvatarUrl = (user) => {
   return iconDataUrl(icon.svg)
 }
 
+const computeMeaningfulRelevance = (title, author, termWords) => {
+  const titleLower = String(title ?? '').toLowerCase()
+  const authorLower = String(author ?? '').toLowerCase()
+  const tokens = (Array.isArray(termWords) ? termWords : [])
+    .map((w) => String(w ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ''))
+    .filter((w) => w.length >= 3)
+
+  if (tokens.length === 0) return 0
+
+  const titleHits = tokens.filter((t) => titleLower.includes(t)).length
+  const authorHits = tokens.filter((t) => authorLower.includes(t)).length
+
+  let score = 0
+  score += Math.min(3, titleHits) * 3
+  if (authorHits > 0) score += 4
+  return score
+}
+
 const openLibraryIsbnCoverUrl = (isbn, size = 'M') => {
   const clean = (isbn ?? '').toString().trim()
   if (!clean) return null
@@ -204,15 +222,7 @@ const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lowe
   const date = String(b.date_published ?? '')
   const year = date ? Number(date.slice(0, 4)) || null : null
 
-  const titleLower = String(title).toLowerCase()
-  const authorLower = String(author).toLowerCase()
-
-  let score = 0
-  if (titleLower.includes(searchLower)) score += 6
-  if (last3Lower && titleLower.includes(last3Lower)) score += 6
-  else if (last2Lower && titleLower.includes(last2Lower)) score += 5
-  else if (last1Lower && titleLower.includes(last1Lower)) score += 4
-  if (termWords.some((w) => w.length >= 3 && authorLower.includes(w.toLowerCase()))) score += 2
+  const score = computeMeaningfulRelevance(title, author, termWords)
 
   return {
     key: `isbndb:${isbn ?? title}`,
@@ -1851,6 +1861,7 @@ function App() {
       const isbndbMapped = isbndbBooks
         .map((b) => mapIsbndbBookToResult(b, searchLower, last1Lower, last2Lower, last3Lower, termWords))
         .filter(Boolean)
+        .filter((r) => (r.relevance ?? 0) >= 4)
         .sort((a, b) => {
           if (b.relevance !== a.relevance) return b.relevance - a.relevance
           return (b.year || 0) - (a.year || 0)
@@ -1882,32 +1893,12 @@ function App() {
           language: doc.language?.[0] || null,
           // Calculate relevance score based on title and author match
           relevance: (() => {
-            const titleLower = String(doc.title ?? '').toLowerCase()
-            const authorLower = (doc.author_name ?? []).map((a) => String(a ?? '').toLowerCase())
-
-            const titleMatchFull = titleLower.includes(searchLower)
-            const titleMatchLast3 = last3Lower && titleLower.includes(last3Lower)
-            const titleMatchLast2 = last2Lower && titleLower.includes(last2Lower)
-            const titleMatchLast1 = last1Lower && titleLower.includes(last1Lower)
-
-            const authorMatchAnyWord = termWords.some((w) => {
-              const wl = w.toLowerCase()
-              return wl.length >= 3 && authorLower.some((a) => a.includes(wl))
-            })
-
-            let score = 0
-            if (titleMatchFull) score += 6
-            if (titleMatchLast3) score += 6
-            else if (titleMatchLast2) score += 5
-            else if (titleMatchLast1) score += 4
-
-            if (authorMatchAnyWord) score += 2
-
+            let score = computeMeaningfulRelevance(doc.title, doc.author_name?.[0] ?? '', termWords)
             if ((doc.language ?? []).includes('eng')) score += 1
-
             return score
           })()
         }))
+        .filter((r) => (r.relevance ?? 0) >= 4)
         .sort((a, b) => {
           // Sort by relevance first, then by edition count
           if (b.relevance !== a.relevance) return b.relevance - a.relevance
