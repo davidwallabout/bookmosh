@@ -955,8 +955,15 @@ function App() {
       if (error) throw error
 
       const rows = Array.isArray(data) ? data : []
-      setIncomingFriendRequests(rows.filter((r) => r.recipient_id === currentUser.id))
-      setOutgoingFriendRequests(rows.filter((r) => r.requester_id === currentUser.id))
+      const friendsSet = new Set((Array.isArray(currentUser?.friends) ? currentUser.friends : []).map((f) => (f ?? '').toLowerCase()))
+      const filtered = rows.filter((r) => {
+        const otherUsername = r.requester_id === currentUser.id ? r.recipient_username : r.requester_username
+        if (!otherUsername) return true
+        return !friendsSet.has(otherUsername.toLowerCase())
+      })
+
+      setIncomingFriendRequests(filtered.filter((r) => r.recipient_id === currentUser.id))
+      setOutgoingFriendRequests(filtered.filter((r) => r.requester_id === currentUser.id))
     } catch (error) {
       console.error('Failed to load friend requests', error)
       setIncomingFriendRequests([])
