@@ -26,6 +26,87 @@ const resolveOpenLibraryWorkKey = async (book) => {
     }
   }
 
+  const closeMoshCoverPicker = () => {
+    setIsMoshCoverPickerOpen(false)
+    setMoshCoverPickerLoading(false)
+    setMoshCoverPickerCovers([])
+  }
+
+  const loadEditionCoversForActiveMosh = async () => {
+    if (!activeMosh) return
+    setMoshCoverPickerLoading(true)
+    setMoshCoverPickerCovers([])
+    try {
+      const workKey = await resolveOpenLibraryWorkKey({
+        title: activeMosh.book_title,
+        author: activeMosh.book_author,
+      })
+      if (!workKey) {
+        setMoshCoverPickerCovers([])
+        return
+      }
+
+      const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=100`
+      const response = await fetch(editionsUrl)
+      if (!response.ok) {
+        setMoshCoverPickerCovers([])
+        return
+      }
+
+      const data = await response.json()
+      const entries = Array.isArray(data?.entries) ? data.entries : []
+      const seen = new Set()
+      const covers = []
+
+      for (const edition of entries) {
+        const coverIds = Array.isArray(edition?.covers) ? edition.covers : []
+        const editionKey = typeof edition?.key === 'string' ? edition.key : null
+        for (const coverId of coverIds) {
+          const key = String(coverId)
+          if (seen.has(key)) continue
+          seen.add(key)
+          covers.push({
+            coverId,
+            editionKey,
+            urlM: `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`,
+            urlS: `https://covers.openlibrary.org/b/id/${coverId}-S.jpg`,
+          })
+        }
+      }
+
+      setMoshCoverPickerCovers(covers)
+    } catch (error) {
+      console.error('Failed to load mosh edition covers', error)
+      setMoshCoverPickerCovers([])
+    } finally {
+      setMoshCoverPickerLoading(false)
+    }
+  }
+
+  const openMoshCoverPicker = async () => {
+    if (!activeMosh) return
+    setIsMoshCoverPickerOpen(true)
+    await loadEditionCoversForActiveMosh()
+  }
+
+  const updateActiveMoshCover = async (coverUrl) => {
+    if (!supabase || !activeMosh) return
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .update({ book_cover: coverUrl })
+        .eq('id', activeMosh.id)
+        .select('*')
+      if (error) throw error
+      const updated = Array.isArray(data) ? data[0] : null
+      if (updated) setActiveMosh(updated)
+      await fetchActiveMoshes()
+      closeMoshCoverPicker()
+    } catch (error) {
+      console.error('Failed to update mosh cover', error)
+    }
+  }
+
   const title = (book?.title ?? '').toString().trim()
   const author = (book?.author ?? '').toString().trim()
   if (!title) return null
@@ -719,6 +800,9 @@ function App() {
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
   const [activeMosh, setActiveMosh] = useState(null)
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
+  const [isMoshCoverPickerOpen, setIsMoshCoverPickerOpen] = useState(false)
+  const [moshCoverPickerLoading, setMoshCoverPickerLoading] = useState(false)
+  const [moshCoverPickerCovers, setMoshCoverPickerCovers] = useState([])
   const [moshDraft, setMoshDraft] = useState('')
   const [moshMentionQuery, setMoshMentionQuery] = useState('')
   const [showMentionDropdown, setShowMentionDropdown] = useState(false)
@@ -3984,6 +4068,14 @@ function App() {
                     >
                       {(activeMosh?.is_public ?? true) ? 'Make Private' : 'Make Public'}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={openMoshCoverPicker}
+                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      Change cover
+                    </button>
                     
                     <button
                       type="button"
@@ -4406,6 +4498,70 @@ function App() {
                 </div>
               ) : (
                 <p className="text-sm text-white/60">No books found for this author.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {currentUser && activeMosh && isMoshCoverPickerOpen && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeMoshCoverPicker()
+            }}
+          >
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+              <div className="flex items-start justify-between mb-5">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh Cover</p>
+                  <h2 className="text-xl font-semibold text-white">Choose a cover</h2>
+                  <p className="text-sm text-white/60 line-clamp-1">{activeMosh.book_title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeMoshCoverPicker}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-20 w-16 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                  {activeMosh.book_cover ? (
+                    <img src={activeMosh.book_cover} alt={activeMosh.book_title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={loadEditionCoversForActiveMosh}
+                  className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {moshCoverPickerLoading ? (
+                <p className="text-sm text-white/60">Loading edition covers…</p>
+              ) : moshCoverPickerCovers.length > 0 ? (
+                <div className="max-h-[60vh] overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+                    {moshCoverPickerCovers.map((c) => (
+                      <button
+                        key={`${c.coverId}-${c.editionKey ?? ''}`}
+                        type="button"
+                        onClick={() => updateActiveMoshCover(c.urlM)}
+                        className="h-20 w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/40"
+                      >
+                        <img src={c.urlS} alt="Edition cover" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-white/60">No edition covers found for this mosh.</p>
               )}
             </div>
           </div>
