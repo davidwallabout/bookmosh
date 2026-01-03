@@ -6920,7 +6920,7 @@ function App() {
                         <p className="text-sm text-white/60">Loading edition covers…</p>
                       ) : coverPickerCovers.length > 0 ? (
                         <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
-                          <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+                          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
                             {coverPickerCovers.map((c) => (
                               (() => {
                                 const coverKey = `cover:${c.key || `${c.coverId}-${c.editionKey ?? ''}`}`
@@ -6938,10 +6938,10 @@ function App() {
                                   setShowCoverPicker(false)
                                   setCoverPickerCovers([])
                                 }}
-                                className="h-20 w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/40"
+                                className="aspect-[2/3] w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/40"
                               >
                                 <img
-                                  src={c.urlS}
+                                  src={c.urlM}
                                   alt="Edition cover"
                                   className="h-full w-full object-cover"
                                   onError={() => markCoverBroken(coverKey)}
