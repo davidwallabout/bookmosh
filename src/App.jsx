@@ -2789,7 +2789,7 @@ function App() {
   useEffect(() => {
     if (!supabase || !currentUser) return
     fetchActiveMoshes()
-  }, [currentUser])
+  }, [currentUser, moshArchiveFilter])
 
   const setBookStatusTag = (title, nextStatus) => {
     const current = tracker.find((b) => b.title === title)
