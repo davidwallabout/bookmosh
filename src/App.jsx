@@ -699,6 +699,8 @@ function App() {
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalMood, setModalMood] = useState('')
+  const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
+  const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
   const [libraryFilterTags, setLibraryFilterTags] = useState([])
   const [selectedAuthor, setSelectedAuthor] = useState(null)
@@ -725,6 +727,7 @@ function App() {
   const [moshInviteFriends, setMoshInviteFriends] = useState([])
   const [moshInviteSearch, setMoshInviteSearch] = useState('')
   const [moshInviteTitle, setMoshInviteTitle] = useState('')
+  const [moshInviteIsPublic, setMoshInviteIsPublic] = useState(true)
   const [moshInviteError, setMoshInviteError] = useState('')
   const [moshInviteLoading, setMoshInviteLoading] = useState(false)
   const [isMoshAddFriendsOpen, setIsMoshAddFriendsOpen] = useState(false)
@@ -1511,6 +1514,7 @@ function App() {
             created_by_username: currentUser.username,
             participants_ids: participantsIds,
             participants_usernames: participantsUsernames,
+            is_public: moshInviteIsPublic,
             archived: false,
           },
         ])
@@ -1559,6 +1563,7 @@ function App() {
     setMoshInviteFriends([])
     setMoshInviteSearch('')
     setMoshInviteTitle('')
+    setMoshInviteIsPublic(true)
     setMoshInviteError('')
     setIsMoshInviteOpen(true)
   }
@@ -1569,6 +1574,7 @@ function App() {
     setMoshInviteFriends([])
     setMoshInviteSearch('')
     setMoshInviteTitle('')
+    setMoshInviteIsPublic(true)
     setMoshInviteError('')
     setMoshInviteLoading(false)
   }
@@ -2290,6 +2296,61 @@ function App() {
     setModalProgress(book.progress ?? 0)
     setModalStatus(normalized.status ?? statusOptions[0])
     setModalMood(book.mood ?? '')
+  }
+
+  useEffect(() => {
+    if (!supabase || !selectedBook) return
+    let canceled = false
+    setPublicMoshesForBookLoading(true)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('moshes')
+          .select('id, book_title, book_author, book_cover, mosh_title, created_at, participants_ids, participants_usernames, archived, is_public')
+          .eq('book_title', selectedBook.title)
+          .eq('archived', false)
+          .eq('is_public', true)
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (error) throw error
+        const rows = Array.isArray(data) ? data : []
+        const sorted = rows
+          .slice()
+          .sort((a, b) => (b.participants_usernames?.length ?? 0) - (a.participants_usernames?.length ?? 0))
+
+        if (!canceled) {
+          setPublicMoshesForBook(sorted)
+        }
+      } catch (err) {
+        console.error('Failed to load public moshes for book', err)
+        if (!canceled) setPublicMoshesForBook([])
+      } finally {
+        if (!canceled) setPublicMoshesForBookLoading(false)
+      }
+    })()
+
+    return () => {
+      canceled = true
+    }
+  }, [selectedBook, supabase])
+
+  const toggleActiveMoshVisibility = async () => {
+    if (!supabase || !activeMosh) return
+    try {
+      const next = !(activeMosh.is_public ?? true)
+      const { data, error } = await supabase
+        .from('moshes')
+        .update({ is_public: next })
+        .eq('id', activeMosh.id)
+        .select('*')
+      if (error) throw error
+      const updated = Array.isArray(data) ? data[0] : null
+      if (updated) setActiveMosh(updated)
+      await fetchActiveMoshes()
+    } catch (error) {
+      console.error('Failed to toggle mosh visibility', error)
+    }
   }
 
   const handleModalRating = (value) => {
@@ -3591,6 +3652,39 @@ function App() {
               </div>
 
               <div className="mt-5 space-y-3">
+                <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Visibility</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMoshInviteIsPublic(true)}
+                    className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                      moshInviteIsPublic
+                        ? 'border-white/60 bg-white/10 text-white'
+                        : 'border-white/20 text-white/70 hover:border-white/60'
+                    }`}
+                  >
+                    Public
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMoshInviteIsPublic(false)}
+                    className={`flex-1 rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                      !moshInviteIsPublic
+                        ? 'border-white/60 bg-white/10 text-white'
+                        : 'border-white/20 text-white/70 hover:border-white/60'
+                    }`}
+                  >
+                    Private
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/50">
+                  {moshInviteIsPublic
+                    ? 'Public moshes can be discovered from the book page.'
+                    : 'Private moshes are hidden and only visible to participants.'}
+                </p>
+              </div>
+
+              <div className="mt-5 space-y-3">
                 <label className="block text-xs uppercase tracking-[0.3em] text-white/50">Invite Friends</label>
                 
                 {/* Selected friends tiles */}
@@ -3882,6 +3976,14 @@ function App() {
                     >
                       Add friends
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleActiveMoshVisibility}
+                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      {(activeMosh?.is_public ?? true) ? 'Make Private' : 'Make Public'}
+                    </button>
                     
                     <button
                       type="button"
@@ -3924,6 +4026,33 @@ function App() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Moshes</label>
+                  {publicMoshesForBookLoading ? (
+                    <p className="text-sm text-white/60">Loading public moshes…</p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-white/60">{publicMoshesForBook.length} public moshes</p>
+                      {publicMoshesForBook.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Popular public</p>
+                          {publicMoshesForBook.slice(0, 3).map((mosh) => (
+                            <div key={mosh.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white line-clamp-1">{mosh.mosh_title || mosh.book_title}</p>
+                                <p className="text-xs text-white/50">by {mosh.created_by_username || 'reader'}</p>
+                              </div>
+                              <div className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+                                {(mosh.participants_usernames?.length ?? 0)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Cover</label>
                   <div className="flex items-center gap-3">
