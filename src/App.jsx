@@ -399,7 +399,7 @@ const searchUsers = async (query) => {
     const normalized = query.trim()
     const { data: exactData, error: exactError } = await supabase
       .from('users')
-      .select('id, username')
+      .select('id, username, email')
       .or(`username.ilike.${normalized},email.ilike.${normalized}`)
       .limit(5)
     
@@ -409,7 +409,7 @@ const searchUsers = async (query) => {
 
     const { data, error } = await supabase
       .from('users')
-      .select('id, username')
+      .select('id, username, email')
       .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%`)
       .limit(10)
 
@@ -417,7 +417,7 @@ const searchUsers = async (query) => {
     return data || []
   } catch (error) {
     console.error('Error searching users:', error)
-    return []
+    throw error
   }
 }
 
@@ -3358,7 +3358,22 @@ function App() {
       const existingFriends = Array.isArray(currentUser.friends) ? currentUser.friends : []
       
       // Search for users
-      const searchResults = await searchUsers(query)
+      let searchResults = []
+      try {
+        searchResults = await searchUsers(query)
+      } catch (e) {
+        const message = String(e?.message || '')
+        const details = String(e?.details || e?.hint || '')
+        const combined = [message, details].filter(Boolean).join(' - ')
+        if (combined.toLowerCase().includes('row-level security') || combined.toLowerCase().includes('permission') || combined.toLowerCase().includes('not allowed')) {
+          setFriendMessage('Unable to search users (database permission denied).')
+        } else if (combined) {
+          setFriendMessage(`Unable to search users: ${combined}`)
+        } else {
+          setFriendMessage('Unable to search users right now.')
+        }
+        return
+      }
       
       if (searchResults.length === 0) {
         setFriendMessage(`No user found for "${query}".`)
