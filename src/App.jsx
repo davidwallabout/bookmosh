@@ -107,6 +107,12 @@ const getProfileAvatarUrl = (user) => {
   return iconDataUrl(icon.svg)
 }
 
+const openLibraryIsbnCoverUrl = (isbn, size = 'M') => {
+  const clean = (isbn ?? '').toString().trim()
+  if (!clean) return null
+  return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(clean)}-${size}.jpg`
+}
+
 const curatedRecommendations = []
 
 const initialTracker = []
@@ -582,64 +588,6 @@ const startBackgroundMatching = (books, setTracker, username, setMatchingProgres
     }
   }
 
-  const openAuthorModal = async (authorName) => {
-    const name = (authorName ?? '').trim()
-    if (!name || name === 'Unknown author') return
-
-    setIsAuthorModalOpen(true)
-    setAuthorModalName(name)
-    setAuthorModalBooks([])
-    setAuthorModalLoading(true)
-
-    try {
-      const response = await fetch(
-        `https://openlibrary.org/search.json?author=${encodeURIComponent(name)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
-      )
-      const data = await response.json()
-
-      const authorLower = name.toLowerCase()
-
-      const mapped = (data.docs || [])
-        .filter((doc) => {
-          if (!doc.title) return false
-          const title = doc.title.toLowerCase()
-          if (
-            title.includes('best of') ||
-            title.includes('anthology') ||
-            title.includes('collection') ||
-            title.includes('complete works') ||
-            title.includes('selected works')
-          ) {
-            return false
-          }
-          if (doc.author_name?.some((a) => a.toLowerCase().includes(authorLower))) return true
-          return true
-        })
-        .map((doc) => ({
-          key: doc.key,
-          title: doc.title,
-          author: doc.author_name?.[0] ?? name,
-          year: doc.first_publish_year,
-          cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
-          editionCount: doc.edition_count || 0,
-          rating: doc.ratings_average || 0,
-          subjects: doc.subject?.slice(0, 3) || [],
-          isbn: doc.isbn?.[0] || null,
-          publisher: doc.publisher?.[0] || null,
-          language: doc.language?.[0] || null,
-        }))
-        .sort((a, b) => {
-          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
-          return (b.year || 0) - (a.year || 0)
-        })
-
-      setAuthorModalBooks(mapped)
-    } catch (error) {
-      console.error('Author modal search failed', error)
-    } finally {
-      setAuthorModalLoading(false)
-    }
-  }
   setTimeout(matchNext, 1000) // Start after 1 second
 }
 
@@ -1750,7 +1698,7 @@ function App() {
           year: doc.first_publish_year,
           cover: doc.cover_i
             ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-            : null,
+            : (doc.isbn?.[0] ? openLibraryIsbnCoverUrl(doc.isbn?.[0], 'M') : null),
           editionCount: doc.edition_count || 0,
           rating: doc.ratings_average || 0,
           subjects: doc.subject?.slice(0, 3) || [],
@@ -1830,7 +1778,7 @@ function App() {
           year: doc.first_publish_year,
           cover: doc.cover_i
             ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-            : null,
+            : (doc.isbn?.[0] ? openLibraryIsbnCoverUrl(doc.isbn?.[0], 'M') : null),
           editionCount: doc.edition_count || 0,
           rating: doc.ratings_average || 0,
           subjects: doc.subject?.slice(0, 3) || [],
@@ -3318,6 +3266,20 @@ function App() {
     setModalReview(book.review ?? '')
     setModalDescription('')
     setModalDescriptionLoading(false)
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const olKey = normalized?.olKey ?? normalized?.key ?? null
+      const isbn = normalized?.isbn ?? null
+      if (olKey) params.set('olKey', olKey)
+      else params.delete('olKey')
+      if (isbn) params.set('isbn', isbn)
+      else params.delete('isbn')
+      params.set('bookTitle', normalized?.title ?? '')
+      params.set('bookAuthor', normalized?.author ?? '')
+      const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
+      window.history.replaceState({}, '', next)
+    }
   }
 
   useEffect(() => {
@@ -3527,18 +3489,6 @@ function App() {
     }
   }
 
-  const closeModal = () => {
-    setSelectedBook(null)
-    setShowFindMatch(false)
-    setFindMatchQuery('')
-    setFindMatchResults([])
-    setShowCoverPicker(false)
-    setCoverPickerLoading(false)
-    setCoverPickerCovers([])
-    setModalDescription('')
-    setModalDescriptionLoading(false)
-  }
-
   const handleModalSave = () => {
     if (!selectedBook) return
     updateBook(selectedBook.title, {
@@ -3551,6 +3501,40 @@ function App() {
     logBookEvent(selectedBook, 'updated')
     closeModal()
   }
+
+  const closeModal = () => {
+    setSelectedBook(null)
+    setShowFindMatch(false)
+    setFindMatchQuery('')
+    setFindMatchResults([])
+    setFindMatchLoading(false)
+    setShowCoverPicker(false)
+    setCoverPickerCovers([])
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      params.delete('olKey')
+      params.delete('isbn')
+      params.delete('bookTitle')
+      params.delete('bookAuthor')
+      const qs = params.toString()
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+      window.history.replaceState({}, '', next)
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const bookTitle = (params.get('bookTitle') ?? '').trim()
+    const bookAuthor = (params.get('bookAuthor') ?? '').trim()
+    const olKey = (params.get('olKey') ?? '').trim()
+    const isbn = (params.get('isbn') ?? '').trim()
+    if (!bookTitle) return
+    if (selectedBook) return
+    openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', olKey: olKey || null, isbn: isbn || null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const loadEditionCoversForSelectedBook = async () => {
     if (!selectedBook) return
@@ -5899,13 +5883,28 @@ function App() {
                       <h2 className="text-xl font-semibold text-white break-words">{selectedBook.title}</h2>
                       <p className="text-sm text-white/60 break-words">{selectedBook.author}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      className="flex-shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                    >
-                      Close
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof window === 'undefined') return
+                          const url = window.location.href
+                          if (navigator?.clipboard?.writeText) {
+                            navigator.clipboard.writeText(url)
+                          }
+                        }}
+                        className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        Copy link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeModal}
+                        className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5956,6 +5955,12 @@ function App() {
                     <div className="h-24 w-16 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
                       {selectedBook.cover ? (
                         <img src={selectedBook.cover} alt={selectedBook.title} className="h-full w-full object-cover" />
+                      ) : selectedBook.isbn ? (
+                        <img
+                          src={openLibraryIsbnCoverUrl(selectedBook.isbn, 'M')}
+                          alt={selectedBook.title}
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">None</div>
                       )}
