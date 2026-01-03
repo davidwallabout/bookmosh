@@ -3730,11 +3730,14 @@ function App() {
 
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {profileTopBooks.map((title, idx) => {
                           const book = title ? tracker.find((b) => b.title === title) : null
                           return (
-                            <div key={`${idx}-${title || 'empty'}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                            <div
+                              key={`${idx}-${title || 'empty'}`}
+                              className="rounded-2xl border border-white/10 bg-white/5 p-2 flex flex-col"
+                            >
                               <button
                                 type="button"
                                 onClick={() => {
@@ -3745,7 +3748,7 @@ function App() {
                                   // Default action = edit cover/details
                                   openModal(book ?? { title, author: 'Unknown author', cover: null })
                                 }}
-                                className="relative h-20 w-full"
+                                className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
                               >
                                 {title ? (
                                   book?.cover ? (
@@ -3759,25 +3762,25 @@ function App() {
                               </button>
 
                               {title && (
-                                <div className="grid grid-cols-3 gap-1 border-t border-white/10 bg-[#050914]/50 p-1">
+                                <div className="mt-2 flex flex-col gap-1">
                                   <button
                                     type="button"
                                     onClick={() => openTopBookModal(idx, `${title}`)}
-                                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
+                                    className="w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
                                   >
                                     Change
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => openModal(book ?? { title, author: 'Unknown author', cover: null })}
-                                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
+                                    className="w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
                                   >
                                     Cover
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => clearTopBookSlot(idx)}
-                                    className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-300 transition hover:border-rose-500/60"
+                                    className="w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-300 transition hover:border-rose-500/60"
                                   >
                                     Remove
                                   </button>
@@ -3787,7 +3790,9 @@ function App() {
                           )
                         })}
                         {Array.from({ length: Math.max(0, 4 - profileTopBooks.length) }).map((_, idx) => (
-                          <div key={idx} className="h-20 rounded-xl border border-dashed border-white/10 bg-white/5" />
+                          <div key={idx} className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-2">
+                            <div className="w-full rounded-xl border border-white/10 bg-white/5 aspect-[2/3]" />
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -4427,9 +4432,10 @@ function App() {
         )}
 
         {currentUser && isMoshPanelOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="w-[clamp(320px,80vw,900px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
-              <div className="flex items-start justify-between">
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm sm:items-center p-0 sm:p-4">
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(320px,80vw,900px)] rounded-none sm:rounded-3xl border border-white/15 bg-[#0b1225]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
+                <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
                   <h2 className="text-xl font-semibold text-white">{activeMosh?.book_title ?? 'Active Moshes'}</h2>
@@ -4451,10 +4457,11 @@ function App() {
                     Close
                   </button>
                 </div>
+                </div>
               </div>
 
               {!activeMosh ? (
-                <div className="mt-5 space-y-4">
+                <div className="mt-5 space-y-4 flex-1 overflow-auto pr-0 sm:pr-0">
                   <div className="flex gap-2 justify-center">
                     <button
                       type="button"
@@ -4552,9 +4559,9 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
-                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <div className="max-h-[45vh] space-y-3 overflow-auto pr-2">
+                <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr] flex-1 overflow-auto">
+                  <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4 flex flex-col">
+                    <div className="flex-1 min-h-0 space-y-3 overflow-auto pr-2">
                       {activeMoshMessages.map((msg) => (
                         <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                           <p className="text-xs uppercase tracking-[0.3em] text-white/50">{msg.sender_username}</p>
