@@ -502,7 +502,7 @@ const matchBookInBackground = async (book, setTracker) => {
   try {
     const searchQuery = `${book.title} ${book.author}`.trim()
     const response = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=1&fields=key,title,author_name,cover_i,isbn`
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(`${searchQuery} language:eng`)}&limit=1&fields=key,title,author_name,cover_i,isbn,language`,
     )
     const data = await response.json()
     
@@ -610,7 +610,7 @@ const startBackgroundMatching = (books, setTracker, username, setMatchingProgres
       const docsByKey = new Map()
       for (const q of queries) {
         const response = await fetch(
-          `https://openlibrary.org/search.json?author=${encodeURIComponent(q)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+          `https://openlibrary.org/search.json?author=${encodeURIComponent(q)}&q=${encodeURIComponent('language:eng')}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
         )
         if (!response.ok) continue
         const data = await response.json()
@@ -1276,7 +1276,7 @@ function App() {
     try {
       // Use general search to include both title and author
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(`${term} language:eng`)}&limit=${limit * 3}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
       )
       const data = await response.json()
       
@@ -2160,7 +2160,7 @@ function App() {
     setProfileTopBookError('')
     try {
       const response = await fetch(
-        `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=10&fields=key,title,author_name,cover_i,isbn,first_publish_year`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(`${q} language:eng`)}&limit=10&fields=key,title,author_name,cover_i,isbn,first_publish_year,language`,
       )
       if (!response.ok) throw new Error('Search failed')
       const data = await response.json()
@@ -4156,7 +4156,7 @@ function App() {
 
         {successModal.show && (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
-            <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-6 sm:p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-auto pt-[env(safe-area-inset-top)]">
+            <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-6 flex flex-col pt-[env(safe-area-inset-top)]">
               <img
                 src="/bookmosh-logo-new.png"
                 alt="BookMosh"
@@ -4635,7 +4635,7 @@ function App() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.mosh_title || mosh.book_title}</p>
+                          <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
                           <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
                           <p className="text-xs text-white/40 line-clamp-1">with {(mosh.participants_usernames || []).filter(u => u !== currentUser?.username).join(', ')}</p>
                         </div>
@@ -5027,7 +5027,7 @@ function App() {
                             setFindMatchLoading(true)
                             try {
                               const response = await fetch(
-                                `https://openlibrary.org/search.json?q=${encodeURIComponent(findMatchQuery)}&limit=5&fields=key,title,author_name,cover_i,isbn`
+                                `https://openlibrary.org/search.json?q=${encodeURIComponent(`${findMatchQuery} language:eng`)}&limit=5&fields=key,title,author_name,cover_i,isbn,language`,
                               )
                               const data = await response.json()
                               setFindMatchResults(data.docs || [])
