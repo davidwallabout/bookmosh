@@ -1932,6 +1932,32 @@ function App() {
             isbndbBooks = [...isbndbBooks, ...extraBooks]
           }
         }
+
+        const authorGuess = termWords.slice(-2).join(' ').trim()
+        if (authorGuess && titleOnlyQuery) {
+          const authorData = await invokeIsbndbSearch({ q: authorGuess, mode: 'author', pageSize: 50 })
+          const authorBooks =
+            (Array.isArray(authorData?.books) ? authorData.books : null) ||
+            (Array.isArray(authorData?.data) ? authorData.data : null) ||
+            (Array.isArray(authorData?.author?.books) ? authorData.author.books : null) ||
+            (Array.isArray(authorData?.author?.data) ? authorData.author.data : null) ||
+            []
+
+          if (Array.isArray(authorBooks) && authorBooks.length > 0) {
+            const titleWords = titleOnlyQuery
+              .split(/\s+/)
+              .map((w) => w.trim())
+              .filter(Boolean)
+            const filteredAuthorBooks = authorBooks.filter((b) => {
+              const t = b?.title ?? b?.title_long ?? ''
+              if (!t) return false
+              return computeMeaningfulRelevance(t, '', titleWords) >= 2
+            })
+            if (filteredAuthorBooks.length > 0) {
+              isbndbBooks = [...isbndbBooks, ...filteredAuthorBooks]
+            }
+          }
+        }
       }
 
       const isbndbMapped = isbndbBooks
@@ -6245,7 +6271,7 @@ function App() {
         )}
 
         {successModal.show && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
+          <div className="fixed inset-0 z-[120] flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
             <div className="w-full h-full sm:h-auto sm:w-[clamp(280px,90vw,400px)] rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-6 sm:p-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-auto pt-[env(safe-area-inset-top)]">
               <img
                 src="/bookmosh-logo-new.png"
