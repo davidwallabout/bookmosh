@@ -4678,9 +4678,9 @@ function App() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                fetchAuthorBooks(book.author)
+                                openAuthorModal(book.author)
                               }}
-                              className="text-sm text-white/60 hover:text-white transition-colors text-left"
+                              className="text-sm text-white/60 hover:text-white hover:underline transition text-left cursor-pointer"
                             >
                               {book.author}
                             </button>
