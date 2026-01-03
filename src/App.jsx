@@ -5505,7 +5505,7 @@ function App() {
                   <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50">Invite by email</p>
-                      <p className="text-sm text-white/60">Send a cute BookPit invite.</p>
+                      <p className="text-sm text-white/60">Send a BookMosh invite.</p>
                     </div>
                     <input
                       type="email"
@@ -5650,14 +5650,6 @@ function App() {
                   
                   <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <p className="text-xs uppercase tracking-[0.3em] text-white/50">Danger Zone</p>
-                    <button
-                      type="button"
-                      onClick={updateReadBooksProgress}
-                      className="w-full rounded-2xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-400 transition hover:border-amber-500 hover:bg-amber-500/20"
-                    >
-                      Update Read Books to 100%
-                    </button>
-                    <p className="text-[10px] text-white/50">Set all books marked as "Read" to 100% progress.</p>
                     <button
                       type="button"
                       onClick={deleteAllBooks}
