@@ -7291,20 +7291,30 @@ function App() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                   <div className="grid grid-cols-4 gap-2">
-                    {(Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books.filter(Boolean) : []).slice(0, 4).map((title) => {
-                      const book = (friendBooks || []).find((b) => b.title === title)
-                      return (
-                        <div key={title} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                          <div className="h-20 w-full">
-                            {book?.cover ? (
-                              <img src={book.cover} alt={title} className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                            )}
+                    {(() => {
+                      const incoming = Array.isArray(selectedFriend.top_books)
+                        ? selectedFriend.top_books
+                        : []
+                      const slots = [incoming[0] ?? null, incoming[1] ?? null, incoming[2] ?? null, incoming[3] ?? null]
+
+                      return slots.map((title, idx) => {
+                        const safeTitle = title ? String(title) : ''
+                        const book = safeTitle ? (friendBooks || []).find((b) => b.title === safeTitle) : null
+                        const cover = book?.cover ?? null
+
+                        return (
+                          <div key={`${safeTitle || 'empty'}-${idx}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                            <div className="w-full aspect-[2/3]">
+                              {cover ? (
+                                <img src={cover} alt={safeTitle || 'Top book'} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })
+                    })()}
                     {(!Array.isArray(selectedFriend.top_books) || selectedFriend.top_books.length === 0) && (
                       <p className="col-span-4 text-sm text-white/60">No top books picked yet.</p>
                     )}
