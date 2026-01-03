@@ -134,18 +134,18 @@ const fetchGoogleBooks = async (query, maxResults = 20) => {
   }
 }
 
-const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
+const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
   if (!supabase) return null
   try {
     if (supabase.functions?.invoke) {
       try {
         const { data, error } = await supabase.functions.invoke('isbndb-search', {
-          body: { q, isbn, pageSize },
+          body: { q, isbn, mode, pageSize },
         })
         if (!error && data) {
           if (import.meta.env.DEV) {
             const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
-            console.log('[ISBNDB] via supabase.functions.invoke', { q, isbn, count })
+            console.log('[ISBNDB] via supabase.functions.invoke', { q, isbn, mode, count })
           }
           return data
         }
@@ -170,7 +170,7 @@ const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
     const res = await fetch(`${baseUrl}/functions/v1/isbndb-search`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ q, isbn, pageSize }),
+      body: JSON.stringify({ q, isbn, mode, pageSize }),
     })
     if (!res.ok) {
       console.warn('[ISBNDB] HTTP fetch failed', res.status)
@@ -179,7 +179,7 @@ const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
     const data = await res.json()
     if (import.meta.env.DEV) {
       const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
-      console.log('[ISBNDB] via HTTP fetch', { q, isbn, count })
+      console.log('[ISBNDB] via HTTP fetch', { q, isbn, mode, count })
     }
     return data
   } catch (error) {
@@ -197,7 +197,10 @@ const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lowe
   const author = authors[0] ?? b.author ?? 'Unknown author'
   const isbn13 = b.isbn13 ?? null
   const isbn = isbn13 || b.isbn || b.isbn10 || null
-  const cover = b.image || b.image_url || b.image_original || null
+  let cover = b.image || b.image_url || b.image_original || null
+  if (typeof cover === 'string' && cover.startsWith('http://')) {
+    cover = `https://${cover.slice('http://'.length)}`
+  }
   const date = String(b.date_published ?? '')
   const year = date ? Number(date.slice(0, 4)) || null : null
 
@@ -1798,67 +1801,6 @@ function App() {
     }
   }, [searchQuery, showAllResults])
 
-  const fetchAuthorBooks = async (authorName) => {
-    if (!authorName?.trim()) return
-    setIsSearching(true)
-    setSelectedAuthor(authorName)
-    try {
-      const response = await fetch(
-        `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
-      )
-      const data = await response.json()
-      
-      const authorLower = authorName.toLowerCase()
-      
-      const mapped = data.docs
-        .filter(doc => {
-          if (!doc.title) return false
-          const title = doc.title.toLowerCase()
-          // Filter out compilations, anthologies, and "best of" collections
-          if (title.includes('best of') || 
-              title.includes('anthology') || 
-              title.includes('collection') ||
-              title.includes('complete works') ||
-              title.includes('selected works')) {
-            return false
-          }
-          return true
-        })
-        .map((doc) => ({
-          key: doc.key,
-          title: doc.title,
-          author: doc.author_name?.[0] ?? 'Unknown author',
-          year: doc.first_publish_year,
-          cover: doc.cover_i
-            ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-            : (doc.isbn?.[0] ? openLibraryIsbnCoverUrl(doc.isbn?.[0], 'M') : null),
-          editionCount: doc.edition_count || 0,
-          rating: doc.ratings_average || 0,
-          subjects: doc.subject?.slice(0, 3) || [],
-          isbn: doc.isbn?.[0] || null,
-          publisher: doc.publisher?.[0] || null,
-          language: doc.language?.[0] || null,
-        }))
-        .sort((a, b) => {
-          // Sort by edition count (popularity) first
-          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
-          // Then by rating
-          if (b.rating !== a.rating) return b.rating - a.rating
-          // Then by year (newer first)
-          return (b.year || 0) - (a.year || 0)
-        })
-      
-      setSearchResults(mapped)
-      setHasSearched(true)
-      setSelectedAuthor(authorName)
-      setShowAllResults(true) // Show all results by default for author searches
-    } catch (err) {
-      console.error('Author search failed', err)
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
   const fetchResults = async (term, limit = 20) => {
     if (!term?.trim()) {
       setHasSearched(false)
@@ -2059,6 +2001,85 @@ function App() {
       console.error('Open Library search failed', err)
     } finally {
       setIsSearching(false)
+    }
+  }
+
+  const openAuthorModal = async (authorName) => {
+    const name = (authorName ?? '').trim()
+    if (!name || name === 'Unknown author') return
+
+    setIsAuthorModalOpen(true)
+    setAuthorModalName(name)
+    setAuthorModalBooks([])
+    setAuthorModalLoading(true)
+
+    try {
+      const isbndbData = await invokeIsbndbSearch({ q: name, mode: 'author', pageSize: 50 })
+      const isbndbBooks =
+        (Array.isArray(isbndbData?.books) ? isbndbData.books : null) ||
+        (Array.isArray(isbndbData?.data) ? isbndbData.data : null) ||
+        (Array.isArray(isbndbData?.author?.books) ? isbndbData.author.books : null) ||
+        (Array.isArray(isbndbData?.author?.data) ? isbndbData.author.data : null) ||
+        []
+
+      const isbndbMapped = (Array.isArray(isbndbBooks) ? isbndbBooks : [])
+        .map((b) => mapIsbndbBookToResult(b, name.toLowerCase(), '', '', '', []))
+        .filter(Boolean)
+
+      if (isbndbMapped.length > 0) {
+        setAuthorModalBooks(isbndbMapped)
+        return
+      }
+
+      const response = await fetch(
+        `https://openlibrary.org/search.json?author=${encodeURIComponent(name)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+      )
+      const data = await response.json()
+
+      const authorLower = name.toLowerCase()
+
+      const mapped = (data.docs || [])
+        .filter((doc) => {
+          if (!doc.title) return false
+          const title = doc.title.toLowerCase()
+          if (
+            title.includes('best of') ||
+            title.includes('anthology') ||
+            title.includes('collection') ||
+            title.includes('complete works') ||
+            title.includes('selected works')
+          ) {
+            return false
+          }
+          if (doc.author_name?.some((a) => a.toLowerCase().includes(authorLower))) return true
+          return true
+        })
+        .map((doc) => ({
+          key: doc.key,
+          title: doc.title,
+          author: doc.author_name?.[0] ?? name,
+          year: doc.first_publish_year,
+          cover: doc.cover_i
+            ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+            : (doc.isbn?.[0] ? openLibraryIsbnCoverUrl(doc.isbn?.[0], 'M') : null),
+          editionCount: doc.edition_count || 0,
+          rating: doc.ratings_average || 0,
+          subjects: doc.subject?.slice(0, 3) || [],
+          isbn: doc.isbn?.[0] || null,
+          publisher: doc.publisher?.[0] || null,
+          language: doc.language?.[0] || null,
+        }))
+        .sort((a, b) => {
+          if (b.editionCount !== a.editionCount) return b.editionCount - a.editionCount
+          return (b.year || 0) - (a.year || 0)
+        })
+
+      setAuthorModalBooks(mapped)
+    } catch (error) {
+      console.error('Author modal search failed', error)
+      setAuthorModalBooks([])
+    } finally {
+      setAuthorModalLoading(false)
     }
   }
 

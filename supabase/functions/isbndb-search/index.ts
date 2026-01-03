@@ -45,6 +45,7 @@ serve(async (req) => {
 
   const q = (payload.q ?? '').toString().trim()
   const isbn = (payload.isbn ?? '').toString().trim()
+  const mode = (payload.mode ?? '').toString().trim().toLowerCase()
   const pageSize = Math.min(50, Math.max(1, Number(payload.pageSize ?? 20) || 20))
 
   const headers = {
@@ -62,11 +63,22 @@ serve(async (req) => {
   }
 
   const encoded = encodeURIComponent(q)
-  const urls = [
-    `https://api2.isbndb.com/books/${encoded}?page=1&pageSize=${pageSize}`,
-    `https://api2.isbndb.com/books/${encoded}?pageSize=${pageSize}`,
-    `https://api2.isbndb.com/books/${encoded}`,
-  ]
+  const urls =
+    mode === 'author'
+      ? [
+          `https://api2.isbndb.com/author/${encoded}?page=1&pageSize=${pageSize}`,
+          `https://api2.isbndb.com/author/${encoded}?pageSize=${pageSize}`,
+          `https://api2.isbndb.com/author/${encoded}`,
+          // fallback patterns
+          `https://api2.isbndb.com/books/${encoded}?page=1&pageSize=${pageSize}`,
+          `https://api2.isbndb.com/books/${encoded}?pageSize=${pageSize}`,
+          `https://api2.isbndb.com/books/${encoded}`,
+        ]
+      : [
+          `https://api2.isbndb.com/books/${encoded}?page=1&pageSize=${pageSize}`,
+          `https://api2.isbndb.com/books/${encoded}?pageSize=${pageSize}`,
+          `https://api2.isbndb.com/books/${encoded}`,
+        ]
 
   const data = await tryFetch(urls, headers)
   return json(200, data ?? { books: [] })
