@@ -8,6 +8,43 @@ const curatedRecommendations = []
 
 const initialTracker = []
 
+const resolveOpenLibraryWorkKey = async (book) => {
+  const existing = book?.olKey
+  if (typeof existing === 'string' && existing.startsWith('/works/')) return existing
+
+  const isbn = (book?.isbn ?? '').toString().trim()
+  if (isbn) {
+    try {
+      const editionRes = await fetch(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`)
+      if (editionRes.ok) {
+        const edition = await editionRes.json()
+        const workKey = edition?.works?.[0]?.key
+        if (typeof workKey === 'string' && workKey.startsWith('/works/')) return workKey
+      }
+    } catch (error) {
+      console.error('Failed to resolve work key from ISBN', error)
+    }
+  }
+
+  const title = (book?.title ?? '').toString().trim()
+  const author = (book?.author ?? '').toString().trim()
+  if (!title) return null
+
+  try {
+    const response = await fetch(
+      `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=1&fields=key,isbn`,
+    )
+    if (!response.ok) return null
+    const data = await response.json()
+    const workKey = data?.docs?.[0]?.key
+    if (typeof workKey === 'string' && workKey.startsWith('/works/')) return workKey
+  } catch (error) {
+    console.error('Failed to resolve work key from search', error)
+  }
+
+  return null
+}
+
 // Updated RLS policies for Supabase users table:
 /*
 -- Create users table
@@ -71,14 +108,46 @@ const updateUserFriends = async (userId, friends) => {
   if (!supabase) throw new Error('Supabase not configured')
   
   try {
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError) {
+      console.warn('Unable to read Supabase auth user:', authError)
+    }
+    const authUser = authData?.user ?? null
+
+    const orFilters = []
+    if (userId) orFilters.push(`id.eq.${userId}`)
+    if (authUser?.id) orFilters.push(`id.eq.${authUser.id}`)
+    if (authUser?.email) orFilters.push(`email.eq.${authUser.email}`)
+    const filter = orFilters.join(',')
+
     const { data, error } = await supabase
       .from('users')
       .update({ friends, updated_at: new Date().toISOString() })
-      .eq('id', userId)
+      .or(filter)
       .select('id, username, email, friends, is_private')
     
     if (error) throw error
-    return Array.isArray(data) ? data[0] : data
+
+    const updated = Array.isArray(data) ? data[0] : data
+    if (updated) return updated
+
+    // No row returned. This usually means either the row didn't match filters (id mismatch)
+    // or RLS blocked the update/return.
+    const { data: visibleRows, error: visibleError } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .or(filter)
+      .limit(1)
+
+    if (visibleError) {
+      throw visibleError
+    }
+
+    if (!visibleRows || visibleRows.length === 0) {
+      throw new Error('Unable to find your user profile row to update (account id mismatch).')
+    }
+
+    throw new Error('Update blocked by Row Level Security (RLS).')
   } catch (error) {
     console.error('Error updating friends:', error)
     throw error
@@ -667,6 +736,9 @@ function App() {
   const [findMatchQuery, setFindMatchQuery] = useState('')
   const [findMatchResults, setFindMatchResults] = useState([])
   const [findMatchLoading, setFindMatchLoading] = useState(false)
+  const [showCoverPicker, setShowCoverPicker] = useState(false)
+  const [coverPickerLoading, setCoverPickerLoading] = useState(false)
+  const [coverPickerCovers, setCoverPickerCovers] = useState([])
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
@@ -1059,6 +1131,7 @@ function App() {
         cover: book.cover ?? null,
         year: book.year ?? null,
         isbn: book.isbn ?? null,
+        olKey: book.key ?? book.olKey ?? null,
         publisher: book.publisher ?? null,
         language: book.language ?? null,
         editionCount: book.editionCount ?? 0,
@@ -2019,6 +2092,12 @@ function App() {
 
   const closeModal = () => {
     setSelectedBook(null)
+    setShowFindMatch(false)
+    setFindMatchQuery('')
+    setFindMatchResults([])
+    setShowCoverPicker(false)
+    setCoverPickerLoading(false)
+    setCoverPickerCovers([])
   }
 
   const handleModalSave = () => {
@@ -2030,6 +2109,61 @@ function App() {
       rating: modalRating,
     })
     closeModal()
+  }
+
+  const loadEditionCoversForSelectedBook = async () => {
+    if (!selectedBook) return
+    setCoverPickerLoading(true)
+    setCoverPickerCovers([])
+
+    try {
+      const workKey = await resolveOpenLibraryWorkKey(selectedBook)
+      if (!workKey) {
+        setCoverPickerCovers([])
+        return
+      }
+
+      updateBook(selectedBook.title, { olKey: workKey })
+      setSelectedBook((prev) => (prev ? { ...prev, olKey: workKey } : prev))
+
+      const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=100`
+      const response = await fetch(editionsUrl)
+      if (!response.ok) {
+        setCoverPickerCovers([])
+        return
+      }
+
+      const data = await response.json()
+      const entries = Array.isArray(data?.entries) ? data.entries : []
+
+      const seen = new Set()
+      const covers = []
+
+      for (const edition of entries) {
+        const coverIds = Array.isArray(edition?.covers) ? edition.covers : []
+        const editionKey = typeof edition?.key === 'string' ? edition.key : null
+        const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
+        for (const coverId of coverIds) {
+          const key = String(coverId)
+          if (seen.has(key)) continue
+          seen.add(key)
+          covers.push({
+            coverId,
+            editionKey,
+            isbn,
+            urlM: `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`,
+            urlS: `https://covers.openlibrary.org/b/id/${coverId}-S.jpg`,
+          })
+        }
+      }
+
+      setCoverPickerCovers(covers)
+    } catch (error) {
+      console.error('Failed to load edition covers', error)
+      setCoverPickerCovers([])
+    } finally {
+      setCoverPickerLoading(false)
+    }
   }
 
   const mapFeedItemToBook = (item) => {
@@ -3358,6 +3492,71 @@ function App() {
 
               <div className="space-y-4">
                 <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Cover</label>
+                  <div className="flex items-center gap-3">
+                    <div className="h-24 w-16 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                      {selectedBook.cover ? (
+                        <img src={selectedBook.cover} alt={selectedBook.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">None</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setShowCoverPicker(true)
+                        await loadEditionCoversForSelectedBook()
+                      }}
+                      className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Choose Cover
+                    </button>
+                    {showCoverPicker && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCoverPicker(false)
+                          setCoverPickerCovers([])
+                        }}
+                        className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Done
+                      </button>
+                    )}
+                  </div>
+
+                  {showCoverPicker && (
+                    <div className="mt-4">
+                      {coverPickerLoading ? (
+                        <p className="text-sm text-white/60">Loading edition covers…</p>
+                      ) : coverPickerCovers.length > 0 ? (
+                        <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+                            {coverPickerCovers.map((c) => (
+                              <button
+                                key={`${c.coverId}-${c.editionKey ?? ''}`}
+                                type="button"
+                                onClick={() => {
+                                  updateBook(selectedBook.title, { cover: c.urlM, isbn: c.isbn ?? selectedBook.isbn, olKey: selectedBook.olKey ?? null })
+                                  setSelectedBook({ ...selectedBook, cover: c.urlM, isbn: c.isbn ?? selectedBook.isbn, olKey: selectedBook.olKey ?? null })
+                                  setShowCoverPicker(false)
+                                  setCoverPickerCovers([])
+                                }}
+                                className="h-20 w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/40"
+                              >
+                                <img src={c.urlS} alt="Edition cover" className="h-full w-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/60">No edition covers found for this book.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
                   <select
                     value={modalStatus}
@@ -3490,8 +3689,8 @@ function App() {
                             onClick={() => {
                               const cover = result.cover_i ? `https://covers.openlibrary.org/b/id/${result.cover_i}-M.jpg` : null
                               const isbn = result.isbn?.[0] || null
-                              updateBook(selectedBook.title, { cover, isbn })
-                              setSelectedBook({ ...selectedBook, cover, isbn })
+                              updateBook(selectedBook.title, { cover, isbn, olKey: result.key })
+                              setSelectedBook({ ...selectedBook, cover, isbn, olKey: result.key })
                               setShowFindMatch(false)
                               setFindMatchResults([])
                             }}
