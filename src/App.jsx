@@ -979,6 +979,9 @@ function App() {
   const [showCoverPicker, setShowCoverPicker] = useState(false)
   const [coverPickerLoading, setCoverPickerLoading] = useState(false)
   const [coverPickerCovers, setCoverPickerCovers] = useState([])
+  const [showEditionPicker, setShowEditionPicker] = useState(false)
+  const [editionPickerLoading, setEditionPickerLoading] = useState(false)
+  const [editionPickerEditions, setEditionPickerEditions] = useState([])
   const [moshLibrarySearch, setMoshLibrarySearch] = useState('')
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
@@ -3552,22 +3555,57 @@ function App() {
 
     ;(async () => {
       try {
+        // ISBNdb books already carry synopsis; don't overwrite it with empty Open Library results.
+        const existingSynopsis = (selectedBook.synopsis ?? '').toString().trim()
+        if ((selectedBook.source ?? null) === 'isbndb' && existingSynopsis) {
+          if (!canceled) setModalDescription(existingSynopsis)
+          return
+        }
+
         const workKey = await resolveOpenLibraryWorkKey(selectedBook)
         if (!workKey) {
-          if (!canceled) setModalDescription('')
+          // fallback: ISBNdb by ISBN if present
+          const isbn = (selectedBook.isbn ?? '').toString().trim()
+          if (isbn) {
+            const isbndb = await invokeIsbndbSearch({ isbn })
+            const b = isbndb?.book ?? null
+            const syn = (b?.synopsis ?? b?.overview ?? '').toString().trim()
+            if (!canceled) setModalDescription(syn)
+          }
           return
         }
 
         const res = await fetch(`https://openlibrary.org${workKey}.json`)
         if (!res.ok) {
-          if (!canceled) setModalDescription('')
+          const isbn = (selectedBook.isbn ?? '').toString().trim()
+          if (isbn) {
+            const isbndb = await invokeIsbndbSearch({ isbn })
+            const b = isbndb?.book ?? null
+            const syn = (b?.synopsis ?? b?.overview ?? '').toString().trim()
+            if (!canceled) setModalDescription(syn)
+          }
           return
         }
 
         const data = await res.json()
         const raw = data?.description
         const desc = typeof raw === 'string' ? raw : (raw?.value ?? '')
-        if (!canceled) setModalDescription((desc ?? '').toString().trim())
+        const cleaned = (desc ?? '').toString().trim()
+        if (cleaned) {
+          if (!canceled) setModalDescription(cleaned)
+          return
+        }
+
+        // Open Library had no description; try ISBNdb by ISBN.
+        const isbn = (selectedBook.isbn ?? '').toString().trim()
+        if (isbn) {
+          const isbndb = await invokeIsbndbSearch({ isbn })
+          const b = isbndb?.book ?? null
+          const syn = (b?.synopsis ?? b?.overview ?? '').toString().trim()
+          if (!canceled) setModalDescription(syn)
+        } else {
+          if (!canceled) setModalDescription('')
+        }
       } catch (error) {
         console.error('Failed to load book description', error)
         if (!canceled) setModalDescription('')
@@ -3999,6 +4037,92 @@ function App() {
       setCoverPickerCovers([])
     } finally {
       setCoverPickerLoading(false)
+    }
+  }
+
+  const loadEditionsForSelectedBook = async () => {
+    if (!selectedBook) return
+    setEditionPickerLoading(true)
+    setEditionPickerEditions([])
+
+    try {
+      const byIsbn = new Map()
+      const pushEdition = (e) => {
+        const isbn = (e?.isbn ?? '').toString().trim()
+        if (!isbn) return
+        if (!byIsbn.has(isbn)) byIsbn.set(isbn, e)
+      }
+
+      const workKey = await resolveOpenLibraryWorkKey(selectedBook)
+      if (workKey) {
+        updateBook(selectedBook.title, { olKey: workKey })
+        setSelectedBook((prev) => (prev ? { ...prev, olKey: workKey } : prev))
+
+        const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=200`
+        const response = await fetch(editionsUrl)
+        if (response.ok) {
+          const data = await response.json()
+          const entries = Array.isArray(data?.entries) ? data.entries : []
+          for (const edition of entries) {
+            const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
+            if (!isbn) continue
+            const coverId = Array.isArray(edition?.covers) ? edition.covers[0] : null
+            const coverUrl = coverId ? openLibraryCoverIdUrl(coverId, 'L') : openLibraryIsbnCoverUrl(isbn, 'L')
+            pushEdition({
+              source: 'openlibrary',
+              isbn,
+              editionKey: typeof edition?.key === 'string' ? edition.key : null,
+              publisher: Array.isArray(edition?.publishers) ? edition.publishers[0] : null,
+              publishDate: edition?.publish_date ?? null,
+              coverUrl,
+            })
+          }
+        }
+      }
+
+      const title = (selectedBook.title ?? '').toString().trim()
+      const author = (selectedBook.author ?? '').toString().trim()
+      const q = `${title} ${author}`.trim()
+      if (q) {
+        const isbndbData = await invokeIsbndbSearch({ q, pageSize: 50 })
+        const isbndbBooks = Array.isArray(isbndbData?.books)
+          ? isbndbData.books
+          : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
+        for (const b of isbndbBooks) {
+          const isbn13 = b?.isbn13 ?? null
+          const isbn10 = b?.isbn10 ?? null
+          const isbn = (isbn13 || isbn10 || b?.isbn || null)?.toString?.() ?? null
+          if (!isbn) continue
+          let url = b?.image || b?.image_url || b?.image_original || b?.image_large || b?.image_small || null
+          if (typeof url === 'string' && url.startsWith('http://')) {
+            url = `https://${url.slice('http://'.length)}`
+          }
+          pushEdition({
+            source: 'isbndb',
+            isbn,
+            publisher: (Array.isArray(b?.publisher) ? b.publisher[0] : b?.publisher) ?? null,
+            publishDate: b?.date_published ?? null,
+            coverUrl: url || null,
+          })
+        }
+      }
+
+      const editions = Array.from(byIsbn.values()).sort((a, b) => {
+        const aHasCover = Boolean(a.coverUrl)
+        const bHasCover = Boolean(b.coverUrl)
+        if (aHasCover !== bHasCover) return aHasCover ? -1 : 1
+        const as = String(a.source ?? '')
+        const bs = String(b.source ?? '')
+        if (as !== bs) return as === 'isbndb' ? -1 : 1
+        return String(a.isbn).localeCompare(String(b.isbn))
+      })
+
+      setEditionPickerEditions(editions)
+    } catch (error) {
+      console.error('Failed to load editions', error)
+      setEditionPickerEditions([])
+    } finally {
+      setEditionPickerLoading(false)
     }
   }
 
@@ -6379,6 +6503,16 @@ function App() {
                     <button
                       type="button"
                       onClick={async () => {
+                        setShowEditionPicker(true)
+                        await loadEditionsForSelectedBook()
+                      }}
+                      className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Choose Edition
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
                         setShowCoverPicker(true)
                         await loadEditionCoversForSelectedBook()
                       }}
@@ -6398,7 +6532,69 @@ function App() {
                         Done
                       </button>
                     )}
+                    {showEditionPicker && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowEditionPicker(false)
+                          setEditionPickerEditions([])
+                        }}
+                        className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Done
+                      </button>
+                    )}
                   </div>
+
+                  {showEditionPicker && (
+                    <div className="mt-4">
+                      {editionPickerLoading ? (
+                        <p className="text-sm text-white/60">Loading editions…</p>
+                      ) : editionPickerEditions.length > 0 ? (
+                        <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5">
+                          <div className="divide-y divide-white/10">
+                            {editionPickerEditions.map((e) => (
+                              <button
+                                key={`${e.source}:${e.isbn}`}
+                                type="button"
+                                onClick={() => {
+                                  const nextCover = e.coverUrl || selectedBook.cover || null
+                                  updateBook(selectedBook.title, {
+                                    isbn: e.isbn,
+                                    cover: nextCover,
+                                    olKey: selectedBook.olKey ?? null,
+                                  })
+                                  setSelectedBook({ ...selectedBook, isbn: e.isbn, cover: nextCover, olKey: selectedBook.olKey ?? null })
+                                  setShowEditionPicker(false)
+                                  setEditionPickerEditions([])
+                                }}
+                                className="w-full px-4 py-3 text-left transition hover:bg-white/5"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="h-16 w-11 overflow-hidden rounded-lg border border-white/10 bg-white/5 flex-shrink-0">
+                                    {e.coverUrl ? (
+                                      <img src={e.coverUrl} alt="Edition cover" className="h-full w-full object-cover" />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/50">No cover</div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs uppercase tracking-[0.3em] text-white/40">{e.source}</p>
+                                    <p className="text-sm font-semibold text-white break-words">ISBN {e.isbn}</p>
+                                    <p className="text-xs text-white/60">
+                                      {[e.publisher, e.publishDate].filter(Boolean).join(' • ') || '—'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/60">No editions found.</p>
+                      )}
+                    </div>
+                  )}
 
                   {showCoverPicker && (
                     <div className="mt-4">
