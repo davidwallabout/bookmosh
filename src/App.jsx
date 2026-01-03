@@ -2625,7 +2625,7 @@ function App() {
       }
     } catch (error) {
       console.error('[MOSH] Create mosh failed:', error)
-      setFriendMessage('Failed to start mosh.')
+      setFriendMessage('Failed to start pit.')
       throw error
     }
   }
@@ -2776,7 +2776,7 @@ function App() {
       await sendMoshInvite(moshInviteBook, moshInviteFriends[0], moshInviteTitle)
       closeMoshInvite()
     } catch (error) {
-      setMoshInviteError(error.message || 'Failed to start mosh.')
+      setMoshInviteError(error.message || 'Failed to start pit.')
       setMoshInviteLoading(false)
     }
   }
@@ -4487,7 +4487,7 @@ function App() {
               <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Pit</p>
                     <h2 className="text-xl font-semibold text-white">Add friends</h2>
                     <p className="text-sm text-white/60 line-clamp-1">{activeMosh.mosh_title || activeMosh.book_title}</p>
                   </div>
@@ -6292,7 +6292,7 @@ function App() {
               <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
                 <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Start a mosh</p>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Start a pit</p>
                   <h2 className="text-xl font-semibold text-white">Invite a friend</h2>
                 </div>
                 <button
@@ -6438,7 +6438,7 @@ function App() {
                   disabled={moshInviteLoading}
                   className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
                 >
-                  {moshInviteLoading ? 'Starting…' : 'Start mosh'}
+                  {moshInviteLoading ? 'Starting…' : 'Start pit'}
                 </button>
               </div>
             </div>
@@ -6452,7 +6452,7 @@ function App() {
                 <div className="mx-auto w-full max-w-5xl px-4 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Pit</p>
                       <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.book_title ?? 'Active Pits'}</h2>
                       {activeMosh?.id && (
                         <p className="text-xs text-white/50 break-words">{activeMosh.mosh_title || activeMosh.book_title}</p>
@@ -6520,7 +6520,7 @@ function App() {
                   </div>
                   
                   <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Start a mosh from your library</p>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Start a pit from your library</p>
                     <input
                       type="text"
                       value={moshLibrarySearch}
@@ -7442,7 +7442,7 @@ function App() {
               <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-[#0b1225]/95 backdrop-blur">
                 <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh Cover</p>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Pit Cover</p>
                   <h2 className="text-xl font-semibold text-white">Choose a cover</h2>
                   <p className="text-sm text-white/60 line-clamp-1">{activeMosh.book_title}</p>
                 </div>
