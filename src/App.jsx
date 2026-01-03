@@ -3705,6 +3705,42 @@ function App() {
         .update({ status: 'accepted', responded_at: new Date().toISOString() })
         .eq('id', request.id)
       if (error) throw error
+
+      // Persist the friendship in both users' profiles.
+      // friends is stored as a text[] of user ids.
+      const requesterId = String(request.requester_id ?? '').trim()
+      const recipientId = String(request.recipient_id ?? currentUser?.id ?? '').trim()
+      if (requesterId && recipientId) {
+        const { data: usersRows, error: usersErr } = await supabase
+          .from('users')
+          .select('id, friends')
+          .in('id', [requesterId, recipientId])
+        if (usersErr) throw usersErr
+
+        const rowById = new Map((Array.isArray(usersRows) ? usersRows : []).map((u) => [String(u.id), u]))
+        const requesterRow = rowById.get(requesterId)
+        const recipientRow = rowById.get(recipientId)
+
+        const nextRequesterFriends = Array.from(
+          new Set([...(Array.isArray(requesterRow?.friends) ? requesterRow.friends : []), recipientId].filter(Boolean)),
+        )
+        const nextRecipientFriends = Array.from(
+          new Set([...(Array.isArray(recipientRow?.friends) ? recipientRow.friends : []), requesterId].filter(Boolean)),
+        )
+
+        const { error: u1Err } = await supabase
+          .from('users')
+          .update({ friends: nextRequesterFriends })
+          .eq('id', requesterId)
+        if (u1Err) throw u1Err
+
+        const { error: u2Err } = await supabase
+          .from('users')
+          .update({ friends: nextRecipientFriends })
+          .eq('id', recipientId)
+        if (u2Err) throw u2Err
+      }
+
       await refreshCurrentUser()
       await loadFriendRequests()
       setFriendMessage(`Connected with ${request.requester_username}.`)
