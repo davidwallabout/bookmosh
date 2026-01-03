@@ -890,6 +890,7 @@ function App() {
   const [modalReview, setModalReview] = useState('')
   const [modalDescription, setModalDescription] = useState('')
   const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
+  const isbndbCoverLookupRef = useRef(new Set())
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
   const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
@@ -3585,6 +3586,37 @@ function App() {
       canceled = true
     }
   }, [selectedBook])
+
+  useEffect(() => {
+    if (!selectedBook) return
+    const isbn = (selectedBook.isbn ?? '').toString().trim()
+    if (!isbn) return
+    if (selectedBook.cover) return
+    if (isbndbCoverLookupRef.current.has(isbn)) return
+    isbndbCoverLookupRef.current.add(isbn)
+
+    let canceled = false
+    ;(async () => {
+      try {
+        const data = await invokeIsbndbSearch({ isbn })
+        const b = data?.book ?? null
+        let cover = b?.image || b?.image_url || b?.image_original || null
+        if (typeof cover === 'string' && cover.startsWith('http://')) {
+          cover = `https://${cover.slice('http://'.length)}`
+        }
+        if (!canceled && cover) {
+          updateBook(selectedBook.title, { cover })
+          setSelectedBook((prev) => (prev ? { ...prev, cover } : prev))
+        }
+      } catch (error) {
+        console.error('Failed to load ISBNdb cover', error)
+      }
+    })()
+
+    return () => {
+      canceled = true
+    }
+  }, [selectedBook?.isbn, selectedBook?.cover])
 
   useEffect(() => {
     if (!supabase || !selectedBook) return
