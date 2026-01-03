@@ -1787,12 +1787,24 @@ function App() {
     setIsSearching(true)
     try {
       const trimmed = term.trim()
-      const termWithLanguage = trimmed.toLowerCase().includes('language:') ? trimmed : `${trimmed} language:eng`
-
-      const termWords = trimmed
+      const rawWords = trimmed
         .split(/\s+/)
         .map((w) => w.trim())
         .filter(Boolean)
+
+      const normalizedWordsForQuery = rawWords.map((w) => {
+        const lower = w.toLowerCase()
+        if (w.length === 1 && /[a-z]/i.test(w)) return `${w}.`
+        if ((lower === 'mrs' || lower === 'mr' || lower === 'ms' || lower === 'dr') && !w.endsWith('.')) return `${w}.`
+        return w
+      })
+
+      const normalizedForQuery = normalizedWordsForQuery.join(' ')
+      const termWithLanguage = normalizedForQuery.toLowerCase().includes('language:')
+        ? normalizedForQuery
+        : `${normalizedForQuery} language:eng`
+
+      const termWords = normalizedWordsForQuery
       const last1 = termWords.slice(-1).join(' ')
       const last2 = termWords.slice(-2).join(' ')
       const last3 = termWords.slice(-3).join(' ')
@@ -1803,7 +1815,7 @@ function App() {
       )
       const data = await response.json()
       
-      const searchLower = trimmed.toLowerCase()
+      const searchLower = normalizedForQuery.toLowerCase()
       const last1Lower = last1.toLowerCase()
       const last2Lower = last2.toLowerCase()
       const last3Lower = last3.toLowerCase()
@@ -5008,15 +5020,15 @@ function App() {
                                     return (
                                       <div
                                         key={`${l.id}-preview-${idx}`}
-                                        className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5"
-                                        style={{ marginLeft: idx === 0 ? 0 : -10 }}
+                                        className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                                        style={{ marginLeft: idx === 0 ? 0 : -12 }}
                                       >
                                         <img src={cover} alt="Cover" className="h-full w-full object-cover" />
                                       </div>
                                     )
                                   })}
                                   {(l.preview_covers ?? []).length === 0 && (
-                                    <div className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5" />
+                                    <div className="h-14 w-10 overflow-hidden rounded-xl border border-white/10 bg-white/5" />
                                   )}
                                 </div>
                               </div>
