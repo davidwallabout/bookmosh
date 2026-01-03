@@ -893,6 +893,17 @@ function App() {
   const [importFileType, setImportFileType] = useState('goodreads')
   const [importMessage, setImportMessage] = useState('')
 
+  const totalUnreadMoshes = useMemo(() => {
+    const values = Object.values(unreadByMoshId || {})
+    return values.reduce((sum, n) => sum + (Number(n) || 0), 0)
+  }, [unreadByMoshId])
+
+  const scrollToSection = (id) => {
+    if (typeof window === 'undefined') return
+    const el = document.getElementById(id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const ensureLocalUserProfile = (username, email) => {
     setUsers((prev) => {
       const existing = prev.find((item) => item.username === username)
@@ -2921,23 +2932,58 @@ function App() {
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10">
         {currentUser && (
-        <header className="flex items-center justify-center">
-          <button
-            onClick={() => {
-              setSelectedStatusFilter(null)
-              setSelectedAuthor(null)
-              setSearchQuery('')
-              setSearchResults([])
-              setHasSearched(false)
-            }}
-            className="transition-opacity hover:opacity-80"
-          >
-            <img
-              src="/bookmosh-vert.png"
-              alt="BookMosh"
-              className="h-48 w-auto"
-            />
-          </button>
+        <header className="flex flex-col items-center justify-center gap-4">
+          <div className="relative">
+            <button
+              onClick={() => {
+                setSelectedStatusFilter(null)
+                setSelectedAuthor(null)
+                setSearchQuery('')
+                setSearchResults([])
+                setHasSearched(false)
+              }}
+              className="transition-opacity hover:opacity-80"
+            >
+              <img
+                src="/bookmosh-vert.png"
+                alt="BookMosh"
+                className="h-48 w-auto"
+              />
+            </button>
+
+            {totalUnreadMoshes > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMoshPanelOpen(true)
+                }}
+                className="absolute right-0 top-0 rounded-full bg-rose-500/90 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white shadow"
+                title="Unread messages"
+              >
+                {totalUnreadMoshes}
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {[
+              { id: 'discovery', label: 'Discovery' },
+              { id: 'library', label: 'Library' },
+              { id: 'moshes', label: 'Moshes' },
+              { id: 'feed', label: 'Feed' },
+              { id: 'community', label: 'Community' },
+              { id: 'lists', label: 'Lists' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollToSection(item.id)}
+                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </header>
         )}
 
@@ -3210,7 +3256,7 @@ function App() {
             </section>
 
             {/* Library */}
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="library" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
@@ -3432,7 +3478,7 @@ function App() {
             </section>
 
             {/* Active Moshes (below Library) */}
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="moshes" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Moshes</p>
@@ -3481,7 +3527,7 @@ function App() {
             </section>
 
             {/* Feed (below Active Moshes) */}
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="feed" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Feed</p>
@@ -3582,7 +3628,7 @@ function App() {
             </section>
 
             {/* Community */}
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="community" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Community</p>
@@ -3982,6 +4028,16 @@ function App() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section id="lists" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Lists</p>
+                  <h3 className="text-2xl font-semibold text-white">Coming soon</h3>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-white/60">Create and follow shareable lists (in progress).</p>
             </section>
           </>
         )}
