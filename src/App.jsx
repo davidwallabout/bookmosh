@@ -131,27 +131,6 @@ const openLibraryIsbnCoverUrl = (isbn, size = 'M') => {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(clean)}-${size}.jpg`
 }
 
-const GOOGLE_BOOKS_API_KEY = import.meta.env?.VITE_GOOGLE_BOOKS_API_KEY
-
-const fetchGoogleBooks = async (query, maxResults = 20) => {
-  const q = (query ?? '').toString().trim()
-  if (!q) return []
-  try {
-    const url = new URL('https://www.googleapis.com/books/v1/volumes')
-    url.searchParams.set('q', q)
-    url.searchParams.set('maxResults', String(Math.min(40, Math.max(1, maxResults))))
-    if (GOOGLE_BOOKS_API_KEY) url.searchParams.set('key', GOOGLE_BOOKS_API_KEY)
-    const res = await fetch(url.toString())
-    if (!res.ok) return []
-    const data = await res.json()
-    const items = Array.isArray(data?.items) ? data.items : []
-    return items
-  } catch (error) {
-    console.error('Google Books search failed', error)
-    return []
-  }
-}
-
 const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
   if (!supabase) return null
   try {
