@@ -26,87 +26,6 @@ const resolveOpenLibraryWorkKey = async (book) => {
     }
   }
 
-  const closeMoshCoverPicker = () => {
-    setIsMoshCoverPickerOpen(false)
-    setMoshCoverPickerLoading(false)
-    setMoshCoverPickerCovers([])
-  }
-
-  const loadEditionCoversForActiveMosh = async () => {
-    if (!activeMosh) return
-    setMoshCoverPickerLoading(true)
-    setMoshCoverPickerCovers([])
-    try {
-      const workKey = await resolveOpenLibraryWorkKey({
-        title: activeMosh.book_title,
-        author: activeMosh.book_author,
-      })
-      if (!workKey) {
-        setMoshCoverPickerCovers([])
-        return
-      }
-
-      const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=100`
-      const response = await fetch(editionsUrl)
-      if (!response.ok) {
-        setMoshCoverPickerCovers([])
-        return
-      }
-
-      const data = await response.json()
-      const entries = Array.isArray(data?.entries) ? data.entries : []
-      const seen = new Set()
-      const covers = []
-
-      for (const edition of entries) {
-        const coverIds = Array.isArray(edition?.covers) ? edition.covers : []
-        const editionKey = typeof edition?.key === 'string' ? edition.key : null
-        for (const coverId of coverIds) {
-          const key = String(coverId)
-          if (seen.has(key)) continue
-          seen.add(key)
-          covers.push({
-            coverId,
-            editionKey,
-            urlM: `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`,
-            urlS: `https://covers.openlibrary.org/b/id/${coverId}-S.jpg`,
-          })
-        }
-      }
-
-      setMoshCoverPickerCovers(covers)
-    } catch (error) {
-      console.error('Failed to load mosh edition covers', error)
-      setMoshCoverPickerCovers([])
-    } finally {
-      setMoshCoverPickerLoading(false)
-    }
-  }
-
-  const openMoshCoverPicker = async () => {
-    if (!activeMosh) return
-    setIsMoshCoverPickerOpen(true)
-    await loadEditionCoversForActiveMosh()
-  }
-
-  const updateActiveMoshCover = async (coverUrl) => {
-    if (!supabase || !activeMosh) return
-    try {
-      const { data, error } = await supabase
-        .from('moshes')
-        .update({ book_cover: coverUrl })
-        .eq('id', activeMosh.id)
-        .select('*')
-      if (error) throw error
-      const updated = Array.isArray(data) ? data[0] : null
-      if (updated) setActiveMosh(updated)
-      await fetchActiveMoshes()
-      closeMoshCoverPicker()
-    } catch (error) {
-      console.error('Failed to update mosh cover', error)
-    }
-  }
-
   const title = (book?.title ?? '').toString().trim()
   const author = (book?.author ?? '').toString().trim()
   if (!title) return null
@@ -2434,6 +2353,87 @@ function App() {
       await fetchActiveMoshes()
     } catch (error) {
       console.error('Failed to toggle mosh visibility', error)
+    }
+  }
+
+  const closeMoshCoverPicker = () => {
+    setIsMoshCoverPickerOpen(false)
+    setMoshCoverPickerLoading(false)
+    setMoshCoverPickerCovers([])
+  }
+
+  const loadEditionCoversForActiveMosh = async () => {
+    if (!activeMosh) return
+    setMoshCoverPickerLoading(true)
+    setMoshCoverPickerCovers([])
+    try {
+      const workKey = await resolveOpenLibraryWorkKey({
+        title: activeMosh.book_title,
+        author: activeMosh.book_author,
+      })
+      if (!workKey) {
+        setMoshCoverPickerCovers([])
+        return
+      }
+
+      const editionsUrl = `https://openlibrary.org${workKey}/editions.json?limit=100`
+      const response = await fetch(editionsUrl)
+      if (!response.ok) {
+        setMoshCoverPickerCovers([])
+        return
+      }
+
+      const data = await response.json()
+      const entries = Array.isArray(data?.entries) ? data.entries : []
+      const seen = new Set()
+      const covers = []
+
+      for (const edition of entries) {
+        const coverIds = Array.isArray(edition?.covers) ? edition.covers : []
+        const editionKey = typeof edition?.key === 'string' ? edition.key : null
+        for (const coverId of coverIds) {
+          const key = String(coverId)
+          if (seen.has(key)) continue
+          seen.add(key)
+          covers.push({
+            coverId,
+            editionKey,
+            urlM: `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`,
+            urlS: `https://covers.openlibrary.org/b/id/${coverId}-S.jpg`,
+          })
+        }
+      }
+
+      setMoshCoverPickerCovers(covers)
+    } catch (error) {
+      console.error('Failed to load mosh edition covers', error)
+      setMoshCoverPickerCovers([])
+    } finally {
+      setMoshCoverPickerLoading(false)
+    }
+  }
+
+  const openMoshCoverPicker = async () => {
+    if (!activeMosh) return
+    setIsMoshCoverPickerOpen(true)
+    await loadEditionCoversForActiveMosh()
+  }
+
+  const updateActiveMoshCover = async (coverUrl) => {
+    if (!supabase || !activeMosh) return
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .update({ book_cover: coverUrl })
+        .eq('id', activeMosh.id)
+        .select('*')
+      if (error) throw error
+      const updated = Array.isArray(data) ? data[0] : null
+      if (updated) setActiveMosh(updated)
+      await fetchActiveMoshes()
+      closeMoshCoverPicker()
+    } catch (error) {
+      console.error('Failed to update mosh cover', error)
     }
   }
 
