@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
   const finalAppUrl = appUrl || 'https://www.bookmosh.com'
   const finalInviteUrl = inviteUrl || finalAppUrl
-  const logoUrl = `${finalAppUrl.replace(/\/$/, '')}/og-image.png`
+  const logoUrl = 'https://www.bookmosh.com/og-image.png'  // Use absolute URL for email compatibility
 
   const safeInviter = (inviterName || 'A friend').replace(/[<>&"']/g, '')
   const safeUrl = finalInviteUrl.replace(/[<>&"']/g, '')

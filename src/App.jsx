@@ -3249,13 +3249,17 @@ function App() {
       
       if (authError) throw authError
       
+      // Check if user was invited by someone
+      const params = new URLSearchParams(window.location.search)
+      const invitedBy = params.get('invitedBy')
+      
       // Create user profile
       const userProfile = {
         id: user.id,
         username: signupData.username,
         email: signupData.email,
         password_hash: 'managed_by_supabase_auth',
-        friends: [],
+        friends: invitedBy ? [invitedBy] : [],
         is_private: false,
       }
       
@@ -3266,6 +3270,37 @@ function App() {
         // Continue anyway - profile might already exist
       }
       
+      // If invited, send friend request to inviter
+      if (invitedBy && supabase) {
+        try {
+          const inviterUser = await searchUsers(invitedBy)
+          if (inviterUser.length > 0) {
+            const inviter = inviterUser[0]
+            await supabase.from('friend_requests').insert([{
+              requester_id: user.id,
+              requester_username: signupData.username,
+              recipient_id: inviter.id,
+              recipient_username: inviter.username,
+              status: 'accepted',
+            }])
+            
+            // Update inviter's friends list
+            const inviterFriends = Array.isArray(inviter.friends) ? inviter.friends : []
+            if (!inviterFriends.includes(signupData.username)) {
+              await supabase
+                .from('users')
+                .update({ friends: [...inviterFriends, signupData.username] })
+                .eq('id', inviter.id)
+            }
+            
+            console.log('[AUTH] Auto-friended inviter:', invitedBy)
+          }
+        } catch (friendError) {
+          console.error('[AUTH] Auto-friend failed:', friendError)
+          // Don't block signup if friending fails
+        }
+      }
+      
       // Log user in immediately
       localStorage.setItem('bookmosh-user', JSON.stringify(userProfile))
       setCurrentUser(userProfile)
@@ -3273,6 +3308,12 @@ function App() {
       
       setSignupData({ username: '', email: '', password: '' })
       setAuthMessage('')
+      
+      // Clean up invite param from URL
+      if (invitedBy) {
+        const newUrl = window.location.pathname + window.location.hash
+        window.history.replaceState({}, '', newUrl)
+      }
     } catch (error) {
       setAuthMessage(error.message || 'Signup failed')
     } finally {
@@ -3577,6 +3618,8 @@ function App() {
       const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.bookmosh.com'
       const inviteUrl = 'https://www.bookmosh.com'
 
+      const inviteUrlWithRef = `${inviteUrl}?invitedBy=${encodeURIComponent(currentUser.username)}`
+      
       const response = await fetch('/api/invite-friend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3584,7 +3627,7 @@ function App() {
           email,
           inviterName: currentUser.username,
           appUrl,
-          inviteUrl,
+          inviteUrl: inviteUrlWithRef,
         }),
       })
 
