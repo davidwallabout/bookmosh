@@ -2013,6 +2013,19 @@ function App() {
 
       const primaryDocs = Array.isArray(data?.docs) ? data.docs : []
       let structuredDocs = []
+
+      let englishEditionDocs = []
+      try {
+        const editionUrl = `https://openlibrary.org/search.json?q=${encodeURIComponent(normalizedForQuery)}&language=eng&limit=${limit * 2}&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`
+        const editionRes = await fetch(editionUrl)
+        if (editionRes.ok) {
+          const editionData = await editionRes.json()
+          englishEditionDocs = Array.isArray(editionData?.docs) ? editionData.docs : []
+        }
+      } catch {
+        englishEditionDocs = []
+      }
+
       if (termWords.length >= 3) {
         const last1Word = String(termWords[termWords.length - 1] ?? '').trim()
         const last2Words = termWords.slice(-2).join(' ').trim()
@@ -2045,7 +2058,7 @@ function App() {
         }
       }
 
-      const openLibraryDocs = [...primaryDocs, ...structuredDocs]
+      const openLibraryDocs = [...englishEditionDocs, ...primaryDocs, ...structuredDocs]
 
       // Filter and sort results for better relevance
       const mapped = openLibraryDocs
