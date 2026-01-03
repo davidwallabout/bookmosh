@@ -1985,6 +1985,23 @@ function App() {
     const name = (authorName ?? '').trim()
     if (!name || name === 'Unknown author') return
 
+    const normalize = (value) =>
+      String(value ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    const requestedTokens = normalize(name)
+      .split(' ')
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2)
+    const matchesRequestedAuthor = (candidateAuthor) => {
+      const cand = normalize(candidateAuthor)
+      if (!cand) return false
+      if (requestedTokens.length === 0) return true
+      return requestedTokens.every((t) => cand.includes(t))
+    }
+
     setIsAuthorModalOpen(true)
     setAuthorModalName(name)
     setAuthorModalBooks([])
@@ -2002,6 +2019,7 @@ function App() {
       const isbndbMapped = (Array.isArray(isbndbBooks) ? isbndbBooks : [])
         .map((b) => mapIsbndbBookToResult(b, name.toLowerCase(), '', '', '', []))
         .filter(Boolean)
+        .filter((b) => matchesRequestedAuthor(b.author))
 
       if (isbndbMapped.length > 0) {
         setAuthorModalBooks(isbndbMapped)
@@ -2028,8 +2046,8 @@ function App() {
           ) {
             return false
           }
-          if (doc.author_name?.some((a) => a.toLowerCase().includes(authorLower))) return true
-          return true
+          if (doc.author_name?.some((a) => matchesRequestedAuthor(a))) return true
+          return false
         })
         .map((doc) => ({
           key: doc.key,
@@ -3578,6 +3596,21 @@ function App() {
         let cover = null
 
         if (isbn) {
+          const data = await invokeIsbndbSearch({ isbn })
+          const b = data?.book ?? null
+          cover =
+            b?.image ||
+            b?.image_url ||
+            b?.image_original ||
+            b?.image_large ||
+            b?.image_small ||
+            null
+          if (typeof cover === 'string' && cover.startsWith('http://')) {
+            cover = `https://${cover.slice('http://'.length)}`
+          }
+        }
+
+        if (!cover && isbn) {
           const olIsbnUrl = openLibraryIsbnCoverUrl(isbn, 'L')
           try {
             const res = await fetch(olIsbnUrl, { method: 'HEAD' })
@@ -3600,21 +3633,6 @@ function App() {
             }
           } catch (_) {
             // ignore
-          }
-        }
-
-        if (!cover && isbn) {
-          const data = await invokeIsbndbSearch({ isbn })
-          const b = data?.book ?? null
-          cover =
-            b?.image ||
-            b?.image_url ||
-            b?.image_original ||
-            b?.image_large ||
-            b?.image_small ||
-            null
-          if (typeof cover === 'string' && cover.startsWith('http://')) {
-            cover = `https://${cover.slice('http://'.length)}`
           }
         }
 
@@ -3906,21 +3924,72 @@ function App() {
       const seen = new Set()
       const covers = []
 
+      const pushCover = ({ key, coverId = null, editionKey = null, isbn = null, urlM, urlS }) => {
+        if (!urlM) return
+        const uniq = String(key || urlM)
+        if (seen.has(uniq)) return
+        seen.add(uniq)
+        covers.push({
+          key: uniq,
+          coverId,
+          editionKey,
+          isbn,
+          urlM,
+          urlS: urlS || urlM,
+        })
+      }
+
       for (const edition of entries) {
         const coverIds = Array.isArray(edition?.covers) ? edition.covers : []
         const editionKey = typeof edition?.key === 'string' ? edition.key : null
         const isbn = edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || null
+
+        // Prefer explicit cover IDs when present.
         for (const coverId of coverIds) {
-          const key = String(coverId)
-          if (seen.has(key)) continue
-          seen.add(key)
-          covers.push({
+          pushCover({
+            key: `olid:${coverId}`,
             coverId,
             editionKey,
             isbn,
             urlM: `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`,
             urlS: `https://covers.openlibrary.org/b/id/${coverId}-S.jpg`,
           })
+        }
+
+        // If edition has an ISBN but no cover IDs, use the OL ISBN cover endpoint.
+        if (isbn) {
+          pushCover({
+            key: `olisbn:${isbn}`,
+            editionKey,
+            isbn,
+            urlM: openLibraryIsbnCoverUrl(isbn, 'M'),
+            urlS: openLibraryIsbnCoverUrl(isbn, 'S'),
+          })
+        }
+      }
+
+      // If still sparse, enrich with ISBNdb editions (often has images even when OL doesn't).
+      if (covers.length < 24) {
+        const title = (selectedBook.title ?? '').toString().trim()
+        const author = (selectedBook.author ?? '').toString().trim()
+        const q = `${title} ${author}`.trim()
+        if (q) {
+          const isbndbData = await invokeIsbndbSearch({ q, pageSize: 50 })
+          const isbndbBooks = Array.isArray(isbndbData?.books)
+            ? isbndbData.books
+            : (Array.isArray(isbndbData?.data) ? isbndbData.data : [])
+
+          for (const b of isbndbBooks) {
+            const isbn13 = b?.isbn13 ?? null
+            const isbn10 = b?.isbn10 ?? null
+            const isbn = (isbn13 || isbn10 || b?.isbn || null)?.toString?.() ?? null
+            let url = b?.image || b?.image_url || b?.image_original || b?.image_large || b?.image_small || null
+            if (typeof url === 'string' && url.startsWith('http://')) {
+              url = `https://${url.slice('http://'.length)}`
+            }
+            if (!url) continue
+            pushCover({ key: `isbndb:${isbn || url}`, isbn, urlM: url, urlS: url })
+          }
         }
       }
 
@@ -6738,30 +6807,32 @@ function App() {
         )}
 
         {isAuthorModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm sm:items-center p-0 sm:p-4">
-            <div className="w-full h-full sm:h-auto sm:max-w-4xl rounded-none sm:rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-4 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col pt-[env(safe-area-inset-top)]">
-              <div className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-4 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
-                <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/50">Author</p>
-                  <h2 className="text-2xl font-semibold text-white">{authorModalName}</h2>
-                  <p className="text-sm text-white/60">{authorModalBooks.length} books</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAuthorModalOpen(false)
-                    setAuthorModalBooks([])
-                    setAuthorModalName('')
-                  }}
-                  className="text-white/60 hover:text-white transition text-2xl"
-                >
-                  ✕
-                </button>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-4xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Author</p>
+                      <h2 className="text-2xl font-semibold text-white break-words">{authorModalName}</h2>
+                      <p className="text-sm text-white/60">{authorModalBooks.length} books</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAuthorModalOpen(false)
+                        setAuthorModalBooks([])
+                        setAuthorModalName('')
+                      }}
+                      className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto">
+              <div className="mx-auto w-full max-w-4xl px-4 py-6">
                 {authorModalLoading ? (
                   <p className="text-sm text-white/60">Loading books…</p>
                 ) : authorModalBooks.length > 0 ? (
@@ -6783,7 +6854,7 @@ function App() {
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                          <p className="text-sm font-semibold text-white line-clamp-2">{book.title} — {book.author}</p>
                           <p className="text-xs text-white/60">{book.year || '—'}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button
