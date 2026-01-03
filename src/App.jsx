@@ -4,6 +4,98 @@ import { supabase } from './lib/supabaseClient'
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
 
+const PROFILE_ICONS = [
+  {
+    id: 'pixel_book_1',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="3" y="2" width="8" height="12" fill="#7c3aed"/>
+  <rect x="4" y="3" width="6" height="10" fill="#a78bfa"/>
+  <rect x="3" y="2" width="1" height="12" fill="#4c1d95"/>
+  <rect x="10" y="2" width="1" height="12" fill="#4c1d95"/>
+  <rect x="5" y="5" width="4" height="1" fill="#4c1d95"/>
+</svg>`,
+  },
+  {
+    id: 'pixel_book_2',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="4" y="2" width="7" height="12" fill="#6d28d9"/>
+  <rect x="5" y="3" width="5" height="10" fill="#c4b5fd"/>
+  <rect x="4" y="2" width="1" height="12" fill="#4c1d95"/>
+  <rect x="10" y="2" width="1" height="12" fill="#4c1d95"/>
+  <rect x="6" y="6" width="3" height="1" fill="#4c1d95"/>
+  <rect x="6" y="8" width="3" height="1" fill="#4c1d95"/>
+</svg>`,
+  },
+  {
+    id: 'pixel_scroll',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="5" y="3" width="6" height="10" fill="#a78bfa"/>
+  <rect x="4" y="4" width="1" height="8" fill="#4c1d95"/>
+  <rect x="11" y="4" width="1" height="8" fill="#4c1d95"/>
+  <rect x="5" y="2" width="6" height="1" fill="#6d28d9"/>
+  <rect x="5" y="13" width="6" height="1" fill="#6d28d9"/>
+  <rect x="6" y="6" width="4" height="1" fill="#4c1d95"/>
+  <rect x="6" y="8" width="4" height="1" fill="#4c1d95"/>
+</svg>`,
+  },
+  {
+    id: 'pixel_spellbook',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="3" y="3" width="10" height="10" fill="#7c3aed"/>
+  <rect x="4" y="4" width="8" height="8" fill="#c4b5fd"/>
+  <rect x="3" y="3" width="10" height="1" fill="#4c1d95"/>
+  <rect x="3" y="12" width="10" height="1" fill="#4c1d95"/>
+  <rect x="3" y="3" width="1" height="10" fill="#4c1d95"/>
+  <rect x="12" y="3" width="1" height="10" fill="#4c1d95"/>
+  <rect x="7" y="6" width="2" height="4" fill="#6d28d9"/>
+  <rect x="6" y="7" width="4" height="2" fill="#6d28d9"/>
+</svg>`,
+  },
+  {
+    id: 'pixel_joystick_book',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="2" y="3" width="6" height="10" fill="#7c3aed"/>
+  <rect x="3" y="4" width="4" height="8" fill="#a78bfa"/>
+  <rect x="9" y="9" width="5" height="3" fill="#6d28d9"/>
+  <rect x="11" y="6" width="1" height="3" fill="#6d28d9"/>
+  <rect x="10" y="5" width="3" height="1" fill="#6d28d9"/>
+  <rect x="12" y="10" width="1" height="1" fill="#c4b5fd"/>
+</svg>`,
+  },
+  {
+    id: 'pixel_book_stack',
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#0b1225"/>
+  <rect x="3" y="3" width="10" height="3" fill="#7c3aed"/>
+  <rect x="3" y="7" width="10" height="3" fill="#6d28d9"/>
+  <rect x="3" y="11" width="10" height="3" fill="#a78bfa"/>
+  <rect x="4" y="4" width="8" height="1" fill="#4c1d95"/>
+  <rect x="4" y="8" width="8" height="1" fill="#4c1d95"/>
+  <rect x="4" y="12" width="8" height="1" fill="#4c1d95"/>
+</svg>`,
+  },
+]
+
+const iconDataUrl = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+const getProfileAvatarUrl = (user) => {
+  if (!user) return null
+  if (user.avatar_url) return user.avatar_url
+  const iconId = user.avatar_icon
+  const icon = PROFILE_ICONS.find((i) => i.id === iconId) ?? PROFILE_ICONS[0]
+  return iconDataUrl(icon.svg)
+}
+
 const curatedRecommendations = []
 
 const initialTracker = []
@@ -77,7 +169,7 @@ const fetchUsers = async () => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, friends, is_private')
+      .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
     
     if (error) throw error
     return data || []
@@ -124,7 +216,7 @@ const updateUserFriends = async (userId, friends) => {
       .from('users')
       .update({ friends, updated_at: new Date().toISOString() })
       .or(filter)
-      .select('id, username, email, friends, is_private')
+      .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
     
     if (error) throw error
 
@@ -710,6 +802,11 @@ function App() {
   const [authorModalLoading, setAuthorModalLoading] = useState(false)
   const [isPrivate, setIsPrivate] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
+  const [profileAvatarIcon, setProfileAvatarIcon] = useState('pixel_book_1')
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
+  const [profileTopBooks, setProfileTopBooks] = useState([])
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
   const [moshes, setMoshes] = useState([]) // Track book chats
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
@@ -928,7 +1025,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, friends, is_private')
+        .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
         .eq('id', currentUser.id)
         .limit(1)
       if (error) throw error
@@ -940,6 +1037,14 @@ function App() {
       console.error('Failed to refresh current user', error)
     }
   }
+
+  useEffect(() => {
+    if (!currentUser) return
+    setIsPrivate(Boolean(currentUser.is_private))
+    setProfileAvatarIcon(currentUser.avatar_icon || 'pixel_book_1')
+    setProfileAvatarUrl(currentUser.avatar_url || '')
+    setProfileTopBooks(Array.isArray(currentUser.top_books) ? currentUser.top_books.slice(0, 4) : [])
+  }, [currentUser?.id])
 
   const loadFriendRequests = async () => {
     if (!supabase || !currentUser?.id) return
@@ -1834,8 +1939,13 @@ function App() {
   const viewFriendProfile = async (friendUsername) => {
     try {
       // Get friend's user info
-      const friendData = await searchUsers(friendUsername)
-      const friend = friendData.find(u => u.username === friendUsername)
+      const { data: profileRows, error: profileError } = await supabase
+        .from('users')
+        .select('id, username, is_private, avatar_icon, avatar_url, top_books')
+        .eq('username', friendUsername)
+        .limit(1)
+      if (profileError) throw profileError
+      const friend = profileRows?.[0]
       
       if (!friend) {
         setFriendMessage('Friend not found')
@@ -1853,6 +1963,73 @@ function App() {
       console.error('Error loading friend profile:', error)
       setFriendMessage('Failed to load friend profile')
     }
+  }
+
+  const saveProfile = async () => {
+    if (!supabase || !currentUser) return
+    setProfileSaving(true)
+    setProfileMessage('')
+    try {
+      const payload = {
+        avatar_icon: profileAvatarUrl ? null : profileAvatarIcon,
+        avatar_url: profileAvatarUrl ? profileAvatarUrl : null,
+        top_books: Array.isArray(profileTopBooks) ? profileTopBooks.slice(0, 4) : [],
+        is_private: Boolean(isPrivate),
+        updated_at: new Date().toISOString(),
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .update(payload)
+        .eq('id', currentUser.id)
+        .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
+        .limit(1)
+
+      if (error) throw error
+      const nextUser = data?.[0]
+      if (nextUser) {
+        setCurrentUser(nextUser)
+        localStorage.setItem('bookmosh-user', JSON.stringify(nextUser))
+      }
+      setProfileMessage('Saved.')
+    } catch (error) {
+      console.error('Profile save failed', error)
+      setProfileMessage(error?.message || 'Failed to save.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const onProfileUpload = async (file) => {
+    if (!file) return
+    const maxBytes = 1024 * 1024 * 1.5
+    if (file.size > maxBytes) {
+      setProfileMessage('Image too large. Please choose an image under ~1.5MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      setProfileAvatarUrl(result)
+    }
+    reader.onerror = () => {
+      setProfileMessage('Failed to read image.')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const addTopBook = (title) => {
+    if (!title) return
+    setProfileTopBooks((prev) => {
+      const next = Array.isArray(prev) ? prev.slice() : []
+      if (next.map((t) => t.toLowerCase()).includes(title.toLowerCase())) return next
+      if (next.length >= 4) return next
+      next.push(title)
+      return next
+    })
+  }
+
+  const removeTopBook = (title) => {
+    setProfileTopBooks((prev) => (Array.isArray(prev) ? prev.filter((t) => t !== title) : []))
   }
 
   const startMosh = async (bookTitle, friendUsername = null) => {
@@ -3447,6 +3624,130 @@ function App() {
                   <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <div className="flex items-center justify-between">
                       <div>
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Profile</p>
+                        <p className="text-sm text-white/60">Customize your avatar + top books</p>
+                      </div>
+                      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                        <img
+                          src={getProfileAvatarUrl({ avatar_icon: profileAvatarIcon, avatar_url: profileAvatarUrl })}
+                          alt="Avatar"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Pick an icon</p>
+                      <div className="grid grid-cols-6 gap-2">
+                        {PROFILE_ICONS.map((icon) => (
+                          <button
+                            key={icon.id}
+                            type="button"
+                            onClick={() => {
+                              setProfileAvatarIcon(icon.id)
+                              setProfileAvatarUrl('')
+                            }}
+                            className={`h-10 w-10 overflow-hidden rounded-xl border bg-white/5 transition ${
+                              profileAvatarUrl
+                                ? 'border-white/10 opacity-60'
+                                : profileAvatarIcon === icon.id
+                                  ? 'border-white/60'
+                                  : 'border-white/10 hover:border-white/40'
+                            }`}
+                          >
+                            <img src={iconDataUrl(icon.svg)} alt={icon.id} className="h-full w-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Or upload</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          onProfileUpload(f)
+                          e.target.value = ''
+                        }}
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white"
+                      />
+                      {profileAvatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setProfileAvatarUrl('')}
+                          className="mt-2 w-full rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                        >
+                          Use icon instead
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {profileTopBooks.map((title) => {
+                          const book = tracker.find((b) => b.title === title)
+                          return (
+                            <div key={title} className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                              <div className="h-20 w-full">
+                                {book?.cover ? (
+                                  <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeTopBook(title)}
+                                className="absolute top-1 right-1 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/80"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )
+                        })}
+                        {Array.from({ length: Math.max(0, 4 - profileTopBooks.length) }).map((_, idx) => (
+                          <div key={idx} className="h-20 rounded-xl border border-dashed border-white/10 bg-white/5" />
+                        ))}
+                      </div>
+
+                      <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-2">
+                        {tracker
+                          .filter((b) => !profileTopBooks.includes(b.title))
+                          .slice(0, 50)
+                          .map((b) => (
+                            <button
+                              key={b.title}
+                              type="button"
+                              onClick={() => addTopBook(b.title)}
+                              disabled={profileTopBooks.length >= 4}
+                              className="mb-2 w-full rounded-xl border border-white/10 bg-[#050914]/60 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/40 disabled:opacity-50"
+                            >
+                              {b.title}
+                            </button>
+                          ))}
+                        {tracker.length === 0 && (
+                          <p className="text-sm text-white/60">Add books to your library to pick a Top 4.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={saveProfile}
+                      disabled={profileSaving}
+                      className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                    >
+                      {profileSaving ? 'Saving…' : 'Save Profile'}
+                    </button>
+                    <p className="text-xs text-white/60 min-h-[1.25rem]">{profileMessage}</p>
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
                         <p className="text-xs uppercase tracking-[0.3em] text-white/50">Privacy</p>
                         <p className="text-sm text-white/60">{isPrivate ? 'Private profile' : 'Public profile'}</p>
                       </div>
@@ -4454,8 +4755,13 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl border border-white/15 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
               <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5 flex-shrink-0">
+                    <img src={getProfileAvatarUrl(selectedFriend)} alt="Avatar" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -4476,6 +4782,29 @@ function App() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []).slice(0, 4).map((title) => {
+                      const book = (selectedFriend.books || []).find((b) => b.title === title)
+                      return (
+                        <div key={title} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                          <div className="h-20 w-full">
+                            {book?.cover ? (
+                              <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {(!Array.isArray(selectedFriend.top_books) || selectedFriend.top_books.length === 0) && (
+                      <p className="col-span-4 text-sm text-white/60">No top books picked yet.</p>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Library</p>
                   {selectedFriend.books && selectedFriend.books.length > 0 ? (
