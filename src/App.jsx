@@ -77,7 +77,7 @@ const fetchUsers = async () => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, friends, is_private')
+      .select('id, username, friends, is_private')
     
     if (error) throw error
     return data || []
@@ -161,7 +161,7 @@ const searchUsers = async (query) => {
     const normalized = query.trim()
     const { data: exactData, error: exactError } = await supabase
       .from('users')
-      .select('id, username, email')
+      .select('id, username')
       .or(`username.ilike.${normalized},email.ilike.${normalized}`)
       .limit(5)
     
@@ -171,7 +171,7 @@ const searchUsers = async (query) => {
 
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email')
+      .select('id, username')
       .or(`username.ilike.%${normalized}%,email.ilike.%${normalized}%`)
       .limit(10)
 
@@ -727,6 +727,11 @@ function App() {
   const [moshInviteTitle, setMoshInviteTitle] = useState('')
   const [moshInviteError, setMoshInviteError] = useState('')
   const [moshInviteLoading, setMoshInviteLoading] = useState(false)
+  const [isMoshAddFriendsOpen, setIsMoshAddFriendsOpen] = useState(false)
+  const [moshAddFriends, setMoshAddFriends] = useState([])
+  const [moshAddSearch, setMoshAddSearch] = useState('')
+  const [moshAddError, setMoshAddError] = useState('')
+  const [moshAddLoading, setMoshAddLoading] = useState(false)
   const [moshArchiveFilter, setMoshArchiveFilter] = useState('open')
   const [librarySearch, setLibrarySearch] = useState('')
   const [showAllLibrary, setShowAllLibrary] = useState(false)
@@ -917,7 +922,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, email, friends, is_private')
+        .select('id, username, friends, is_private')
         .eq('id', currentUser.id)
         .limit(1)
       if (error) throw error
@@ -1566,6 +1571,106 @@ function App() {
     setMoshInviteTitle('')
     setMoshInviteError('')
     setMoshInviteLoading(false)
+  }
+
+  const openMoshAddFriends = () => {
+    if (!currentUser || !activeMosh) return
+    setMoshAddFriends([])
+    setMoshAddSearch('')
+    setMoshAddError('')
+    setMoshAddLoading(false)
+    setIsMoshAddFriendsOpen(true)
+  }
+
+  const closeMoshAddFriends = () => {
+    setIsMoshAddFriendsOpen(false)
+    setMoshAddFriends([])
+    setMoshAddSearch('')
+    setMoshAddError('')
+    setMoshAddLoading(false)
+  }
+
+  const addMoshAddFriend = (username) => {
+    if (!moshAddFriends.includes(username)) {
+      setMoshAddFriends((prev) => [...prev, username])
+      setMoshAddSearch('')
+    }
+  }
+
+  const removeMoshAddFriend = (username) => {
+    setMoshAddFriends((prev) => prev.filter((f) => f !== username))
+  }
+
+  const confirmMoshAddFriends = async () => {
+    if (!supabase || !currentUser || !activeMosh) return
+    if (moshAddFriends.length === 0) {
+      setMoshAddError('Select at least one friend to add.')
+      return
+    }
+
+    setMoshAddLoading(true)
+    setMoshAddError('')
+
+    try {
+      const existingIds = Array.isArray(activeMosh.participants_ids) ? activeMosh.participants_ids : []
+      const existingUsernames = Array.isArray(activeMosh.participants_usernames) ? activeMosh.participants_usernames : []
+
+      const newIds = []
+      for (const username of moshAddFriends) {
+        const id = await resolveUserId(username)
+        if (!id) {
+          throw new Error(`Could not find user ${username}`)
+        }
+        newIds.push(id)
+      }
+
+      const nextParticipantsIds = Array.from(new Set([...existingIds, ...newIds]))
+      const nextParticipantsUsernames = Array.from(new Set([...existingUsernames, ...moshAddFriends]))
+
+      const { data: updatedRows, error: updateError } = await supabase
+        .from('moshes')
+        .update({
+          participants_ids: nextParticipantsIds,
+          participants_usernames: nextParticipantsUsernames,
+        })
+        .eq('id', activeMosh.id)
+        .select('*')
+
+      if (updateError) throw updateError
+
+      const updatedMosh = Array.isArray(updatedRows) ? updatedRows[0] : null
+      if (updatedMosh) {
+        setActiveMosh(updatedMosh)
+      } else {
+        // Fallback refresh
+        await fetchActiveMoshes()
+      }
+
+      const readsPayload = newIds
+        .filter((id) => !existingIds.includes(id))
+        .map((id, idx) => ({
+          mosh_id: activeMosh.id,
+          user_id: id,
+          username: moshAddFriends[idx] ?? 'reader',
+          last_read_at: new Date(0).toISOString(),
+        }))
+
+      if (readsPayload.length > 0) {
+        const { error: readsError } = await supabase
+          .from('mosh_reads')
+          .upsert(readsPayload, { onConflict: 'mosh_id,user_id' })
+        if (readsError) {
+          console.error('[MOSH] Failed to create mosh_reads for new participants:', readsError)
+        }
+      }
+
+      await fetchActiveMoshes()
+      closeMoshAddFriends()
+    } catch (error) {
+      console.error('[MOSH] Add friends failed:', error)
+      setMoshAddError(error?.message || 'Failed to add friends.')
+      setMoshAddLoading(false)
+    }
   }
 
   const addMoshInviteFriend = (friendUsername) => {
@@ -2334,6 +2439,111 @@ function App() {
             />
           </button>
         </header>
+        )}
+
+        {currentUser && activeMosh && isMoshAddFriendsOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                closeMoshAddFriends()
+              }
+            }}
+          >
+            <div className="w-[clamp(320px,80vw,620px)] rounded-3xl border border-white/15 bg-[#0b1225]/95 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/40">Mosh</p>
+                  <h2 className="text-xl font-semibold text-white">Add friends</h2>
+                  <p className="text-sm text-white/60 line-clamp-1">{activeMosh.mosh_title || activeMosh.book_title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeMoshAddFriends}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {moshAddFriends.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {moshAddFriends.map((friend) => (
+                      <div key={friend} className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1">
+                        <span className="text-sm text-white">{friend}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMoshAddFriend(friend)}
+                          className="text-white/60 hover:text-white transition"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  value={moshAddSearch}
+                  onChange={(e) => setMoshAddSearch(e.target.value)}
+                  placeholder="Type to search friends..."
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                />
+
+                <div className="max-h-48 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-[#050914]/60 p-3">
+                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                    .filter((f) => {
+                      const alreadyInMosh = (activeMosh?.participants_usernames || []).includes(f)
+                      const matches = f.toLowerCase().includes(moshAddSearch.toLowerCase())
+                      const notSelected = !moshAddFriends.includes(f)
+                      return matches && notSelected && !alreadyInMosh
+                    })
+                    .map((friend) => (
+                      <button
+                        key={friend}
+                        type="button"
+                        onClick={() => addMoshAddFriend(friend)}
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/30 hover:bg-white/10"
+                      >
+                        {friend}
+                      </button>
+                    ))}
+
+                  {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                    .filter((f) => {
+                      const alreadyInMosh = (activeMosh?.participants_usernames || []).includes(f)
+                      const matches = f.toLowerCase().includes(moshAddSearch.toLowerCase())
+                      const notSelected = !moshAddFriends.includes(f)
+                      return matches && notSelected && !alreadyInMosh
+                    }).length === 0 && (
+                    <p className="text-sm text-white/60">{moshAddSearch ? 'No matching friends' : 'No friends available to add'}</p>
+                  )}
+                </div>
+
+                <p className="text-sm text-rose-200 min-h-[1.25rem]">{moshAddError}</p>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeMoshAddFriends}
+                  className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmMoshAddFriends}
+                  disabled={moshAddLoading}
+                  className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-60"
+                >
+                  {moshAddLoading ? 'Adding…' : 'Add to mosh'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {!currentUser && (
@@ -3664,6 +3874,14 @@ function App() {
                         ))}
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={openMoshAddFriends}
+                      className="w-full rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40"
+                    >
+                      Add friends
+                    </button>
                     
                     <button
                       type="button"
@@ -3951,7 +4169,6 @@ function App() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold text-white">{selectedFriend.username}</h2>
-                  <p className="text-sm text-white/60">{selectedFriend.email}</p>
                 </div>
                 <button
                   type="button"
