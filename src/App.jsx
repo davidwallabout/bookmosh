@@ -2006,33 +2006,39 @@ function App() {
     setProfileSaving(true)
     setProfileMessage('')
     try {
-      const payload = {
-        avatar_icon: profileAvatarUrl ? null : profileAvatarIcon,
-        avatar_url: profileAvatarUrl ? profileAvatarUrl : null,
-        top_books: Array.isArray(profileTopBooks) ? profileTopBooks.slice(0, 4) : ['', '', '', ''],
-        is_private: Boolean(isPrivate),
-        updated_at: new Date().toISOString(),
-      }
-      const { data, error } = await supabase
-        .from('users')
-        .update(payload)
-        .eq('id', currentUser.id)
-        .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
-        .limit(1)
-
-      if (error) throw error
-      const nextUser = data?.[0]
-      if (nextUser) {
-        setCurrentUser(nextUser)
-        localStorage.setItem('bookmosh-user', JSON.stringify(nextUser))
-      }
-      setProfileMessage('Saved.')
+      await updateProfileFields({})
     } catch (error) {
       console.error('Profile save failed', error)
       setProfileMessage(error?.message || 'Failed to save.')
     } finally {
       setProfileSaving(false)
     }
+  }
+
+  const updateProfileFields = async (overrides) => {
+    if (!supabase || !currentUser) return
+    const payload = {
+      avatar_icon: profileAvatarUrl ? null : profileAvatarIcon,
+      avatar_url: profileAvatarUrl ? profileAvatarUrl : null,
+      top_books: Array.isArray(profileTopBooks) ? profileTopBooks.slice(0, 4) : ['', '', '', ''],
+      is_private: Boolean(isPrivate),
+      updated_at: new Date().toISOString(),
+      ...(overrides || {}),
+    }
+    const { data, error } = await supabase
+      .from('users')
+      .update(payload)
+      .eq('id', currentUser.id)
+      .select('id, username, friends, is_private, avatar_icon, avatar_url, top_books')
+      .limit(1)
+
+    if (error) throw error
+    const nextUser = data?.[0]
+    if (nextUser) {
+      setCurrentUser(nextUser)
+      localStorage.setItem('bookmosh-user', JSON.stringify(nextUser))
+    }
+    setProfileMessage('Saved.')
   }
 
   const onProfileUpload = async (file) => {
@@ -2046,6 +2052,18 @@ function App() {
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : ''
       setProfileAvatarUrl(result)
+      ;(async () => {
+        try {
+          setProfileSaving(true)
+          setProfileMessage('')
+          await updateProfileFields({ avatar_url: result || null, avatar_icon: null })
+        } catch (error) {
+          console.error('Profile avatar upload save failed', error)
+          setProfileMessage(error?.message || 'Failed to save.')
+        } finally {
+          setProfileSaving(false)
+        }
+      })()
     }
     reader.onerror = () => {
       setProfileMessage('Failed to read image.')
@@ -2070,6 +2088,18 @@ function App() {
     setProfileTopBooks((prev) => {
       const next = Array.isArray(prev) ? prev.slice(0, 4) : ['', '', '', '']
       next[slotIndex] = title || ''
+      ;(async () => {
+        try {
+          setProfileSaving(true)
+          setProfileMessage('')
+          await updateProfileFields({ top_books: next })
+        } catch (error) {
+          console.error('Profile top books save failed', error)
+          setProfileMessage(error?.message || 'Failed to save.')
+        } finally {
+          setProfileSaving(false)
+        }
+      })()
       return next
     })
   }
@@ -3692,6 +3722,18 @@ function App() {
                             onClick={() => {
                               setProfileAvatarIcon(icon.id)
                               setProfileAvatarUrl('')
+                              ;(async () => {
+                                try {
+                                  setProfileSaving(true)
+                                  setProfileMessage('')
+                                  await updateProfileFields({ avatar_icon: icon.id, avatar_url: null })
+                                } catch (error) {
+                                  console.error('Profile avatar icon save failed', error)
+                                  setProfileMessage(error?.message || 'Failed to save.')
+                                } finally {
+                                  setProfileSaving(false)
+                                }
+                              })()
                             }}
                             className={`h-10 w-10 overflow-hidden rounded-xl border bg-white/5 transition ${
                               profileAvatarUrl
@@ -3722,7 +3764,21 @@ function App() {
                       {profileAvatarUrl && (
                         <button
                           type="button"
-                          onClick={() => setProfileAvatarUrl('')}
+                          onClick={() => {
+                            setProfileAvatarUrl('')
+                            ;(async () => {
+                              try {
+                                setProfileSaving(true)
+                                setProfileMessage('')
+                                await updateProfileFields({ avatar_icon: profileAvatarIcon, avatar_url: null })
+                              } catch (error) {
+                                console.error('Profile switch to icon save failed', error)
+                                setProfileMessage(error?.message || 'Failed to save.')
+                              } finally {
+                                setProfileSaving(false)
+                              }
+                            })()
+                          }}
                           className="mt-2 w-full rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
                         >
                           Use icon instead
