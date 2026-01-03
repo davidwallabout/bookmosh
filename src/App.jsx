@@ -1180,11 +1180,20 @@ function App() {
 
   const activeFriendProfiles = useMemo(() => {
     if (!currentUser) return []
-    return currentUser.friends
+    const resolved = (Array.isArray(currentUser.friends) ? currentUser.friends : [])
       .map((friendKey) =>
         users.find((user) => user.username === friendKey) || users.find((user) => String(user.id) === String(friendKey)),
       )
       .filter(Boolean)
+
+    const seen = new Set()
+    return resolved.filter((friend) => {
+      const key = String(friend?.id ?? friend?.username ?? '')
+      if (!key) return false
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   }, [currentUser, users])
 
   useEffect(() => {
@@ -5520,7 +5529,7 @@ function App() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50">Friends</p>
-                      <p className="text-sm text-white/60">{currentUser.friends?.length ?? 0} connections</p>
+                      <p className="text-sm text-white/60">{activeFriendProfiles.length} connections</p>
                     </div>
                     <div className="text-xs text-white/50">{activeFriendProfiles.length} online</div>
                   </div>
