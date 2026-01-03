@@ -1181,7 +1181,9 @@ function App() {
   const activeFriendProfiles = useMemo(() => {
     if (!currentUser) return []
     return currentUser.friends
-      .map((username) => users.find((user) => user.username === username))
+      .map((friendKey) =>
+        users.find((user) => user.username === friendKey) || users.find((user) => String(user.id) === String(friendKey)),
+      )
       .filter(Boolean)
   }, [currentUser, users])
 
@@ -3707,13 +3709,15 @@ function App() {
       if (error) throw error
 
       // Persist the friendship in both users' profiles.
-      // friends is stored as a text[] of user ids.
+      // friends is stored as a text[] of usernames in this app.
       const requesterId = String(request.requester_id ?? '').trim()
       const recipientId = String(request.recipient_id ?? currentUser?.id ?? '').trim()
-      if (requesterId && recipientId) {
+      const requesterUsername = String(request.requester_username ?? '').trim()
+      const recipientUsername = String(request.recipient_username ?? currentUser?.username ?? '').trim()
+      if (requesterId && recipientId && requesterUsername && recipientUsername) {
         const { data: usersRows, error: usersErr } = await supabase
           .from('users')
-          .select('id, friends')
+          .select('id, username, friends')
           .in('id', [requesterId, recipientId])
         if (usersErr) throw usersErr
 
@@ -3721,12 +3725,31 @@ function App() {
         const requesterRow = rowById.get(requesterId)
         const recipientRow = rowById.get(recipientId)
 
+        const normalizeList = (list) =>
+          (Array.isArray(list) ? list : [])
+            .map((v) => String(v ?? '').trim())
+            .filter(Boolean)
+
         const nextRequesterFriends = Array.from(
-          new Set([...(Array.isArray(requesterRow?.friends) ? requesterRow.friends : []), recipientId].filter(Boolean)),
-        )
+          new Set(
+            [...normalizeList(requesterRow?.friends), recipientUsername].map((v) => v.toLowerCase()),
+          ),
+        ).map((lower) => {
+          // Keep original casing from usernames list if possible
+          if (lower === recipientUsername.toLowerCase()) return recipientUsername
+          const original = normalizeList(requesterRow?.friends).find((v) => v.toLowerCase() === lower)
+          return original || lower
+        })
+
         const nextRecipientFriends = Array.from(
-          new Set([...(Array.isArray(recipientRow?.friends) ? recipientRow.friends : []), requesterId].filter(Boolean)),
-        )
+          new Set(
+            [...normalizeList(recipientRow?.friends), requesterUsername].map((v) => v.toLowerCase()),
+          ),
+        ).map((lower) => {
+          if (lower === requesterUsername.toLowerCase()) return requesterUsername
+          const original = normalizeList(recipientRow?.friends).find((v) => v.toLowerCase() === lower)
+          return original || lower
+        })
 
         const { error: u1Err } = await supabase
           .from('users')
