@@ -138,11 +138,23 @@ const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
   if (!supabase) return null
   try {
     if (supabase.functions?.invoke) {
-      const { data, error } = await supabase.functions.invoke('isbndb-search', {
-        body: { q, isbn, pageSize },
-      })
-      if (error) throw error
-      return data
+      try {
+        const { data, error } = await supabase.functions.invoke('isbndb-search', {
+          body: { q, isbn, pageSize },
+        })
+        if (!error && data) {
+          if (import.meta.env.DEV) {
+            const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
+            console.log('[ISBNDB] via supabase.functions.invoke', { q, isbn, count })
+          }
+          return data
+        }
+        if (error) {
+          console.warn('[ISBNDB] invoke failed, falling back to HTTP fetch', error)
+        }
+      } catch (error) {
+        console.warn('[ISBNDB] invoke threw, falling back to HTTP fetch', error)
+      }
     }
 
     const baseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -160,8 +172,16 @@ const invokeIsbndbSearch = async ({ q, isbn, pageSize = 20 } = {}) => {
       headers,
       body: JSON.stringify({ q, isbn, pageSize }),
     })
-    if (!res.ok) return null
-    return await res.json()
+    if (!res.ok) {
+      console.warn('[ISBNDB] HTTP fetch failed', res.status)
+      return null
+    }
+    const data = await res.json()
+    if (import.meta.env.DEV) {
+      const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
+      console.log('[ISBNDB] via HTTP fetch', { q, isbn, count })
+    }
+    return data
   } catch (error) {
     console.error('ISBNdb search invoke failed', error)
     return null
