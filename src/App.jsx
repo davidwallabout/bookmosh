@@ -131,6 +131,12 @@ const openLibraryIsbnCoverUrl = (isbn, size = 'M') => {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(clean)}-${size}.jpg`
 }
 
+const openLibraryCoverIdUrl = (coverId, size = 'L') => {
+  const id = (coverId ?? '').toString().trim()
+  if (!id) return null
+  return `https://covers.openlibrary.org/b/id/${encodeURIComponent(id)}-${size}.jpg`
+}
+
 const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
   if (!supabase) return null
   try {
@@ -3560,36 +3566,67 @@ function App() {
   useEffect(() => {
     if (!selectedBook) return
     const isbn = (selectedBook.isbn ?? '').toString().trim()
-    if (!isbn) return
     if (selectedBook.cover) return
-    if (isbndbCoverLookupRef.current.has(isbn)) return
-    isbndbCoverLookupRef.current.add(isbn)
+    const olKey = (selectedBook.olKey ?? selectedBook.key ?? '').toString().trim()
+    const cacheKey = `${isbn || ''}|${olKey || ''}`
+    if (isbndbCoverLookupRef.current.has(cacheKey)) return
+    isbndbCoverLookupRef.current.add(cacheKey)
 
     let canceled = false
     ;(async () => {
       try {
-        const data = await invokeIsbndbSearch({ isbn })
-        const b = data?.book ?? null
-        let cover =
-          b?.image ||
-          b?.image_url ||
-          b?.image_original ||
-          b?.image_large ||
-          b?.image_small ||
-          null
-        if (typeof cover === 'string' && cover.startsWith('http://')) {
-          cover = `https://${cover.slice('http://'.length)}`
+        let cover = null
+
+        if (isbn) {
+          const olIsbnUrl = openLibraryIsbnCoverUrl(isbn, 'L')
+          try {
+            const res = await fetch(olIsbnUrl, { method: 'HEAD' })
+            if (res.ok) cover = olIsbnUrl
+          } catch (_) {
+            // ignore
+          }
         }
+
+        if (!cover && olKey && olKey.startsWith('/works/')) {
+          try {
+            const workRes = await fetch(`https://openlibrary.org${olKey}.json`)
+            if (workRes.ok) {
+              const work = await workRes.json()
+              const covers = Array.isArray(work?.covers) ? work.covers : []
+              if (covers.length > 0) {
+                const url = openLibraryCoverIdUrl(covers[0], 'L')
+                if (url) cover = url
+              }
+            }
+          } catch (_) {
+            // ignore
+          }
+        }
+
+        if (!cover && isbn) {
+          const data = await invokeIsbndbSearch({ isbn })
+          const b = data?.book ?? null
+          cover =
+            b?.image ||
+            b?.image_url ||
+            b?.image_original ||
+            b?.image_large ||
+            b?.image_small ||
+            null
+          if (typeof cover === 'string' && cover.startsWith('http://')) {
+            cover = `https://${cover.slice('http://'.length)}`
+          }
+        }
+
         if (!canceled && cover) {
           updateBook(selectedBook.title, { cover })
           setSelectedBook((prev) => (prev ? { ...prev, cover } : prev))
         } else {
-          // allow retry later
-          isbndbCoverLookupRef.current.delete(isbn)
+          isbndbCoverLookupRef.current.delete(cacheKey)
         }
       } catch (error) {
         console.error('Failed to load ISBNdb cover', error)
-        isbndbCoverLookupRef.current.delete(isbn)
+        isbndbCoverLookupRef.current.delete(cacheKey)
       }
     })()
 
