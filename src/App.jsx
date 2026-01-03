@@ -6202,7 +6202,14 @@ function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelectedFriend(null)}
+                        onClick={() => {
+                          setSelectedFriend(null)
+                          setFriendBooks([])
+                          setFriendBooksOffset(0)
+                          setFriendBooksHasMore(false)
+                          setFriendBooksStatusFilter('all')
+                          setFriendLists([])
+                        }}
                         className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
                       >
                         Close
@@ -6218,7 +6225,7 @@ function App() {
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                   <div className="grid grid-cols-4 gap-2">
                     {(Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books.filter(Boolean) : []).slice(0, 4).map((title) => {
-                      const book = (selectedFriend.books || []).find((b) => b.title === title)
+                      const book = (friendBooks || []).find((b) => b.title === title)
                       return (
                         <div key={title} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
                           <div className="h-20 w-full">
@@ -6238,10 +6245,79 @@ function App() {
                 </div>
 
                 <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Lists</p>
+                  {friendListsLoading ? (
+                    <p className="text-sm text-white/60">Loading lists…</p>
+                  ) : friendLists.length > 0 ? (
+                    <div className="space-y-2">
+                      {friendLists.map((l) => (
+                        <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
+                              {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
+                            </div>
+                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                {l.item_count ?? 0}
+                              </span>
+                              <div className="flex items-center">
+                                {Array.from({ length: Math.min(4, (l.preview_covers ?? []).length || 0) }).map((_, idx) => {
+                                  const cover = l.preview_covers[idx]
+                                  return (
+                                    <div
+                                      key={`${l.id}-preview-${idx}`}
+                                      className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5"
+                                      style={{ marginLeft: idx === 0 ? 0 : -10 }}
+                                    >
+                                      <img src={cover} alt="Cover" className="h-full w-full object-cover" />
+                                    </div>
+                                  )
+                                })}
+                                {(l.preview_covers ?? []).length === 0 && (
+                                  <div className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/60">No public lists yet.</p>
+                  )}
+                </div>
+
+                <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Library</p>
-                  {selectedFriend.books && selectedFriend.books.length > 0 ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {[{ id: 'all', label: 'All' }, ...statusTags.map((s) => ({ id: s, label: s }))].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setFriendBooksStatusFilter(opt.id)}
+                        className={`rounded-full border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                          friendBooksStatusFilter === opt.id
+                            ? 'border-white/60 bg-white/10 text-white'
+                            : 'border-white/10 text-white/60 hover:border-white/40'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {friendBooksLoading && friendBooks.length === 0 ? (
+                    <p className="text-sm text-white/60">Loading books…</p>
+                  ) : (friendBooksStatusFilter === 'all'
+                      ? friendBooks
+                      : friendBooks.filter((b) => (b.status ?? '').toLowerCase() === friendBooksStatusFilter.toLowerCase())
+                    ).length > 0 ? (
                     <div className="grid gap-3 md:grid-cols-2">
-                      {selectedFriend.books.map((book, idx) => (
+                      {(friendBooksStatusFilter === 'all'
+                        ? friendBooks
+                        : friendBooks.filter((b) => (b.status ?? '').toLowerCase() === friendBooksStatusFilter.toLowerCase())
+                      ).map((book, idx) => (
                         <div key={idx} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                           <div className="flex gap-3">
                             {book.cover ? (
@@ -6269,6 +6345,19 @@ function App() {
                     </div>
                   ) : (
                     <p className="text-sm text-white/60">No books in library yet</p>
+                  )}
+
+                  {friendBooksHasMore && (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={loadMoreFriendBooks}
+                        disabled={friendBooksLoading}
+                        className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5 disabled:opacity-60"
+                      >
+                        {friendBooksLoading ? 'Loading…' : 'Load 20 more'}
+                      </button>
+                    </div>
                   )}
                 </div>
                 </div>
