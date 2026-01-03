@@ -9,23 +9,15 @@
 
 DROP POLICY IF EXISTS "Users can view public profiles" ON users;
 
--- Create a more permissive policy that allows viewing:
--- 1. Public profiles (is_private = false)
--- 2. Your own profile
--- 3. Profiles of users who are your friends
--- 4. Profiles of users who have you as a friend
+-- Create a simpler policy that avoids recursion
+-- Just allow viewing public profiles and your own profile
+-- The "Users can search for other users" policy below handles friend search
 CREATE POLICY "Users can view public profiles"
 ON users
 FOR SELECT
 USING (
   is_private = false 
   OR auth.uid()::text = id::text
-  OR auth.uid()::text = ANY(friends)
-  OR EXISTS (
-    SELECT 1 FROM users u2 
-    WHERE u2.id::text = auth.uid()::text 
-    AND id::text = ANY(u2.friends)
-  )
 );
 
 -- Also, we need to ensure users can update their own friends array
