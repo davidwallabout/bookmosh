@@ -107,6 +107,17 @@ const getProfileAvatarUrl = (user) => {
   return iconDataUrl(icon.svg)
 }
 
+const normalizeOpenLibraryPersonOrTitle = (value) => {
+  const raw = (value ?? '').toString().trim()
+  if (!raw) return ''
+  return raw
+    .replace(/[\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\.,:;!?()\[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 const curatedRecommendations = []
 
 const initialTracker = []
@@ -590,14 +601,31 @@ const startBackgroundMatching = (books, setTracker, username, setMatchingProgres
     setAuthorModalLoading(true)
 
     try {
-      const response = await fetch(
-        `https://openlibrary.org/search.json?author=${encodeURIComponent(name)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
-      )
-      const data = await response.json()
+      const normalizedName = normalizeOpenLibraryPersonOrTitle(name)
+      const queries = [name]
+      if (normalizedName && normalizedName.toLowerCase() !== name.toLowerCase()) {
+        queries.push(normalizedName)
+      }
+
+      const docsByKey = new Map()
+      for (const q of queries) {
+        const response = await fetch(
+          `https://openlibrary.org/search.json?author=${encodeURIComponent(q)}&limit=100&fields=key,title,author_name,first_publish_year,cover_i,edition_count,ratings_average,subject,isbn,publisher,language`,
+        )
+        if (!response.ok) continue
+        const data = await response.json()
+        const docs = Array.isArray(data?.docs) ? data.docs : []
+        for (const doc of docs) {
+          const key = doc?.key || `${doc?.title ?? ''}|${doc?.author_name?.[0] ?? ''}|${doc?.first_publish_year ?? ''}`
+          if (!docsByKey.has(key)) docsByKey.set(key, doc)
+        }
+      }
+
+      const docs = Array.from(docsByKey.values())
 
       const authorLower = name.toLowerCase()
 
-      const mapped = (data.docs || [])
+      const mapped = docs
         .filter((doc) => {
           if (!doc.title) return false
           const title = doc.title.toLowerCase()
