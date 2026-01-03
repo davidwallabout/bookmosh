@@ -287,7 +287,7 @@ const searchUsers = async (query) => {
 }
 
 // Fetch friend's reading data
-const fetchFriendBooks = async (username) => {
+const fetchFriendBooks = async (username, offset = 0, limit = 20) => {
   if (!supabase) return []
   
   try {
@@ -295,6 +295,8 @@ const fetchFriendBooks = async (username) => {
       .from('bookmosh_books')
       .select('*')
       .eq('owner', username)
+      .order('updated_at', { ascending: false })
+      .range(offset, offset + limit - 1)
     
     if (error) throw error
     return data || []
@@ -816,6 +818,13 @@ function App() {
   const [authorModalLoading, setAuthorModalLoading] = useState(false)
   const [isPrivate, setIsPrivate] = useState(false)
   const [selectedFriend, setSelectedFriend] = useState(null)
+  const [friendBooks, setFriendBooks] = useState([])
+  const [friendBooksLoading, setFriendBooksLoading] = useState(false)
+  const [friendBooksHasMore, setFriendBooksHasMore] = useState(false)
+  const [friendBooksOffset, setFriendBooksOffset] = useState(0)
+  const [friendBooksStatusFilter, setFriendBooksStatusFilter] = useState('all')
+  const [friendLists, setFriendLists] = useState([])
+  const [friendListsLoading, setFriendListsLoading] = useState(false)
   const [profileAvatarIcon, setProfileAvatarIcon] = useState('pixel_book_1')
   const [profileAvatarUrl, setProfileAvatarUrl] = useState('')
   const [profileTopBooks, setProfileTopBooks] = useState(['', '', '', ''])
@@ -1179,7 +1188,7 @@ function App() {
         .eq('owner_id', currentUser.id)
         .order('updated_at', { ascending: false })
       if (mineError) throw mineError
-      setOwnedLists(Array.isArray(mine) ? mine : [])
+      const mineLists = Array.isArray(mine) ? mine : []
 
       const { data: follows, error: followsError } = await supabase
         .from('list_follows')
@@ -1195,9 +1204,9 @@ function App() {
           .in('id', followIds)
           .order('updated_at', { ascending: false })
         if (followedError) throw followedError
-        setFollowedLists((Array.isArray(followed) ? followed : []).filter((l) => l.owner_id !== currentUser.id))
+        var followedListsRaw = (Array.isArray(followed) ? followed : []).filter((l) => l.owner_id !== currentUser.id)
       } else {
-        setFollowedLists([])
+        var followedListsRaw = []
       }
 
       const { data: pub, error: pubError } = await supabase
@@ -1209,7 +1218,43 @@ function App() {
       if (pubError) throw pubError
       const pubLists = Array.isArray(pub) ? pub : []
       const followedSet = new Set(followIds)
-      setPublicLists(pubLists.filter((l) => l.owner_id !== currentUser.id && !followedSet.has(l.id)))
+      const publicListsRaw = pubLists.filter((l) => l.owner_id !== currentUser.id && !followedSet.has(l.id))
+
+      const allListIds = Array.from(
+        new Set([...mineLists, ...followedListsRaw, ...publicListsRaw].map((l) => l.id).filter(Boolean)),
+      )
+
+      let countsByListId = {}
+      let previewCoversByListId = {}
+      if (allListIds.length) {
+        const { data: items, error: itemsError } = await supabase
+          .from('list_items')
+          .select('list_id, book_cover, created_at')
+          .in('list_id', allListIds)
+          .order('created_at', { ascending: false })
+
+        if (itemsError) throw itemsError
+
+        const rows = Array.isArray(items) ? items : []
+        for (const row of rows) {
+          const listId = row.list_id
+          if (!listId) continue
+          countsByListId[listId] = (countsByListId[listId] ?? 0) + 1
+          if ((previewCoversByListId[listId]?.length ?? 0) >= 4) continue
+          previewCoversByListId[listId] = previewCoversByListId[listId] ?? []
+          if (row.book_cover) previewCoversByListId[listId].push(row.book_cover)
+        }
+      }
+
+      const withPreview = (l) => ({
+        ...l,
+        item_count: countsByListId[l.id] ?? 0,
+        preview_covers: previewCoversByListId[l.id] ?? [],
+      })
+
+      setOwnedLists(mineLists.map(withPreview))
+      setFollowedLists(followedListsRaw.map(withPreview))
+      setPublicLists(publicListsRaw.map(withPreview))
 
       const { data: invites, error: invitesError } = await supabase
         .from('list_invites')
@@ -2514,17 +2559,90 @@ function App() {
         setFriendMessage('Friend not found')
         return
       }
-      
-      // Get friend's books
-      const friendBooks = await fetchFriendBooks(friendUsername)
-      
-      setSelectedFriend({
-        ...friend,
-        books: friendBooks
-      })
+
+      setSelectedFriend({ ...friend })
+      setFriendBooks([])
+      setFriendBooksOffset(0)
+      setFriendBooksHasMore(false)
+      setFriendBooksStatusFilter('all')
+      setFriendLists([])
+
+      const PAGE_SIZE = 20
+
+      // Get first page of friend's books
+      setFriendBooksLoading(true)
+      try {
+        const firstPage = await fetchFriendBooks(friendUsername, 0, PAGE_SIZE)
+        const normalized = Array.isArray(firstPage) ? firstPage : []
+        setFriendBooks(normalized)
+        setFriendBooksOffset(normalized.length)
+        setFriendBooksHasMore(normalized.length === PAGE_SIZE)
+      } finally {
+        setFriendBooksLoading(false)
+      }
+
+      // Get friend's public lists
+      setFriendListsLoading(true)
+      try {
+        const { data: listsRows, error: listsError } = await supabase
+          .from('lists')
+          .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+          .eq('owner_id', friend.id)
+          .eq('is_public', true)
+          .order('updated_at', { ascending: false })
+          .limit(50)
+        if (listsError) throw listsError
+        const rawLists = Array.isArray(listsRows) ? listsRows : []
+
+        const listIds = rawLists.map((l) => l.id).filter(Boolean)
+        let countsByListId = {}
+        let previewCoversByListId = {}
+        if (listIds.length) {
+          const { data: items, error: itemsError } = await supabase
+            .from('list_items')
+            .select('list_id, book_cover, created_at')
+            .in('list_id', listIds)
+            .order('created_at', { ascending: false })
+          if (itemsError) throw itemsError
+          const rows = Array.isArray(items) ? items : []
+          for (const row of rows) {
+            const listId = row.list_id
+            if (!listId) continue
+            countsByListId[listId] = (countsByListId[listId] ?? 0) + 1
+            if ((previewCoversByListId[listId]?.length ?? 0) >= 4) continue
+            previewCoversByListId[listId] = previewCoversByListId[listId] ?? []
+            if (row.book_cover) previewCoversByListId[listId].push(row.book_cover)
+          }
+        }
+
+        setFriendLists(
+          rawLists.map((l) => ({
+            ...l,
+            item_count: countsByListId[l.id] ?? 0,
+            preview_covers: previewCoversByListId[l.id] ?? [],
+          })),
+        )
+      } finally {
+        setFriendListsLoading(false)
+      }
     } catch (error) {
       console.error('Error loading friend profile:', error)
       setFriendMessage('Failed to load friend profile')
+    }
+  }
+
+  const loadMoreFriendBooks = async () => {
+    if (!selectedFriend?.username || friendBooksLoading || !friendBooksHasMore) return
+    const PAGE_SIZE = 20
+    setFriendBooksLoading(true)
+    try {
+      const nextPage = await fetchFriendBooks(selectedFriend.username, friendBooksOffset, PAGE_SIZE)
+      const incoming = Array.isArray(nextPage) ? nextPage : []
+      setFriendBooks((prev) => [...(Array.isArray(prev) ? prev : []), ...incoming])
+      setFriendBooksOffset((prev) => prev + incoming.length)
+      setFriendBooksHasMore(incoming.length === PAGE_SIZE)
+    } finally {
+      setFriendBooksLoading(false)
     }
   }
 
@@ -4876,9 +4994,36 @@ function App() {
                       {(listsTab === 'mine' ? ownedLists : listsTab === 'following' ? followedLists : publicLists).map((l) => (
                         <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                           <button type="button" onClick={() => openList(l)} className="w-full text-left">
-                            <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
-                            <p className="text-xs text-white/60 line-clamp-1">by {l.owner_username}</p>
-                            {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
+                                <p className="text-xs text-white/60 line-clamp-1">by {l.owner_username}</p>
+                                {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
+                              </div>
+
+                              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.item_count ?? 0}
+                                </span>
+                                <div className="flex items-center">
+                                  {Array.from({ length: Math.min(4, (l.preview_covers ?? []).length || 0) }).map((_, idx) => {
+                                    const cover = l.preview_covers[idx]
+                                    return (
+                                      <div
+                                        key={`${l.id}-preview-${idx}`}
+                                        className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5"
+                                        style={{ marginLeft: idx === 0 ? 0 : -10 }}
+                                      >
+                                        <img src={cover} alt="Cover" className="h-full w-full object-cover" />
+                                      </div>
+                                    )
+                                  })}
+                                  {(l.preview_covers ?? []).length === 0 && (
+                                    <div className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </button>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {listsTab === 'mine' ? (
