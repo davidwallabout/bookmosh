@@ -5834,110 +5834,84 @@ function App() {
                 </div>
               )}
 
-              <div className="mt-6 space-y-3">
+              <div className="mt-6 space-y-2">
                 {feedItems.length > 0 ? (
                   feedItems.slice(0, feedDisplayCount).map((item) => {
                     const book = mapFeedItemToBook(item)
-                    const libraryMatch = (Array.isArray(tracker) ? tracker : []).find((b) => {
-                      const t1 = String(b?.title ?? '').trim().toLowerCase()
-                      const a1 = String(b?.author ?? '').trim().toLowerCase()
-                      const t2 = String(book?.title ?? '').trim().toLowerCase()
-                      const a2 = String(book?.author ?? '').trim().toLowerCase()
-                      return Boolean(t1 && t2 && t1 === t2 && a1 && a2 && a1 === a2)
-                    })
+                    const status = (book.tags ?? []).find(t => ['to-read', 'Reading', 'Read'].includes(t)) || 'their library'
+                    const statusText = status === 'to-read' ? 'to read list' : status === 'Reading' ? 'currently reading' : status === 'Read' ? 'read list' : 'library'
+                    
                     return (
                       <div
                         key={item.id}
-                        className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#050914]/60 p-4"
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
                       >
-                        <button
-                          type="button"
-                          onClick={() => openModal(book)}
-                          className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5"
-                        >
-                          {book.cover ? (
-                            <img src={book.cover} alt={book.title} className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                          )}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/50">{item.owner_username}</p>
-                          <p className="text-base font-semibold text-white line-clamp-2">{book.title}</p>
-                          <p className="text-sm text-white/60 line-clamp-1">{book.author}</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {(book.tags ?? []).map((tag) => (
-                              <span key={tag} className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {[
-                              { id: 'to-read', label: 'To Read' },
-                              { id: 'Reading', label: 'Reading' },
-                              { id: 'Read', label: 'Read' },
-                            ].map((opt) => (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                onClick={() => applyFeedQuickStatus(book, opt.id)}
-                                className={`rounded-full border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
-                                  (libraryMatch?.status ?? null) === opt.id
-                                    ? 'border-white/60 bg-white/10 text-white'
-                                    : 'border-white/20 text-white/70 hover:border-white/60 hover:text-white'
-                                }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => toggleFeedLike(item.id)}
-                              className={`group flex items-center gap-1 rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                                feedLikes[item.id]?.likedByMe
-                                  ? 'border-pink-500/60 bg-pink-500/20 text-pink-400'
-                                  : 'border-white/20 text-white/70 hover:border-pink-500/40 hover:text-pink-400'
-                              }`}
-                              title={feedLikes[item.id]?.users?.length ? `Liked by ${feedLikes[item.id].users.join(', ')}` : 'Like this post'}
+                        <p className="text-sm text-white/80">
+                          <button
+                            type="button"
+                            onClick={() => viewFriendProfile(item.owner_username)}
+                            className="font-semibold text-white hover:text-aurora hover:underline transition"
+                          >
+                            {item.owner_username}
+                          </button>
+                          <span className="text-white/60"> added </span>
+                          <button
+                            type="button"
+                            onClick={() => openModal(book)}
+                            className="font-semibold text-white hover:text-aurora hover:underline transition"
+                          >
+                            {book.title}
+                          </button>
+                          <span className="text-white/60"> by </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              scrollToDiscovery()
+                              openAuthorModal(book.author)
+                            }}
+                            className="font-semibold text-white hover:text-aurora hover:underline transition"
+                          >
+                            {book.author}
+                          </button>
+                          <span className="text-white/60"> to {statusText}</span>
+                        </p>
+                        
+                        <div className="mt-2 flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleFeedLike(item.id)}
+                            className={`group flex items-center gap-1 text-xs transition ${
+                              feedLikes[item.id]?.likedByMe
+                                ? 'text-pink-400'
+                                : 'text-white/50 hover:text-pink-400'
+                            }`}
+                            title={feedLikes[item.id]?.users?.length ? `Liked by ${feedLikes[item.id].users.join(', ')}` : 'Like this post'}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill={feedLikes[item.id]?.likedByMe ? 'currentColor' : 'none'}
+                              stroke="currentColor"
+                              strokeWidth={2}
+                              className="h-4 w-4"
                             >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill={feedLikes[item.id]?.likedByMe ? 'currentColor' : 'none'}
-                                stroke="currentColor"
-                                strokeWidth={2}
-                                className="h-4 w-4"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-                                />
-                              </svg>
-                              {(feedLikes[item.id]?.count ?? 0) > 0 && (
-                                <span>{feedLikes[item.id].count}</span>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openModal(book)}
-                              className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                            >
-                              Details
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openMoshInvite(book)}
-                              className="rounded-full bg-gradient-to-r from-aurora to-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                            >
-                              Send Pit invite
-                            </button>
-                          </div>
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+                              />
+                            </svg>
+                            {(feedLikes[item.id]?.count ?? 0) > 0 && (
+                              <span>{feedLikes[item.id].count}</span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openMoshInvite(book)}
+                            className="text-xs text-white/50 hover:text-white transition"
+                          >
+                            Send Pit invite
+                          </button>
                         </div>
                       </div>
                     )
