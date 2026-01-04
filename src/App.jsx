@@ -7418,7 +7418,13 @@ function App() {
                          {(activeMosh?.participants_usernames || []).map((username) => (
                           <div key={username} className="flex items-center gap-2">
                             <div className="h-2 w-2 rounded-full bg-green-400"></div>
-                            <p className="text-sm text-white">{username}</p>
+                            <button
+                              type="button"
+                              onClick={() => viewFriendProfile(username)}
+                              className="text-sm text-white hover:text-white/80 hover:underline transition text-left"
+                            >
+                              {username}
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -7969,7 +7975,7 @@ function App() {
                                 type="button"
                                 onClick={() => {
                                   if (!title) return
-                                  openModal(book ?? { title, author: selectedFriend.username, cover: null })
+                                  openModal(book ?? { title, author: 'Unknown author', cover: null })
                                 }}
                                 className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
                               >
