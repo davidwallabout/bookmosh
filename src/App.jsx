@@ -7720,10 +7720,13 @@ function App() {
 
                       return slots.map((title, idx) => {
                         const safeTitle = title ? String(title) : ''
-                        // First try top_books_data (fetched with covers), then fall back to friendBooks
-                        const book = safeTitle
-                          ? (topBooksData.find((b) => b.title === safeTitle) || (friendBooks || []).find((b) => b.title === safeTitle))
+                        // Use the pre-fetched top_books_data by index (already matched in viewFriendProfile)
+                        // Fall back to case-insensitive search in friendBooks
+                        const bookFromData = topBooksData[idx] ?? null
+                        const bookFromFriends = safeTitle
+                          ? (friendBooks || []).find((b) => String(b.title ?? '').toLowerCase().trim() === safeTitle.toLowerCase().trim())
                           : null
+                        const book = bookFromData?.cover ? bookFromData : (bookFromFriends ?? bookFromData)
                         const cover = book?.cover ?? null
                         const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
 
@@ -7746,7 +7749,7 @@ function App() {
                               // Just open the modal - don't auto-add to library
                               openModal(payload)
                             }}
-                            className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/5 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className={`group relative overflow-hidden rounded-xl border border-white/10 disabled:opacity-60 disabled:cursor-not-allowed ${cover ? '' : 'bg-white/5'}`}
                           >
                             <div className="w-full aspect-[2/3]">
                               {cover ? (
