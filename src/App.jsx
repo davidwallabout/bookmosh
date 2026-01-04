@@ -7818,6 +7818,7 @@ function App() {
                                 olKey: book?.olKey ?? book?.key ?? null,
                               }
                               // Just open the modal - don't auto-add to library
+                              closeFriendProfile(true)
                               openModal(payload)
                             }}
                             className={`group relative overflow-hidden rounded-xl border border-white/10 disabled:opacity-60 disabled:cursor-not-allowed ${cover ? '' : 'bg-white/5'}`}
@@ -7932,7 +7933,10 @@ function App() {
                           <div className="flex gap-3">
                             <button
                               type="button"
-                              onClick={() => openModal(bookPayload)}
+                              onClick={() => {
+                                closeFriendProfile(true)
+                                openModal(bookPayload)
+                              }}
                               className="flex-shrink-0 focus:outline-none"
                             >
                               {book.cover ? (
@@ -7946,11 +7950,25 @@ function App() {
                             <div className="flex-1 min-w-0">
                               <button
                                 type="button"
-                                onClick={() => openModal(bookPayload)}
+                                onClick={() => {
+                                  closeFriendProfile(true)
+                                  openModal(bookPayload)
+                                }}
                                 className="text-left focus:outline-none"
                               >
                                 <p className="text-sm font-semibold text-white line-clamp-2 hover:underline">{book.title}</p>
-                                <p className="text-xs text-white/60 line-clamp-1">{book.author}</p>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  closeFriendProfile(true)
+                                  scrollToDiscovery()
+                                  openAuthorModal(book.author)
+                                }}
+                                className="text-left text-xs text-white/60 line-clamp-1 hover:text-white hover:underline transition"
+                              >
+                                {book.author}
                               </button>
                               <div className="mt-2 flex items-center gap-2">
                                 <span className="rounded-full bg-aurora/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-aurora">
