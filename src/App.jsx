@@ -5188,13 +5188,13 @@ function App() {
                 {/* Profile Button */}
                 <button
                   type="button"
-                  onClick={() => scrollToSection('profile')}
-                  className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 pl-2 pr-3 py-1.5 transition hover:border-white/50"
+                  onClick={() => scrollToSection('community')}
+                  className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 pl-1.5 pr-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white"
                 >
-                  <div className="h-6 w-6 overflow-hidden rounded-full border border-white/10 bg-white/5 flex-shrink-0">
+                  <div className="h-5 w-5 overflow-hidden rounded-full border border-white/10 bg-white/5 flex-shrink-0">
                     <img src={getProfileAvatarUrl(currentUser)} alt="Avatar" className="h-full w-full object-cover" />
                   </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">{currentUser.username}</span>
+                  <span>{currentUser.username}</span>
                 </button>
               </div>
             </div>
@@ -5255,13 +5255,13 @@ function App() {
             {/* Profile Button */}
             <button
               type="button"
-              onClick={() => scrollToSection('profile')}
-              className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 pl-2 pr-4 py-2 transition hover:border-white/50"
+              onClick={() => scrollToSection('community')}
+              className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 pl-2 pr-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white"
             >
-              <div className="h-8 w-8 overflow-hidden rounded-full border border-white/10 bg-white/5 flex-shrink-0">
+              <div className="h-6 w-6 overflow-hidden rounded-full border border-white/10 bg-white/5 flex-shrink-0">
                 <img src={getProfileAvatarUrl(currentUser)} alt="Avatar" className="h-full w-full object-cover" />
               </div>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70">{currentUser.username}</span>
+              <span>{currentUser.username}</span>
             </button>
           </div>
           </header>
