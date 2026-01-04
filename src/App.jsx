@@ -3429,36 +3429,7 @@ function App() {
         return
       }
 
-      // Fetch covers for top_books titles.
-      // IMPORTANT: Keep the array aligned to the 4 display slots (do NOT filter),
-      // otherwise index-based rendering will shift and show the placeholder over real covers.
-      const incomingTop = Array.isArray(friend.top_books) ? friend.top_books : []
-      const topSlots = [incomingTop[0] ?? '', incomingTop[1] ?? '', incomingTop[2] ?? '', incomingTop[3] ?? '']
-      let topBooksWithCovers = [null, null, null, null]
-      const titlesToResolve = topSlots.filter((t) => String(t ?? '').trim())
-      if (titlesToResolve.length > 0) {
-        const { data: allFriendBooks } = await supabase
-          .from('bookmosh_books')
-          .select('title, author, cover, cover_url, isbn, year, olKey, key')
-          .eq('owner', friendUsername)
-          .limit(200)
-        const friendBooksArr = Array.isArray(allFriendBooks) ? allFriendBooks : []
-        topBooksWithCovers = topSlots.map((t) => {
-          const raw = String(t ?? '').trim()
-          if (!raw) return null
-          const titleLower = raw.toLowerCase()
-          const match = friendBooksArr.find((b) => String(b.title ?? '').toLowerCase().trim() === titleLower)
-          const cover = match?.cover ?? match?.cover_url ?? (match?.isbn ? openLibraryIsbnCoverUrl(match.isbn, 'M') : null)
-          const result = match
-            ? { ...match, cover }
-            : { title: raw, author: null, cover: null, isbn: null, year: null, olKey: null }
-          console.log('[FRIEND TOP 4] Title:', raw, '| Match:', !!match, '| Cover:', cover)
-          return result
-        })
-      }
-
-      console.log('[FRIEND TOP 4] Final topBooksWithCovers:', topBooksWithCovers)
-      setSelectedFriend({ ...friend, top_books_data: topBooksWithCovers })
+      setSelectedFriend(friend)
       setFriendBooks([])
       setFriendBooksOffset(0)
       setFriendBooksHasMore(false)
@@ -7952,62 +7923,40 @@ function App() {
               <div className="mx-auto w-full max-w-3xl px-4 py-6">
                 <div className="space-y-4">
                 {(() => {
-                  const incoming = Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []
-                  const titles = incoming
-                    .map((t) => String(t ?? '').trim())
-                    .filter(Boolean)
-                    .slice(0, 4)
-
-                  if (titles.length === 0) return null
-
-                  const topBooksData = Array.isArray(selectedFriend.top_books_data)
-                    ? selectedFriend.top_books_data
-                    : []
-                  const topBooksResolved = topBooksData.filter(Boolean)
+                  const topBooks = Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []
+                  if (topBooks.length === 0) return null
 
                   return (
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
-                      <div className="grid grid-cols-4 gap-2">
-                        {titles.map((safeTitle) => {
-                          const titleLower = safeTitle.toLowerCase().trim()
-                          const bookFromData = topBooksResolved.find(
-                            (b) => String(b?.title ?? '').toLowerCase().trim() === titleLower,
-                          )
-                          const bookFromFriends = (friendBooks || []).find(
-                            (b) => String(b?.title ?? '').toLowerCase().trim() === titleLower,
-                          )
-                          const book = bookFromData?.cover ? bookFromData : (bookFromFriends ?? bookFromData)
-                          const cover = book?.cover ?? null
-                          const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
-
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {topBooks.slice(0, 4).map((title, idx) => {
+                          const book = title ? (friendBooks || []).find((b) => b.title === title) : null
                           return (
-                            <button
-                              key={safeTitle}
-                              type="button"
-                              title={hoverLabel || undefined}
-                              onClick={() => {
-                                const payload = {
-                                  title: safeTitle,
-                                  author: book?.author ?? selectedFriend.username,
-                                  cover: cover ?? null,
-                                  year: book?.year ?? null,
-                                  isbn: book?.isbn ?? null,
-                                  olKey: book?.olKey ?? book?.key ?? null,
-                                }
-                                closeFriendProfile(true)
-                                openModal(payload)
-                              }}
-                              className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/30"
+                            <div
+                              key={`${idx}-${title || 'empty'}`}
+                              className="rounded-2xl border border-white/10 bg-white/5 p-2 flex flex-col"
                             >
-                              <div className="w-full aspect-[2/3]">
-                                {cover ? (
-                                  <img src={cover} alt={safeTitle} className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!title) return
+                                  closeFriendProfile(true)
+                                  openModal(book ?? { title, author: selectedFriend.username, cover: null })
+                                }}
+                                className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
+                              >
+                                {title ? (
+                                  book?.cover ? (
+                                    <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">No cover</div>
+                                  )
                                 ) : (
-                                  <div className="h-full w-full bg-gradient-to-b from-white/5 to-transparent" />
+                                  <div className="flex h-full w-full items-center justify-center text-2xl text-white/50">+</div>
                                 )}
-                              </div>
-                            </button>
+                              </button>
+                            </div>
                           )
                         })}
                       </div>
