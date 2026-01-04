@@ -3438,12 +3438,27 @@ function App() {
 
       const PAGE_SIZE = 20
 
+      // Fetch Top 4 books specifically (if friend has top_books set)
+      const topTitles = Array.isArray(friend.top_books) ? friend.top_books.filter(Boolean).slice(0, 4) : []
+      let topBooksWithData = []
+      if (topTitles.length > 0) {
+        const { data: topBooksRows } = await supabase
+          .from('bookmosh_books')
+          .select('*')
+          .eq('owner', friendUsername)
+          .in('title', topTitles)
+        topBooksWithData = Array.isArray(topBooksRows) ? topBooksRows : []
+      }
+
       // Get first page of friend's books
       setFriendBooksLoading(true)
       try {
         const firstPage = await fetchFriendBooks(friendUsername, 0, PAGE_SIZE)
         const normalized = Array.isArray(firstPage) ? firstPage : []
-        setFriendBooks(normalized)
+        // Merge Top 4 books into friendBooks (dedupe by title)
+        const topTitlesSet = new Set(topBooksWithData.map(b => b.title))
+        const combined = [...topBooksWithData, ...normalized.filter(b => !topTitlesSet.has(b.title))]
+        setFriendBooks(combined)
         setFriendBooksOffset(normalized.length)
         setFriendBooksHasMore(normalized.length === PAGE_SIZE)
       } finally {
@@ -7884,10 +7899,10 @@ function App() {
           </div>
         )}
 
-        {/* Friend Profile Modal */}
+        {/* Friend Profile Page */}
         {selectedFriend && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+          <div className="min-h-screen bg-gradient-to-b from-[#0b1225] to-[#050914]">
+            <div className="overflow-auto pt-[env(safe-area-inset-top)]">
               <div className="sticky top-0 z-10 border-b border-white/10 bg-gradient-to-b from-[#0b1225]/95 to-[#050914]/95 backdrop-blur">
                 <div className="mx-auto w-full max-w-3xl px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
