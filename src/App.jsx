@@ -3235,6 +3235,19 @@ function App() {
     fetchActiveMoshes()
   }, [currentUser, moshArchiveFilter])
 
+  // Handle initial URL params (on page load/refresh)
+  useEffect(() => {
+    if (!supabase || !currentUser) return
+    if (typeof window === 'undefined') return
+    
+    const params = new URLSearchParams(window.location.search)
+    const profileParam = params.get('profile')
+    
+    if (profileParam && !selectedFriend) {
+      viewFriendProfile(profileParam, true)
+    }
+  }, [currentUser, supabase])
+
   // Handle browser back/forward button
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -3436,12 +3449,15 @@ function App() {
           const titleLower = raw.toLowerCase()
           const match = friendBooksArr.find((b) => String(b.title ?? '').toLowerCase().trim() === titleLower)
           const cover = match?.cover ?? match?.cover_url ?? (match?.isbn ? openLibraryIsbnCoverUrl(match.isbn, 'M') : null)
-          return match
+          const result = match
             ? { ...match, cover }
             : { title: raw, author: null, cover: null, isbn: null, year: null, olKey: null }
+          console.log('[FRIEND TOP 4] Title:', raw, '| Match:', !!match, '| Cover:', cover)
+          return result
         })
       }
 
+      console.log('[FRIEND TOP 4] Final topBooksWithCovers:', topBooksWithCovers)
       setSelectedFriend({ ...friend, top_books_data: topBooksWithCovers })
       setFriendBooks([])
       setFriendBooksOffset(0)
