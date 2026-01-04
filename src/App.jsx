@@ -3308,24 +3308,27 @@ function App() {
         return
       }
 
-      // Fetch covers for top_books titles - get all friend's books and match by title
-      const topTitles = Array.isArray(friend.top_books) ? friend.top_books.filter(Boolean) : []
-      let topBooksWithCovers = []
-      if (topTitles.length > 0) {
-        // Fetch friend's books to find matches (case-insensitive)
+      // Fetch covers for top_books titles.
+      // IMPORTANT: Keep the array aligned to the 4 display slots (do NOT filter),
+      // otherwise index-based rendering will shift and show the placeholder over real covers.
+      const incomingTop = Array.isArray(friend.top_books) ? friend.top_books : []
+      const topSlots = [incomingTop[0] ?? '', incomingTop[1] ?? '', incomingTop[2] ?? '', incomingTop[3] ?? '']
+      let topBooksWithCovers = [null, null, null, null]
+      const titlesToResolve = topSlots.filter((t) => String(t ?? '').trim())
+      if (titlesToResolve.length > 0) {
         const { data: allFriendBooks } = await supabase
           .from('bookmosh_books')
-          .select('title, author, cover, isbn, year')
+          .select('title, author, cover, isbn, year, olKey, key')
           .eq('owner', friendUsername)
           .limit(200)
         const friendBooksArr = Array.isArray(allFriendBooks) ? allFriendBooks : []
-        
-        // Match top_books titles to actual books (case-insensitive)
-        topBooksWithCovers = topTitles.map((t) => {
-          const titleLower = String(t).toLowerCase().trim()
+        topBooksWithCovers = topSlots.map((t) => {
+          const raw = String(t ?? '').trim()
+          if (!raw) return null
+          const titleLower = raw.toLowerCase()
           const match = friendBooksArr.find((b) => String(b.title ?? '').toLowerCase().trim() === titleLower)
-          return match || { title: t, author: null, cover: null, isbn: null, year: null }
-        }).filter(Boolean)
+          return match || { title: raw, author: null, cover: null, isbn: null, year: null, olKey: null }
+        })
       }
 
       setSelectedFriend({ ...friend, top_books_data: topBooksWithCovers })
@@ -7786,11 +7789,13 @@ function App() {
 
                       return slots.map((title, idx) => {
                         const safeTitle = title ? String(title) : ''
-                        // Use the pre-fetched top_books_data by index (already matched in viewFriendProfile)
-                        // Fall back to case-insensitive search in friendBooks
-                        const bookFromData = topBooksData[idx] ?? null
+                        // top_books_data is slot-aligned; only use it when this slot has a title.
+                        // Fall back to case-insensitive search in friendBooks.
+                        const bookFromData = safeTitle ? (topBooksData[idx] ?? null) : null
                         const bookFromFriends = safeTitle
-                          ? (friendBooks || []).find((b) => String(b.title ?? '').toLowerCase().trim() === safeTitle.toLowerCase().trim())
+                          ? (friendBooks || []).find(
+                              (b) => String(b.title ?? '').toLowerCase().trim() === safeTitle.toLowerCase().trim(),
+                            )
                           : null
                         const book = bookFromData?.cover ? bookFromData : (bookFromFriends ?? bookFromData)
                         const cover = book?.cover ?? null
