@@ -4341,26 +4341,19 @@ function App() {
             .map((v) => String(v ?? '').trim())
             .filter(Boolean)
 
-        const nextRequesterFriends = Array.from(
-          new Set(
-            [...normalizeList(requesterRow?.friends), recipientUsername].map((v) => v.toLowerCase()),
-          ),
-        ).map((lower) => {
-          // Keep original casing from usernames list if possible
-          if (lower === recipientUsername.toLowerCase()) return recipientUsername
-          const original = normalizeList(requesterRow?.friends).find((v) => v.toLowerCase() === lower)
-          return original || lower
-        })
+        const requesterFriendsList = normalizeList(requesterRow?.friends)
+        const recipientFriendsList = normalizeList(recipientRow?.friends)
+        
+        // Deduplicate case-insensitively but preserve original casing
+        const nextRequesterFriends = [...requesterFriendsList]
+        if (!requesterFriendsList.some(f => f.toLowerCase() === recipientUsername.toLowerCase())) {
+          nextRequesterFriends.push(recipientUsername)
+        }
 
-        const nextRecipientFriends = Array.from(
-          new Set(
-            [...normalizeList(recipientRow?.friends), requesterUsername].map((v) => v.toLowerCase()),
-          ),
-        ).map((lower) => {
-          if (lower === requesterUsername.toLowerCase()) return requesterUsername
-          const original = normalizeList(recipientRow?.friends).find((v) => v.toLowerCase() === lower)
-          return original || lower
-        })
+        const nextRecipientFriends = [...recipientFriendsList]
+        if (!recipientFriendsList.some(f => f.toLowerCase() === requesterUsername.toLowerCase())) {
+          nextRecipientFriends.push(requesterUsername)
+        }
 
         const { error: u1Err } = await supabase
           .from('users')
