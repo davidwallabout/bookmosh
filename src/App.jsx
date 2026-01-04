@@ -1153,33 +1153,16 @@ function App() {
       return
     }
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      
-      if (!token) {
-        console.log('[EMAIL] No auth token available')
-        return
-      }
-
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      if (!baseUrl || !anonKey) {
-        console.log('[EMAIL] Missing baseUrl or anonKey')
-        return
-      }
-
       console.log('[EMAIL] Sending notification:', { type, to, data })
-      const response = await fetch(`${baseUrl}/functions/v1/send-notification-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: anonKey,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ type, to, data }),
+      const { data: result, error } = await supabase.functions.invoke('send-notification-email', {
+        body: { type, to, data }
       })
-      const result = await response.json()
-      console.log('[EMAIL] Response:', response.status, result)
+      
+      if (error) {
+        console.error('[EMAIL] Error:', error)
+      } else {
+        console.log('[EMAIL] Success:', result)
+      }
     } catch (error) {
       console.error('[EMAIL] Failed to send notification:', error)
     }
