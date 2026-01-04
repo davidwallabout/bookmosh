@@ -1144,6 +1144,28 @@ function App() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // Send email notification via Supabase edge function
+  const sendEmailNotification = async (type, to, data) => {
+    if (!supabase) return
+    try {
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      if (!baseUrl || !anonKey) return
+
+      await fetch(`${baseUrl}/functions/v1/send-notification-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ type, to, data }),
+      })
+    } catch (error) {
+      console.error('[EMAIL] Failed to send notification:', error)
+    }
+  }
+
   // Track scroll position for sticky header
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2616,6 +2638,24 @@ function App() {
             users: [...(prev[bookId]?.users ?? []), currentUser.username],
           },
         }))
+
+        // Send email notification to post owner
+        const feedItem = feedItems.find(item => item.id === bookId)
+        if (feedItem && feedItem.owner_username !== currentUser.username) {
+          const { data: ownerData } = await supabase
+            .from('users')
+            .select('email')
+            .eq('username', feedItem.owner_username)
+            .single()
+          
+          if (ownerData?.email) {
+            sendEmailNotification('feed_like', ownerData.email, {
+              likerName: currentUser.username,
+              bookTitle: feedItem.title,
+              bookAuthor: feedItem.author,
+            })
+          }
+        }
       }
     } catch (err) {
       console.error('Toggle like failed', err)
@@ -2990,6 +3030,31 @@ function App() {
           }],
           { onConflict: 'mosh_id,user_id' },
         )
+
+      // Send email notifications to other participants
+      const otherParticipants = (activeMosh.participants_usernames || []).filter(
+        u => u !== currentUser.username
+      )
+      
+      if (otherParticipants.length > 0) {
+        const { data: participantEmails } = await supabase
+          .from('users')
+          .select('username, email')
+          .in('username', otherParticipants)
+        
+        if (participantEmails && participantEmails.length > 0) {
+          participantEmails.forEach(participant => {
+            if (participant.email) {
+              sendEmailNotification('pit_message', participant.email, {
+                senderName: currentUser.username,
+                pitTitle: activeMosh.mosh_title || activeMosh.book_title,
+                pitId: activeMosh.id,
+                messagePreview: body.slice(0, 100),
+              })
+            }
+          })
+        }
+      }
       setUnreadByMoshId((prev) => ({ ...prev, [activeMosh.id]: 0 }))
     } catch (error) {
       console.error('[MOSH] Send message failed:', error)
