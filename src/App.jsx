@@ -3099,6 +3099,29 @@ function App() {
       const params = new URLSearchParams(window.location.search)
       const moshParam = params.get('mosh')
       const moshIdParam = params.get('moshId')
+      const profileParam = params.get('profile')
+      const bookTitleParam = params.get('bookTitle')
+
+      // Handle profile navigation
+      if (profileParam) {
+        // Open profile if not already viewing this one
+        if (selectedFriend?.username !== profileParam) {
+          viewFriendProfile(profileParam, true)
+        }
+      } else if (selectedFriend) {
+        // Close profile if URL no longer has profile param
+        setSelectedFriend(null)
+        setFriendBooks([])
+        setFriendBooksOffset(0)
+        setFriendBooksHasMore(false)
+        setFriendBooksStatusFilter('all')
+        setFriendLists([])
+      }
+
+      // Handle book modal navigation
+      if (!bookTitleParam && selectedBook) {
+        closeModal()
+      }
 
       // If no mosh params in URL, close the pit panel
       if (!moshParam) {
@@ -3120,7 +3143,7 @@ function App() {
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+  }, [selectedFriend, selectedBook])
 
   const setBookStatusTag = (title, nextStatus) => {
     const current = tracker.find((b) => b.title === title)
@@ -3225,8 +3248,16 @@ function App() {
     }
   }
 
-  const viewFriendProfile = async (friendUsername) => {
+  const viewFriendProfile = async (friendUsername, skipPushState = false) => {
     try {
+      // Update URL to reflect profile view
+      if (!skipPushState && typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        params.set('profile', friendUsername)
+        const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
+        window.history.pushState({ profile: friendUsername }, '', next)
+      }
+
       // Get friend's user info
       const { data: profileRows, error: profileError } = await supabase
         .from('users')
@@ -3344,6 +3375,28 @@ function App() {
       setFriendBooksHasMore(incoming.length === PAGE_SIZE)
     } finally {
       setFriendBooksLoading(false)
+    }
+  }
+
+  const closeFriendProfile = (skipHistoryBack = false) => {
+    setSelectedFriend(null)
+    setFriendBooks([])
+    setFriendBooksOffset(0)
+    setFriendBooksHasMore(false)
+    setFriendBooksStatusFilter('all')
+    setFriendLists([])
+
+    // Clear profile from URL
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      params.delete('profile')
+      const qs = params.toString()
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+      if (skipHistoryBack) {
+        window.history.replaceState({}, '', next)
+      } else {
+        window.history.pushState({}, '', next)
+      }
     }
   }
 
@@ -4190,7 +4243,8 @@ function App() {
       params.set('bookTitle', normalized?.title ?? '')
       params.set('bookAuthor', normalized?.author ?? '')
       const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
-      window.history.replaceState({}, '', next)
+      // Use pushState so back button works
+      window.history.pushState({ book: normalized?.title }, '', next)
     }
   }
 
@@ -7640,14 +7694,7 @@ function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedFriend(null)
-                          setFriendBooks([])
-                          setFriendBooksOffset(0)
-                          setFriendBooksHasMore(false)
-                          setFriendBooksStatusFilter('all')
-                          setFriendLists([])
-                        }}
+                        onClick={() => closeFriendProfile()}
                         className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
                       >
                         Close
@@ -7696,8 +7743,7 @@ function App() {
                                 isbn: book?.isbn ?? null,
                                 olKey: book?.olKey ?? book?.key ?? null,
                               }
-                              // Ensure it exists in your library so you can tag it right away.
-                              handleAddBook(payload, 'to-read')
+                              // Just open the modal - don't auto-add to library
                               openModal(payload)
                             }}
                             className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/5 disabled:opacity-60 disabled:cursor-not-allowed"
