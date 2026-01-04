@@ -1026,6 +1026,7 @@ function App() {
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
   const [activeMosh, setActiveMosh] = useState(null)
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
+  const [moshMessageReactions, setMoshMessageReactions] = useState({})
   const [isMoshCoverPickerOpen, setIsMoshCoverPickerOpen] = useState(false)
   const [moshCoverPickerLoading, setMoshCoverPickerLoading] = useState(false)
   const [moshCoverPickerCovers, setMoshCoverPickerCovers] = useState([])
@@ -2671,6 +2672,7 @@ function App() {
     setIsMoshPanelOpen(false)
     setActiveMosh(null)
     setActiveMoshMessages([])
+    setMoshMessageReactions({})
     setMoshDraft('')
     setShowMentionDropdown(false)
     setMoshUrlState({ isOpen: false, moshId: null })
@@ -2679,15 +2681,92 @@ function App() {
   const backToMoshes = () => {
     setActiveMosh(null)
     setActiveMoshMessages([])
+    setMoshMessageReactions({})
     setMoshDraft('')
     setShowMentionDropdown(false)
     setMoshUrlState({ isOpen: true, moshId: null })
   }
 
+  const formatMoshTimestamp = (ts) => {
+    const raw = ts ? new Date(ts) : null
+    if (!raw || Number.isNaN(raw.getTime())) return ''
+    return raw.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
+
+  const loadMoshMessageReactions = async (messageIds) => {
+    if (!supabase || !currentUser?.id) return
+    const ids = Array.isArray(messageIds) ? messageIds.filter(Boolean) : []
+    if (!ids.length) {
+      setMoshMessageReactions({})
+      return
+    }
+    try {
+      const { data, error } = await supabase
+        .from('mosh_message_reactions')
+        .select('message_id, user_id, reaction')
+        .in('message_id', ids)
+      if (error) throw error
+
+      const next = {}
+      for (const id of ids) {
+        const rows = (data ?? []).filter((r) => r.message_id === id)
+        const up = rows.filter((r) => r.reaction === 'up').length
+        const down = rows.filter((r) => r.reaction === 'down').length
+        const mine = rows.find((r) => r.user_id === currentUser.id)?.reaction ?? null
+        next[id] = { up, down, mine }
+      }
+      setMoshMessageReactions(next)
+    } catch (error) {
+      console.error('[MOSH] Failed to load message reactions:', error)
+      setMoshMessageReactions({})
+    }
+  }
+
+  const toggleMoshReaction = async (messageId, reaction) => {
+    if (!supabase || !currentUser?.id || !messageId) return
+    const id = String(messageId)
+    const nextReaction = reaction === 'up' ? 'up' : 'down'
+    const current = moshMessageReactions[id] ?? { up: 0, down: 0, mine: null }
+    const mine = current.mine
+
+    const applyLocal = (mineNext) => {
+      const baseUp = current.up - (mine === 'up' ? 1 : 0)
+      const baseDown = current.down - (mine === 'down' ? 1 : 0)
+      const nextUp = baseUp + (mineNext === 'up' ? 1 : 0)
+      const nextDown = baseDown + (mineNext === 'down' ? 1 : 0)
+      setMoshMessageReactions((prev) => ({ ...prev, [id]: { up: Math.max(0, nextUp), down: Math.max(0, nextDown), mine: mineNext } }))
+    }
+
+    try {
+      if (mine === nextReaction) {
+        applyLocal(null)
+        const { error } = await supabase
+          .from('mosh_message_reactions')
+          .delete()
+          .eq('message_id', id)
+          .eq('user_id', currentUser.id)
+        if (error) throw error
+        return
+      }
+
+      applyLocal(nextReaction)
+      const { error } = await supabase
+        .from('mosh_message_reactions')
+        .upsert(
+          [{ message_id: id, user_id: currentUser.id, username: currentUser.username, reaction: nextReaction }],
+          { onConflict: 'message_id,user_id' },
+        )
+      if (error) throw error
+    } catch (error) {
+      console.error('[MOSH] Toggle reaction failed:', error)
+      loadMoshMessageReactions(Object.keys(moshMessageReactions))
+    }
+  }
+
   const openMosh = async (mosh) => {
-    if (!supabase || !currentUser) return
-    setActiveMosh(mosh)
+    if (!supabase || !currentUser || !mosh) return
     setIsMoshPanelOpen(true)
+    setActiveMosh(mosh)
     setMoshUrlState({ isOpen: true, moshId: mosh?.id ?? null })
     try {
       const { data } = await supabase
@@ -2696,6 +2775,7 @@ function App() {
         .eq('mosh_id', mosh.id)
         .order('created_at')
       setActiveMoshMessages(data ?? [])
+      await loadMoshMessageReactions((data ?? []).map((m) => m.id))
       await supabase
         .from('mosh_reads')
         .upsert(
@@ -2709,7 +2789,7 @@ function App() {
         )
       setUnreadByMoshId((prev) => ({ ...prev, [mosh.id]: 0 }))
     } catch (error) {
-      console.error('Open mosh failed', error)
+      console.error('[MOSH] Failed to load messages:', error)
     }
   }
 
@@ -2739,6 +2819,24 @@ function App() {
       setMoshUrlState({ isOpen: true, moshId: null })
     }
   }
+
+  useEffect(() => {
+    if (!activeMosh?.id) return
+    // Ensure we land on the newest message when entering a pit.
+    const t = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    }, 50)
+    return () => clearTimeout(t)
+  }, [activeMosh?.id])
+
+  useEffect(() => {
+    if (!activeMosh?.id) return
+    // When the initial message list loads for an open pit, jump to the bottom.
+    const t = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    }, 0)
+    return () => clearTimeout(t)
+  }, [activeMosh?.id, activeMoshMessages.length])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2851,6 +2949,13 @@ function App() {
         console.log('[MOSH] Updated messages count:', updated.length)
         return updated
       })
+
+      if (Array.isArray(data) && data.length > 0) {
+        const nextId = data[0]?.id
+        if (nextId) {
+          setMoshMessageReactions((prev) => ({ ...prev, [nextId]: { up: 0, down: 0, mine: null } }))
+        }
+      }
       
       // Auto-scroll to bottom
       setTimeout(() => {
@@ -7172,8 +7277,57 @@ function App() {
                       <div className="flex-1 min-h-0 space-y-3 overflow-auto pr-2">
                         {activeMoshMessages.map((msg) => (
                           <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                            <p className="text-xs uppercase tracking-[0.3em] text-white/50">{msg.sender_username}</p>
+                            <div className="flex items-start justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={() => viewFriendProfile(msg.sender_username)}
+                                className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white hover:underline transition text-left"
+                              >
+                                {msg.sender_username}
+                              </button>
+                              <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">
+                                {formatMoshTimestamp(msg.created_at)}
+                              </span>
+                            </div>
                             <p className="text-sm text-white">{msg.body}</p>
+
+                            <div className="mt-2 flex items-center gap-2">
+                              {(() => {
+                                const r = moshMessageReactions[msg.id] ?? { up: 0, down: 0, mine: null }
+                                const upActive = r.mine === 'up'
+                                const downActive = r.mine === 'down'
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMoshReaction(msg.id, 'up')}
+                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] transition ${
+                                        upActive ? 'border-white/60 bg-white/10 text-white' : 'border-white/15 text-white/60 hover:border-white/40 hover:text-white'
+                                      }`}
+                                      title="Like"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                                        <path d="M2 10c0-.552.448-1 1-1h3v9H3a1 1 0 0 1-1-1v-6ZM7 18V9.828a2 2 0 0 1 .586-1.414l5.172-5.172A1.5 1.5 0 0 1 15.34 4.5V8h2.16a1.5 1.5 0 0 1 1.477 1.77l-1.2 6A1.5 1.5 0 0 1 16.306 17H9a2 2 0 0 1-2-2Z" />
+                                      </svg>
+                                      {r.up}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMoshReaction(msg.id, 'down')}
+                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] transition ${
+                                        downActive ? 'border-white/60 bg-white/10 text-white' : 'border-white/15 text-white/60 hover:border-white/40 hover:text-white'
+                                      }`}
+                                      title="Dislike"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                                        <path d="M18 10c0 .552-.448 1-1 1h-3V2h3a1 1 0 0 1 1 1v7ZM13 2v8.172a2 2 0 0 1-.586 1.414l-5.172 5.172A1.5 1.5 0 0 1 4.66 15.5V12H2.5A1.5 1.5 0 0 1 1.023 10.23l1.2-6A1.5 1.5 0 0 1 3.694 3H11a2 2 0 0 1 2 2Z" />
+                                      </svg>
+                                      {r.down}
+                                    </button>
+                                  </>
+                                )
+                              })()}
+                            </div>
                           </div>
                         ))}
                         {activeMoshMessages.length === 0 && (
@@ -7781,76 +7935,69 @@ function App() {
 
               <div className="mx-auto w-full max-w-3xl px-4 py-6">
                 <div className="space-y-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(() => {
-                      const incoming = Array.isArray(selectedFriend.top_books)
-                        ? selectedFriend.top_books
-                        : []
-                      const topBooksData = Array.isArray(selectedFriend.top_books_data)
-                        ? selectedFriend.top_books_data
-                        : []
-                      const slots = [incoming[0] ?? null, incoming[1] ?? null, incoming[2] ?? null, incoming[3] ?? null]
+                {(() => {
+                  const incoming = Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []
+                  const titles = incoming
+                    .map((t) => String(t ?? '').trim())
+                    .filter(Boolean)
+                    .slice(0, 4)
 
-                      return slots.map((title, idx) => {
-                        const safeTitle = title ? String(title) : ''
-                        // top_books_data is slot-aligned; only use it when this slot has a title.
-                        // Fall back to case-insensitive search in friendBooks.
-                        const bookFromData = safeTitle ? (topBooksData[idx] ?? null) : null
-                        const bookFromFriends = safeTitle
-                          ? (friendBooks || []).find(
-                              (b) => String(b.title ?? '').toLowerCase().trim() === safeTitle.toLowerCase().trim(),
-                            )
-                          : null
-                        const book = bookFromData?.cover ? bookFromData : (bookFromFriends ?? bookFromData)
-                        const cover = book?.cover ?? null
-                        const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
+                  if (titles.length === 0) return null
 
-                        return (
-                          <button
-                            key={`${safeTitle || 'empty'}-${idx}`}
-                            type="button"
-                            disabled={!safeTitle}
-                            title={hoverLabel || undefined}
-                            onClick={() => {
-                              if (!safeTitle) return
-                              const payload = {
-                                title: safeTitle,
-                                author: book?.author ?? selectedFriend.username,
-                                cover: cover ?? null,
-                                year: book?.year ?? null,
-                                isbn: book?.isbn ?? null,
-                                olKey: book?.olKey ?? book?.key ?? null,
-                              }
-                              // Just open the modal - don't auto-add to library
-                              closeFriendProfile(true)
-                              openModal(payload)
-                            }}
-                            className={`group relative overflow-hidden rounded-xl border border-white/10 disabled:opacity-60 disabled:cursor-not-allowed ${cover ? '' : 'bg-white/5'}`}
-                          >
-                            <div className="w-full aspect-[2/3]">
-                              {cover ? (
-                                <img src={cover} alt={safeTitle || 'Top book'} className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                              )}
-                            </div>
-                            {safeTitle && (
-                              <div className="pointer-events-none absolute inset-x-1 bottom-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
-                                <div className="line-clamp-2">{safeTitle}</div>
-                                {book?.author && <div className="mt-0.5 line-clamp-1 text-white/70">{book.author}</div>}
+                  const topBooksData = Array.isArray(selectedFriend.top_books_data)
+                    ? selectedFriend.top_books_data
+                    : []
+                  const topBooksResolved = topBooksData.filter(Boolean)
+
+                  return (
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {titles.map((safeTitle) => {
+                          const titleLower = safeTitle.toLowerCase().trim()
+                          const bookFromData = topBooksResolved.find(
+                            (b) => String(b?.title ?? '').toLowerCase().trim() === titleLower,
+                          )
+                          const bookFromFriends = (friendBooks || []).find(
+                            (b) => String(b?.title ?? '').toLowerCase().trim() === titleLower,
+                          )
+                          const book = bookFromData?.cover ? bookFromData : (bookFromFriends ?? bookFromData)
+                          const cover = book?.cover ?? null
+                          const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
+
+                          return (
+                            <button
+                              key={safeTitle}
+                              type="button"
+                              title={hoverLabel || undefined}
+                              onClick={() => {
+                                const payload = {
+                                  title: safeTitle,
+                                  author: book?.author ?? selectedFriend.username,
+                                  cover: cover ?? null,
+                                  year: book?.year ?? null,
+                                  isbn: book?.isbn ?? null,
+                                  olKey: book?.olKey ?? book?.key ?? null,
+                                }
+                                closeFriendProfile(true)
+                                openModal(payload)
+                              }}
+                              className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-white/30"
+                            >
+                              <div className="w-full aspect-[2/3]">
+                                {cover ? (
+                                  <img src={cover} alt={safeTitle} className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="h-full w-full bg-gradient-to-b from-white/5 to-transparent" />
+                                )}
                               </div>
-                            )}
-                          </button>
-                        )
-                      })
-                    })()}
-                    {(!Array.isArray(selectedFriend.top_books) || selectedFriend.top_books.length === 0) && (
-                      <p className="col-span-4 text-sm text-white/60">No top books picked yet.</p>
-                    )}
-                  </div>
-                </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Lists</p>
