@@ -1016,6 +1016,7 @@ function App() {
   const [feedScope, setFeedScope] = useState('friends')
   const [feedItems, setFeedItems] = useState([])
   const [feedDisplayCount, setFeedDisplayCount] = useState(10)
+  const [feedLikes, setFeedLikes] = useState({})
   const [activeMoshes, setActiveMoshes] = useState([])
   const [unreadByMoshId, setUnreadByMoshId] = useState({})
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
@@ -2492,12 +2493,75 @@ function App() {
 
       const { data, error } = await query
       if (error) throw error
-      setFeedItems(data ?? [])
+      const items = data ?? []
+      setFeedItems(items)
       setFeedDisplayCount(10)
+
+      // Fetch likes for these feed items
+      if (items.length > 0) {
+        const bookIds = items.map((i) => i.id).filter(Boolean)
+        const { data: likesData } = await supabase
+          .from('feed_likes')
+          .select('book_id, user_id, username')
+          .in('book_id', bookIds)
+        const likesMap = {}
+        for (const item of items) {
+          const itemLikes = (likesData ?? []).filter((l) => l.book_id === item.id)
+          likesMap[item.id] = {
+            count: itemLikes.length,
+            likedByMe: itemLikes.some((l) => l.user_id === currentUser?.id),
+            users: itemLikes.map((l) => l.username),
+          }
+        }
+        setFeedLikes(likesMap)
+      } else {
+        setFeedLikes({})
+      }
     } catch (error) {
       console.error('Feed fetch failed', error)
       setFeedItems([])
       setFeedDisplayCount(10)
+      setFeedLikes({})
+    }
+  }
+
+  const toggleFeedLike = async (bookId) => {
+    if (!supabase || !currentUser?.id || !bookId) return
+    const current = feedLikes[bookId] ?? { count: 0, likedByMe: false, users: [] }
+    try {
+      if (current.likedByMe) {
+        // Unlike
+        await supabase
+          .from('feed_likes')
+          .delete()
+          .eq('book_id', bookId)
+          .eq('user_id', currentUser.id)
+        setFeedLikes((prev) => ({
+          ...prev,
+          [bookId]: {
+            count: Math.max(0, (prev[bookId]?.count ?? 1) - 1),
+            likedByMe: false,
+            users: (prev[bookId]?.users ?? []).filter((u) => u !== currentUser.username),
+          },
+        }))
+      } else {
+        // Like
+        await supabase.from('feed_likes').insert({
+          book_id: bookId,
+          user_id: currentUser.id,
+          username: currentUser.username,
+        })
+        setFeedLikes((prev) => ({
+          ...prev,
+          [bookId]: {
+            count: (prev[bookId]?.count ?? 0) + 1,
+            likedByMe: true,
+            users: [...(prev[bookId]?.users ?? []), currentUser.username],
+          },
+        }))
+      }
+    } catch (err) {
+      console.error('Toggle like failed', err)
     }
   }
 
@@ -3177,7 +3241,20 @@ function App() {
         return
       }
 
-      setSelectedFriend({ ...friend })
+      // Fetch covers for top_books titles
+      const topTitles = Array.isArray(friend.top_books) ? friend.top_books.filter(Boolean) : []
+      let topBooksWithCovers = []
+      if (topTitles.length > 0) {
+        const { data: topBooksData } = await supabase
+          .from('bookmosh_books')
+          .select('title, author, cover, isbn, year')
+          .eq('owner', friendUsername)
+          .in('title', topTitles)
+          .limit(4)
+        topBooksWithCovers = Array.isArray(topBooksData) ? topBooksData : []
+      }
+
+      setSelectedFriend({ ...friend, top_books_data: topBooksWithCovers })
       setFriendBooks([])
       setFriendBooksOffset(0)
       setFriendBooksHasMore(false)
@@ -5561,7 +5638,35 @@ function App() {
                             ))}
                           </div>
 
-                          <div className="mt-3 flex flex-wrap gap-2">
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleFeedLike(item.id)}
+                              className={`group flex items-center gap-1 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                                feedLikes[item.id]?.likedByMe
+                                  ? 'border-pink-500/60 bg-pink-500/20 text-pink-400'
+                                  : 'border-white/20 text-white/70 hover:border-pink-500/40 hover:text-pink-400'
+                              }`}
+                              title={feedLikes[item.id]?.users?.length ? `Liked by ${feedLikes[item.id].users.join(', ')}` : 'Like this post'}
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill={feedLikes[item.id]?.likedByMe ? 'currentColor' : 'none'}
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                className="h-4 w-4"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+                                />
+                              </svg>
+                              {(feedLikes[item.id]?.count ?? 0) > 0 && (
+                                <span>{feedLikes[item.id].count}</span>
+                              )}
+                            </button>
                             <button
                               type="button"
                               onClick={() => openModal(book)}
@@ -7554,11 +7659,17 @@ function App() {
                       const incoming = Array.isArray(selectedFriend.top_books)
                         ? selectedFriend.top_books
                         : []
+                      const topBooksData = Array.isArray(selectedFriend.top_books_data)
+                        ? selectedFriend.top_books_data
+                        : []
                       const slots = [incoming[0] ?? null, incoming[1] ?? null, incoming[2] ?? null, incoming[3] ?? null]
 
                       return slots.map((title, idx) => {
                         const safeTitle = title ? String(title) : ''
-                        const book = safeTitle ? (friendBooks || []).find((b) => b.title === safeTitle) : null
+                        // First try top_books_data (fetched with covers), then fall back to friendBooks
+                        const book = safeTitle
+                          ? (topBooksData.find((b) => b.title === safeTitle) || (friendBooks || []).find((b) => b.title === safeTitle))
+                          : null
                         const cover = book?.cover ?? null
                         const hoverLabel = [safeTitle, book?.author].filter(Boolean).join(' — ')
 
