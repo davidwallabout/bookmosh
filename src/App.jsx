@@ -1135,6 +1135,10 @@ function App() {
 
   const scrollToSection = (id) => {
     if (typeof window === 'undefined') return
+    // Close friend profile if open
+    if (selectedFriend) {
+      closeFriendProfile()
+    }
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -5056,6 +5060,10 @@ function App() {
           <div className="relative">
             <button
               onClick={() => {
+                // Close friend profile if open
+                if (selectedFriend) {
+                  closeFriendProfile()
+                }
                 setSelectedStatusFilter(null)
                 setSelectedAuthor(null)
                 setSearchQuery('')
@@ -7956,7 +7964,6 @@ function App() {
                                 type="button"
                                 onClick={() => {
                                   if (!title) return
-                                  closeFriendProfile(true)
                                   openModal(book ?? { title, author: selectedFriend.username, cover: null })
                                 }}
                                 className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
@@ -8066,10 +8073,7 @@ function App() {
                           <div className="flex gap-3">
                             <button
                               type="button"
-                              onClick={() => {
-                                closeFriendProfile(true)
-                                openModal(bookPayload)
-                              }}
+                              onClick={() => openModal(bookPayload)}
                               className="flex-shrink-0 focus:outline-none"
                             >
                               {book.cover ? (
@@ -8083,10 +8087,7 @@ function App() {
                             <div className="flex-1 min-w-0">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  closeFriendProfile(true)
-                                  openModal(bookPayload)
-                                }}
+                                onClick={() => openModal(bookPayload)}
                                 className="text-left focus:outline-none"
                               >
                                 <p className="text-sm font-semibold text-white line-clamp-2 hover:underline">{book.title}</p>
