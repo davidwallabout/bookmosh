@@ -1068,6 +1068,7 @@ function App() {
   const messagesEndRef = useRef(null)
   const [users, setUsers] = useState(defaultUsers)
   const [currentUser, setCurrentUser] = useState(null)
+  const [isScrolled, setIsScrolled] = useState(false)
 
   const markCoverBroken = (key) => {
     const k = String(key || '')
@@ -1142,6 +1143,18 @@ function App() {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // Track scroll position for sticky header
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 100)
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const ensureLocalUserProfile = (username, email) => {
     setUsers((prev) => {
@@ -5059,6 +5072,59 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
+      {/* Sticky Header - appears on scroll */}
+      {currentUser && !selectedFriend && isScrolled && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-[#0b1225]/98 to-[#050914]/95 backdrop-blur-lg border-b border-white/10">
+          <div className="mx-auto max-w-6xl px-6 py-3">
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                  if (selectedFriend) closeFriendProfile()
+                  setSelectedStatusFilter(null)
+                  setSelectedAuthor(null)
+                  setSearchQuery('')
+                  setSearchResults([])
+                  setHasSearched(false)
+                }}
+                className="flex-shrink-0 transition-opacity hover:opacity-80"
+              >
+                <img
+                  src="/bookmosh-logo.png"
+                  alt="BookMosh"
+                  className="h-10 w-auto"
+                />
+              </button>
+              
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: 'discovery', label: 'Discovery' },
+                  { id: 'library', label: 'Library' },
+                  { id: 'moshes', label: 'Pits', badge: totalUnreadMoshes },
+                  { id: 'feed', label: 'Feed' },
+                  { id: 'community', label: 'Community', badge: incomingFriendRequests.length },
+                  { id: 'lists', label: 'Lists' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => scrollToSection(item.id)}
+                    className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/50 hover:text-white relative"
+                  >
+                    {item.label}
+                    {item.badge > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10">
         {currentUser && (
           <header className="flex flex-col items-center justify-center gap-4">
