@@ -508,7 +508,10 @@ const fetchFriendBooks = async (username, offset = 0, limit = 20) => {
       .range(offset, offset + limit - 1)
     
     if (error) throw error
-    return data || []
+    return (data || []).map((row) => ({
+      ...row,
+      cover: row?.cover ?? row?.cover_url ?? (row?.isbn ? openLibraryIsbnCoverUrl(row.isbn, 'M') : null),
+    }))
   } catch (error) {
     console.error('Error fetching friend books:', error)
     return []
@@ -3318,7 +3321,7 @@ function App() {
       if (titlesToResolve.length > 0) {
         const { data: allFriendBooks } = await supabase
           .from('bookmosh_books')
-          .select('title, author, cover, isbn, year, olKey, key')
+          .select('title, author, cover, cover_url, isbn, year, olKey, key')
           .eq('owner', friendUsername)
           .limit(200)
         const friendBooksArr = Array.isArray(allFriendBooks) ? allFriendBooks : []
@@ -3327,7 +3330,10 @@ function App() {
           if (!raw) return null
           const titleLower = raw.toLowerCase()
           const match = friendBooksArr.find((b) => String(b.title ?? '').toLowerCase().trim() === titleLower)
-          return match || { title: raw, author: null, cover: null, isbn: null, year: null, olKey: null }
+          const cover = match?.cover ?? match?.cover_url ?? (match?.isbn ? openLibraryIsbnCoverUrl(match.isbn, 'M') : null)
+          return match
+            ? { ...match, cover }
+            : { title: raw, author: null, cover: null, isbn: null, year: null, olKey: null }
         })
       }
 
