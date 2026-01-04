@@ -1017,6 +1017,7 @@ function App() {
   const [feedItems, setFeedItems] = useState([])
   const [feedDisplayCount, setFeedDisplayCount] = useState(10)
   const [feedLikes, setFeedLikes] = useState({})
+  const [likeNotifications, setLikeNotifications] = useState([])
   const [activeMoshes, setActiveMoshes] = useState([])
   const [unreadByMoshId, setUnreadByMoshId] = useState({})
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
@@ -2517,11 +2518,46 @@ function App() {
       } else {
         setFeedLikes({})
       }
+
+      // Fetch likes on current user's posts (for notifications)
+      const { data: myBooks } = await supabase
+        .from('bookmosh_books')
+        .select('id, title, author, cover')
+        .eq('owner', currentUser.username)
+        .limit(100)
+      const myBookIds = (myBooks ?? []).map((b) => b.id).filter(Boolean)
+      
+      if (myBookIds.length > 0) {
+        const { data: likesOnMyPosts } = await supabase
+          .from('feed_likes')
+          .select('book_id, user_id, username, created_at')
+          .in('book_id', myBookIds)
+          .neq('user_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        
+        const notifications = (likesOnMyPosts ?? []).map((like) => {
+          const book = (myBooks ?? []).find((b) => b.id === like.book_id)
+          return {
+            id: `${like.book_id}-${like.user_id}`,
+            type: 'like',
+            username: like.username,
+            bookTitle: book?.title ?? 'a book',
+            bookAuthor: book?.author ?? null,
+            bookCover: book?.cover ?? null,
+            createdAt: like.created_at,
+          }
+        })
+        setLikeNotifications(notifications)
+      } else {
+        setLikeNotifications([])
+      }
     } catch (error) {
       console.error('Feed fetch failed', error)
       setFeedItems([])
       setFeedDisplayCount(10)
       setFeedLikes({})
+      setLikeNotifications([])
     }
   }
 
@@ -5638,6 +5674,36 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {/* Like notifications */}
+              {likeNotifications.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {likeNotifications.slice(0, 5).map((notif) => (
+                    <div key={notif.id} className="rounded-xl border border-pink-500/20 bg-pink-500/5 px-4 py-3 text-sm text-white/80">
+                      <span className="inline-flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-pink-400">
+                          <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                        </svg>
+                        <button
+                          type="button"
+                          onClick={() => viewFriendProfile(notif.username)}
+                          className="font-semibold text-aurora hover:underline"
+                        >
+                          {notif.username}
+                        </button>
+                        <span className="text-white/60">liked your addition of</span>
+                        <button
+                          type="button"
+                          onClick={() => openModal({ title: notif.bookTitle, author: notif.bookAuthor, cover: notif.bookCover })}
+                          className="font-semibold text-aurora hover:underline"
+                        >
+                          {notif.bookTitle}
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-6 space-y-3">
                 {feedItems.length > 0 ? (
