@@ -6204,7 +6204,7 @@ function App() {
                       onClick={handleSendFriendInvite}
                       className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
                     >
-                      Send invite
+                      Request connection
                     </button>
                     <p className="text-xs text-white/60">{friendMessage}</p>
                   </div>
