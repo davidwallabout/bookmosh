@@ -3241,17 +3241,24 @@ function App() {
         return
       }
 
-      // Fetch covers for top_books titles
+      // Fetch covers for top_books titles - get all friend's books and match by title
       const topTitles = Array.isArray(friend.top_books) ? friend.top_books.filter(Boolean) : []
       let topBooksWithCovers = []
       if (topTitles.length > 0) {
-        const { data: topBooksData } = await supabase
+        // Fetch friend's books to find matches (case-insensitive)
+        const { data: allFriendBooks } = await supabase
           .from('bookmosh_books')
           .select('title, author, cover, isbn, year')
           .eq('owner', friendUsername)
-          .in('title', topTitles)
-          .limit(4)
-        topBooksWithCovers = Array.isArray(topBooksData) ? topBooksData : []
+          .limit(200)
+        const friendBooksArr = Array.isArray(allFriendBooks) ? allFriendBooks : []
+        
+        // Match top_books titles to actual books (case-insensitive)
+        topBooksWithCovers = topTitles.map((t) => {
+          const titleLower = String(t).toLowerCase().trim()
+          const match = friendBooksArr.find((b) => String(b.title ?? '').toLowerCase().trim() === titleLower)
+          return match || { title: t, author: null, cover: null, isbn: null, year: null }
+        }).filter(Boolean)
       }
 
       setSelectedFriend({ ...friend, top_books_data: topBooksWithCovers })
@@ -7791,19 +7798,40 @@ function App() {
                       {(friendBooksStatusFilter === 'all'
                         ? friendBooks
                         : friendBooks.filter((b) => (b.status ?? '').toLowerCase() === friendBooksStatusFilter.toLowerCase())
-                      ).map((book, idx) => (
+                      ).map((book, idx) => {
+                        const bookPayload = {
+                          title: book.title,
+                          author: book.author,
+                          cover: book.cover ?? null,
+                          year: book.year ?? null,
+                          isbn: book.isbn ?? null,
+                          olKey: book.olKey ?? book.key ?? null,
+                        }
+                        return (
                         <div key={idx} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                           <div className="flex gap-3">
-                            {book.cover ? (
-                              <img src={book.cover} alt={book.title} className="h-20 w-14 rounded-lg object-cover flex-shrink-0" />
-                            ) : (
-                              <div className="flex h-20 w-14 items-center justify-center rounded-lg bg-white/5 text-xs text-white/40 flex-shrink-0">
-                                No cover
-                              </div>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => openModal(bookPayload)}
+                              className="flex-shrink-0 focus:outline-none"
+                            >
+                              {book.cover ? (
+                                <img src={book.cover} alt={book.title} className="h-20 w-14 rounded-lg object-cover" />
+                              ) : (
+                                <div className="flex h-20 w-14 items-center justify-center rounded-lg bg-white/5 text-xs text-white/40">
+                                  No cover
+                                </div>
+                              )}
+                            </button>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
-                              <p className="text-xs text-white/60 line-clamp-1">{book.author}</p>
+                              <button
+                                type="button"
+                                onClick={() => openModal(bookPayload)}
+                                className="text-left focus:outline-none"
+                              >
+                                <p className="text-sm font-semibold text-white line-clamp-2 hover:underline">{book.title}</p>
+                                <p className="text-xs text-white/60 line-clamp-1">{book.author}</p>
+                              </button>
                               <div className="mt-2 flex items-center gap-2">
                                 <span className="rounded-full bg-aurora/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-aurora">
                                   {book.status}
@@ -7855,7 +7883,7 @@ function App() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   ) : (
                     <p className="text-sm text-white/60">No books in library yet</p>
