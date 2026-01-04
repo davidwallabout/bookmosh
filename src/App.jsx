@@ -986,6 +986,8 @@ function App() {
   const [profileTopBooks, setProfileTopBooks] = useState(['', '', '', ''])
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
+  const [editingUsername, setEditingUsername] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
   const [isProfileTopBookModalOpen, setIsProfileTopBookModalOpen] = useState(false)
   const [profileTopBookSlotIndex, setProfileTopBookSlotIndex] = useState(0)
   const [profileTopBookSearch, setProfileTopBookSearch] = useState('')
@@ -6122,6 +6124,69 @@ function App() {
                     </div>
 
                     <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Username</p>
+                      {editingUsername ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={newUsername}
+                            onChange={(e) => setNewUsername(e.target.value)}
+                            placeholder="Enter new username"
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!newUsername.trim()) return
+                                try {
+                                  setProfileSaving(true)
+                                  setProfileMessage('')
+                                  await updateProfileFields({ username: newUsername.trim() })
+                                  setEditingUsername(false)
+                                  setProfileMessage('Username updated successfully!')
+                                } catch (error) {
+                                  console.error('Username update failed', error)
+                                  setProfileMessage(error?.message || 'Failed to update username.')
+                                } finally {
+                                  setProfileSaving(false)
+                                }
+                              }}
+                              disabled={profileSaving || !newUsername.trim()}
+                              className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingUsername(false)
+                                setNewUsername('')
+                              }}
+                              className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                          <span className="text-white font-semibold">{currentUser?.username}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewUsername(currentUser?.username || '')
+                              setEditingUsername(true)
+                            }}
+                            className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Pick an icon</p>
                       <div className="grid grid-cols-6 gap-2">
                         {PROFILE_ICONS.map((icon) => (
@@ -6526,7 +6591,6 @@ function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Lists</p>
-                  <h3 className="text-2xl font-semibold text-white">Share your book lists</h3>
                 </div>
                 <button
                   type="button"
