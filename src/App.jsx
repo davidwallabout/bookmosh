@@ -5675,13 +5675,27 @@ function App() {
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
                   <h3 className="text-2xl font-semibold text-white">{tracker.length}</h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={scrollToDiscovery}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  + Add book
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFullLibrary(!showFullLibrary)
+                      if (!showFullLibrary) {
+                        setTimeout(() => scrollToSection('library-search'), 100)
+                      }
+                    }}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    {showFullLibrary ? '− Collapse' : '+ Browse All'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={scrollToDiscovery}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    + Add book
+                  </button>
+                </div>
               </div>
 
               {/* Two Column Layout */}
