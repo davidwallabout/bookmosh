@@ -1051,6 +1051,7 @@ function App() {
   const [moshArchiveFilter, setMoshArchiveFilter] = useState('open')
   const [librarySearch, setLibrarySearch] = useState('')
   const [showAllLibrary, setShowAllLibrary] = useState(false)
+  const [showFullLibrary, setShowFullLibrary] = useState(false)
   const [libraryDisplayCount, setLibraryDisplayCount] = useState(6)
   const [librarySort, setLibrarySort] = useState('recent')
   const [matchingProgress, setMatchingProgress] = useState({ active: false, current: 0, total: 0, currentBook: null })
@@ -5669,60 +5670,244 @@ function App() {
 
             {/* Library */}
             <section id="library" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Library</p>
-                  <h3 className="text-2xl font-semibold text-white">
-                    {libraryFilterTags.length > 0 || librarySearch.trim() 
-                      ? `${filteredLibrary.length}/${tracker.length}`
-                      : filteredLibrary.length
-                    }
-                  </h3>
+                  <h3 className="text-2xl font-semibold text-white">{tracker.length}</h3>
                 </div>
-                <div className="flex gap-2">
-                  <select
-                    value={librarySort}
-                    onChange={(e) => setLibrarySort(e.target.value)}
-                    className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 focus:outline-none"
-                  >
-                    <option value="recent">Most Recent</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="title-asc">Title A-Z</option>
-                    <option value="title-desc">Title Z-A</option>
-                    <option value="author-asc">Author A-Z</option>
-                    <option value="author-desc">Author Z-A</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={scrollToDiscovery}
-                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                  >
-                    + Add book
-                  </button>
+                <button
+                  type="button"
+                  onClick={scrollToDiscovery}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  + Add book
+                </button>
+              </div>
+
+              {/* Two Column Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column - 2/3 width */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* To-Read Module */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm uppercase tracking-[0.4em] text-cyan-400">To-Read Pile</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryFilterTags(['to-read'])
+                          setShowFullLibrary(true)
+                        }}
+                        className="text-white/60 hover:text-white transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {tracker.filter(b => b.status === 'to-read').slice(0, 6).map((book) => (
+                        <button
+                          key={book.title}
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
+                        >
+                          {book.cover ? (
+                            <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60 p-2 text-center">
+                              {book.title}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {tracker.filter(b => b.status === 'to-read').length === 0 && (
+                        <p className="text-sm text-white/50">No books to read yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Read Module */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm uppercase tracking-[0.4em] text-green-400">Read</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryFilterTags(['read'])
+                          setShowFullLibrary(true)
+                        }}
+                        className="text-white/60 hover:text-white transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {tracker.filter(b => b.status === 'read').slice(0, 6).map((book) => (
+                        <button
+                          key={book.title}
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
+                        >
+                          {book.cover ? (
+                            <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60 p-2 text-center">
+                              {book.title}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {tracker.filter(b => b.status === 'read').length === 0 && (
+                        <p className="text-sm text-white/50">No books read yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Owned Module */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm uppercase tracking-[0.4em] text-purple-400">Owned</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryFilterTags(['Owned'])
+                          setShowFullLibrary(true)
+                        }}
+                        className="text-white/60 hover:text-white transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {tracker.filter(b => (b.tags ?? []).includes('Owned')).slice(0, 6).map((book) => (
+                        <button
+                          key={book.title}
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
+                        >
+                          {book.cover ? (
+                            <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60 p-2 text-center">
+                              {book.title}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {tracker.filter(b => (b.tags ?? []).includes('Owned')).length === 0 && (
+                        <p className="text-sm text-white/50">No owned books yet</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column - 1/3 width */}
+                <div className="space-y-6">
+                  {/* Currently Reading Module */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <h4 className="text-sm uppercase tracking-[0.4em] text-pink-400 mb-4">Currently Reading ({tracker.filter(b => b.status === 'reading').length})</h4>
+                    <div className="space-y-4">
+                      {tracker.filter(b => b.status === 'reading').slice(0, 3).map((book) => (
+                        <button
+                          key={book.title}
+                          type="button"
+                          onClick={() => openModal(book)}
+                          className="flex gap-3 w-full text-left hover:bg-white/5 rounded-xl p-2 transition"
+                        >
+                          <div className="flex-shrink-0 w-16 h-24 rounded-lg overflow-hidden border border-white/10 bg-white/5">
+                            {book.cover ? (
+                              <img src={book.cover} alt={book.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[8px] uppercase tracking-[0.2em] text-white/60 p-1 text-center">
+                                {book.title}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white line-clamp-2">{book.title}</p>
+                            <p className="text-xs text-white/60 line-clamp-1 mt-1">{book.author}</p>
+                          </div>
+                        </button>
+                      ))}
+                      {tracker.filter(b => b.status === 'reading').length === 0 && (
+                        <p className="text-sm text-white/50">No books currently reading</p>
+                      )}
+                    </div>
+                    {tracker.filter(b => b.status === 'reading').length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryFilterTags(['reading'])
+                          setShowFullLibrary(true)
+                        }}
+                        className="mt-4 w-full rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                      >
+                        View All
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {matchingProgress.active && (
-                <div className="mt-5 rounded-2xl border border-aurora/30 bg-aurora/5 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs uppercase tracking-[0.3em] text-aurora">Matching Covers</p>
-                    <p className="text-xs text-white/60">{matchingProgress.current} / {matchingProgress.total}</p>
+              {/* Full Library View */}
+              {showFullLibrary && (
+                <>
+                  <div className="mt-6 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullLibrary(false)}
+                      className="flex items-center gap-2 text-white/60 hover:text-white transition"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Back to Overview
+                    </button>
+                    <div className="flex gap-2">
+                      <select
+                        value={librarySort}
+                        onChange={(e) => setLibrarySort(e.target.value)}
+                        className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 focus:outline-none"
+                      >
+                        <option value="recent">Most Recent</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="title-asc">Title A-Z</option>
+                        <option value="title-desc">Title Z-A</option>
+                        <option value="author-asc">Author A-Z</option>
+                        <option value="author-desc">Author Z-A</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-2">
-                    <div 
-                      className="h-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
-                      style={{ width: `${(matchingProgress.current / matchingProgress.total) * 100}%` }}
-                    />
-                  </div>
-                  {matchingProgress.currentBook && (
-                    <p className="text-xs text-white/50 line-clamp-1">
-                      Matching: {matchingProgress.currentBook}
-                    </p>
-                  )}
-                </div>
-              )}
 
-              <div className="mt-5 relative">
+                  {matchingProgress.active && (
+                    <div className="mt-5 rounded-2xl border border-aurora/30 bg-aurora/5 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs uppercase tracking-[0.3em] text-aurora">Matching Covers</p>
+                        <p className="text-xs text-white/60">{matchingProgress.current} / {matchingProgress.total}</p>
+                      </div>
+                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                        <div 
+                          className="h-full bg-gradient-to-r from-aurora to-white/70 transition-all duration-300"
+                          style={{ width: `${(matchingProgress.current / matchingProgress.total) * 100}%` }}
+                        />
+                      </div>
+                      {matchingProgress.currentBook && (
+                        <p className="text-xs text-white/50 line-clamp-1">
+                          Matching: {matchingProgress.currentBook}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-5 relative">
                 <input
                   type="text"
                   value={librarySearch}
@@ -5898,16 +6083,18 @@ function App() {
                 )}
               </div>
 
-              {libraryDisplayCount < filteredLibrary.length && (
-                <div className="mt-6 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setLibraryDisplayCount(prev => prev + 20)}
-                    className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
-                  >
-                    Load More ({Math.min(20, filteredLibrary.length - libraryDisplayCount)} more)
-                  </button>
-                </div>
+                  {libraryDisplayCount < filteredLibrary.length && (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setLibraryDisplayCount(prev => prev + 20)}
+                        className="rounded-2xl border border-white/20 px-8 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                      >
+                        Load More ({Math.min(20, filteredLibrary.length - libraryDisplayCount)} more)
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
