@@ -5882,16 +5882,23 @@ function App() {
               {showFullLibrary && (
                 <>
                   <div className="mt-6 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setShowFullLibrary(false)}
-                      className="flex items-center gap-2 text-white/60 hover:text-white transition"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                      Back to Overview
-                    </button>
+                    <div className="flex items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowFullLibrary(false)}
+                        className="flex items-center gap-2 text-white/60 hover:text-white transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Back to Overview
+                      </button>
+                      {(libraryFilterTags.length > 0 || librarySearch) && (
+                        <p className="text-sm text-white/60">
+                          Showing <span className="text-white font-semibold">{filteredLibrary.length}</span> of <span className="text-white font-semibold">{tracker.length}</span> books
+                        </p>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <select
                         value={librarySort}
