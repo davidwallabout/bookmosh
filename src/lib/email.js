@@ -59,10 +59,13 @@ export const sendWithResend = async ({
 }) => {
   try {
     // Get API key from env if not provided
-    const resendApiKey = apiKey || import.meta.env.VITE_RESEND_API_KEY
+    // Try VITE_ prefixed first (for client-side), then fallback to non-prefixed (for server-side/Vercel)
+    const resendApiKey = apiKey || 
+                        import.meta.env.VITE_RESEND_API_KEY || 
+                        import.meta.env.RESEND_API_KEY
     
     if (!resendApiKey) {
-      console.error('[EMAIL] No Resend API key configured')
+      console.error('[EMAIL] No Resend API key configured. Checked: VITE_RESEND_API_KEY, RESEND_API_KEY')
       throw new Error('RESEND_API_KEY not configured')
     }
 
