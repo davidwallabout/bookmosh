@@ -1139,8 +1139,8 @@ function App() {
 
   const scrollToSection = (id) => {
     if (typeof window === 'undefined') return
-    // Close friend profile if open
-    if (selectedFriend) {
+    // Close friend profile if open (but not if we're scrolling to community from closeFriendProfile)
+    if (selectedFriend && id !== 'community') {
       closeFriendProfile()
     }
     const el = document.getElementById(id)
