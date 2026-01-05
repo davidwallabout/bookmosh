@@ -3,7 +3,7 @@
  * Avoids CORS issues by proxying email requests through serverless function
  */
 
- import { supabase } from './supabaseClient'
+import { supabase } from './supabaseClient'
 
 /**
  * Normalize email addresses
@@ -33,6 +33,16 @@ export const sendWithResend = async ({
       throw new Error('Supabase client not initialized')
     }
 
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) {
+      console.error('[EMAIL] Failed to read Supabase session:', sessionError)
+    }
+    const accessToken = sessionData?.session?.access_token
+    if (!accessToken) {
+      console.error('[EMAIL] No active session. Edge Function requires a signed-in user JWT.')
+      throw new Error('Not signed in (missing Supabase session)')
+    }
+
     // Normalize recipients
     const toEmails = normalizeEmails(to)
     if (toEmails.length === 0) {
@@ -55,10 +65,18 @@ export const sendWithResend = async ({
         to: recipientEmail,
         data,
       },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     })
 
     if (error) {
+      // supabase-js wraps non-2xx responses in FunctionsHttpError; message is generic.
       console.error('[EMAIL] Edge Function error:', error)
+      const status = error?.context?.status
+      if (status) {
+        console.error('[EMAIL] Edge Function HTTP status:', status)
+      }
       throw new Error(`Edge Function error: ${error.message || 'Unknown error'}`)
     }
 
