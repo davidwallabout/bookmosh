@@ -3530,17 +3530,13 @@ function App() {
 
   const viewFriendProfile = async (friendUsername, skipPushState = false) => {
     try {
-      // Scroll to top when opening friend profile
-      if (typeof window !== 'undefined') {
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }
-      
-      // Update URL to reflect profile view
+      // Navigate to new URL with profile parameter
       if (!skipPushState && typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search)
         params.set('profile', friendUsername)
         const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
-        window.history.pushState({ profile: friendUsername }, '', next)
+        window.location.href = next
+        return // Exit early since we're navigating
       }
 
       // Get friend's user info
