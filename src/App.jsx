@@ -2935,13 +2935,49 @@ function App() {
   }
 
   useEffect(() => {
-    if (!activeMosh?.id) return
-    // Ensure we land on the newest message when entering a pit.
-    const t = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
-    }, 50)
-    return () => clearTimeout(t)
-  }, [activeMosh?.id])
+    if (!supabase || !currentUser?.id || !activeMosh?.id) return
+
+    const moshId = String(activeMosh.id)
+
+    const channel = supabase
+      .channel(`mosh_messages:${moshId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'mosh_messages',
+          filter: `mosh_id=eq.${moshId}`,
+        },
+        (payload) => {
+          const nextMsg = payload?.new
+          const nextId = String(nextMsg?.id ?? '')
+          if (!nextId) return
+
+          setActiveMoshMessages((prev) => {
+            const base = Array.isArray(prev) ? prev : []
+            const has = base.some((m) => String(m?.id ?? '') === nextId)
+            if (has) return base
+            return [...base, nextMsg]
+          })
+
+          setMoshMessageReactions((prev) => {
+            const base = prev ?? {}
+            if (base[nextId]) return base
+            return { ...base, [nextId]: { up: 0, down: 0, mine: null } }
+          })
+        },
+      )
+      .subscribe()
+
+    return () => {
+      try {
+        supabase.removeChannel(channel)
+      } catch (e) {
+        console.warn('[MOSH] Failed to remove realtime channel', e)
+      }
+    }
+  }, [supabase, currentUser?.id, activeMosh?.id])
 
   useEffect(() => {
     if (!activeMosh?.id) return
@@ -3059,9 +3095,19 @@ function App() {
       
       console.log('[MOSH] Message sent successfully:', data)
       setActiveMoshMessages((prev) => {
-        const updated = [...prev, ...(data ?? [])]
-        console.log('[MOSH] Updated messages count:', updated.length)
-        return updated
+        const base = Array.isArray(prev) ? prev : []
+        const incoming = Array.isArray(data) ? data : []
+        if (incoming.length === 0) return base
+        const seen = new Set(base.map((m) => String(m?.id ?? '')))
+        const merged = [...base]
+        for (const msg of incoming) {
+          const id = String(msg?.id ?? '')
+          if (!id || seen.has(id)) continue
+          seen.add(id)
+          merged.push(msg)
+        }
+        console.log('[MOSH] Updated messages count:', merged.length)
+        return merged
       })
 
       if (Array.isArray(data) && data.length > 0) {
