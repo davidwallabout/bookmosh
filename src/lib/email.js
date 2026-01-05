@@ -44,16 +44,25 @@ export const sendWithResend = async ({
 
     const edgeFunctionUrl = `${supabaseUrl}/functions/v1/send-notification-email`
 
+    // Get Supabase anon key for authentication
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    if (!supabaseAnonKey) {
+      console.error('[EMAIL] No Supabase anon key configured')
+      throw new Error('VITE_SUPABASE_ANON_KEY not configured')
+    }
+
     console.log('[EMAIL] Sending via Edge Function:', { 
       type, 
       to: recipientEmail
     })
 
-    // Call Supabase Edge Function
+    // Call Supabase Edge Function with authentication
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey
       },
       body: JSON.stringify({
         type,
