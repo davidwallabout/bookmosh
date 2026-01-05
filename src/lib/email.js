@@ -5,6 +5,18 @@
 
 import { supabase } from './supabaseClient'
 
+const decodeJwtPayloadSafe = (token) => {
+  try {
+    const parts = String(token).split('.')
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(base64)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Normalize email addresses
  * Filters out invalid emails and returns array
@@ -33,6 +45,15 @@ export const sendWithResend = async ({
       throw new Error('Supabase client not initialized')
     }
 
+    // Make sure we have a fresh session/token
+    // (Expired tokens are a common reason for 401s on Edge Functions)
+    try {
+      await supabase.auth.refreshSession()
+    } catch (err) {
+      // Not fatal; we'll still try with whatever session we have.
+      console.warn('[EMAIL] refreshSession failed (continuing):', err)
+    }
+
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     if (sessionError) {
       console.error('[EMAIL] Failed to read Supabase session:', sessionError)
@@ -41,6 +62,20 @@ export const sendWithResend = async ({
     if (!accessToken) {
       console.error('[EMAIL] No active session. Edge Function requires a signed-in user JWT.')
       throw new Error('Not signed in (missing Supabase session)')
+    }
+
+    const jwtPayload = decodeJwtPayloadSafe(accessToken)
+    if (jwtPayload) {
+      const exp = Number(jwtPayload.exp)
+      const now = Math.floor(Date.now() / 1000)
+      console.log('[EMAIL] JWT diagnostics:', {
+        role: jwtPayload.role,
+        exp,
+        secondsUntilExpiry: Number.isFinite(exp) ? exp - now : null,
+        sub: jwtPayload.sub,
+      })
+    } else {
+      console.warn('[EMAIL] Could not decode JWT payload for diagnostics')
     }
 
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -72,7 +107,8 @@ export const sendWithResend = async ({
         data,
       },
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        // Use lowercase headers to avoid any gateway/header-normalization issues.
+        authorization: `Bearer ${accessToken}`,
         apikey: supabaseAnonKey,
       },
     })
