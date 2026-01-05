@@ -3530,7 +3530,10 @@ function App() {
 
   const viewFriendProfile = async (friendUsername, skipPushState = false) => {
     try {
-      // Don't scroll to top - stay at current position
+      // Scroll to top when opening friend profile
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
       
       // Update URL to reflect profile view
       if (!skipPushState && typeof window !== 'undefined') {
