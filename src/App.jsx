@@ -1372,8 +1372,19 @@ function App() {
     }
   }
 
-  const openList = async (listRow) => {
+  const openList = async (listRow, options = {}) => {
     if (!listRow?.id) return
+
+    const skipUrlUpdate = Boolean(options?.skipUrlUpdate)
+
+    if (!skipUrlUpdate && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      params.delete('profile')
+      params.set('listId', String(listRow.id))
+      const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
+      window.history.pushState({}, '', next)
+    }
+
     setSelectedList(listRow)
     setListBookSearch('')
     setListInviteUsername('')
@@ -1383,6 +1394,45 @@ function App() {
     await fetchListItems(listRow.id)
     if (listRow.owner_id === currentUser?.id) {
       await fetchOutgoingListInvites(listRow.id)
+    }
+  }
+
+  const clearSelectedList = (useReplaceState = false) => {
+    setSelectedList(null)
+    setSelectedListItems([])
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      params.delete('listId')
+      const qs = params.toString()
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+      if (useReplaceState) {
+        window.history.replaceState({}, '', next)
+      } else {
+        window.history.pushState({}, '', next)
+      }
+    }
+  }
+
+  const openListById = async (listId, options = {}) => {
+    if (!supabase || !currentUser || !listId) return
+    try {
+      const { data, error } = await supabase
+        .from('lists')
+        .select('id, owner_id, owner_username, title, description, is_public, created_at, updated_at')
+        .eq('id', listId)
+        .limit(1)
+      if (error) throw error
+      const row = data?.[0]
+      if (!row) {
+        setListsMessage('List not found.')
+        return
+      }
+      await openList(row, { skipUrlUpdate: Boolean(options?.skipUrlUpdate) })
+      setTimeout(() => scrollToSection('lists'), 100)
+    } catch (error) {
+      console.error('Open list by id failed', error)
+      setListsMessage(error?.message || 'Failed to open list.')
     }
   }
 
@@ -3333,9 +3383,14 @@ function App() {
     
     const params = new URLSearchParams(window.location.search)
     const profileParam = params.get('profile')
+    const listIdParam = params.get('listId')
     
     if (profileParam && !selectedFriend) {
       viewFriendProfile(profileParam, true)
+    }
+
+    if (listIdParam && !selectedList) {
+      openListById(listIdParam, { skipUrlUpdate: true })
     }
   }, [currentUser, supabase])
 
@@ -3349,6 +3404,7 @@ function App() {
       const moshIdParam = params.get('moshId')
       const profileParam = params.get('profile')
       const bookTitleParam = params.get('bookTitle')
+      const listIdParam = params.get('listId')
 
       // Handle profile navigation
       if (profileParam) {
@@ -3369,6 +3425,16 @@ function App() {
       // Handle book modal navigation
       if (!bookTitleParam && selectedBook) {
         closeModal()
+      }
+
+      // Handle list navigation
+      if (listIdParam) {
+        if (String(selectedList?.id) !== String(listIdParam)) {
+          openListById(listIdParam, { skipUrlUpdate: true })
+        }
+      } else if (selectedList) {
+        setSelectedList(null)
+        setSelectedListItems([])
       }
 
       // If no mosh params in URL, close the pit panel
@@ -3622,7 +3688,7 @@ function App() {
     }
   }
 
-  const closeFriendProfile = (skipHistoryBack = false) => {
+  const closeFriendProfile = (skipHistoryBack = false, skipScroll = false) => {
     setSelectedFriend(null)
     setFriendBooks([])
     setFriendBooksOffset(0)
@@ -3642,8 +3708,10 @@ function App() {
         window.history.pushState({}, '', next)
       }
       
-      // Scroll back to community section
-      setTimeout(() => scrollToSection('community'), 100)
+      if (!skipScroll) {
+        // Scroll back to community section
+        setTimeout(() => scrollToSection('community'), 100)
+      }
     }
   }
 
@@ -7045,8 +7113,7 @@ function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedList(null)
-                              setSelectedListItems([])
+                              clearSelectedList()
                             }}
                             className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
                           >
@@ -8437,34 +8504,44 @@ function App() {
                     <div className="space-y-2">
                       {friendLists.map((l) => (
                         <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
-                              {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
-                            </div>
-                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
-                                {l.item_count ?? 0}
-                              </span>
-                              <div className="flex items-center">
-                                {Array.from({ length: Math.min(4, (l.preview_covers ?? []).length || 0) }).map((_, idx) => {
-                                  const cover = l.preview_covers[idx]
-                                  return (
-                                    <div
-                                      key={`${l.id}-preview-${idx}`}
-                                      className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5"
-                                      style={{ marginLeft: idx === 0 ? 0 : -10 }}
-                                    >
-                                      <img src={cover} alt="Cover" className="h-full w-full object-cover" />
-                                    </div>
-                                  )
-                                })}
-                                {(l.preview_covers ?? []).length === 0 && (
-                                  <div className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5" />
-                                )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              closeFriendProfile(true, true)
+                              await openList(l)
+                              setTimeout(() => scrollToSection('lists'), 100)
+                            }}
+                            className="w-full text-left"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white line-clamp-1">{l.title}</p>
+                                {l.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{l.description}</p>}
+                              </div>
+                              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                                  {l.item_count ?? 0}
+                                </span>
+                                <div className="flex items-center">
+                                  {Array.from({ length: Math.min(4, (l.preview_covers ?? []).length || 0) }).map((_, idx) => {
+                                    const cover = l.preview_covers[idx]
+                                    return (
+                                      <div
+                                        key={`${l.id}-preview-${idx}`}
+                                        className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5"
+                                        style={{ marginLeft: idx === 0 ? 0 : -10 }}
+                                      >
+                                        <img src={cover} alt="Cover" className="h-full w-full object-cover" />
+                                      </div>
+                                    )
+                                  })}
+                                  {(l.preview_covers ?? []).length === 0 && (
+                                    <div className="h-10 w-7 overflow-hidden rounded-lg border border-white/10 bg-white/5" />
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </button>
                         </div>
                       ))}
                     </div>
