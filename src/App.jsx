@@ -1590,6 +1590,29 @@ function App() {
       setNewListDescription('')
       setNewListIsPublic(true)
       await fetchLists()
+      
+      // Add list creation to feed
+      if (created && created.is_public) {
+        try {
+          await supabase
+            .from('book_events')
+            .insert([
+              {
+                owner_id: currentUser.id,
+                owner_username: currentUser.username,
+                book_title: created.title,
+                book_author: created.description || 'New list',
+                book_cover: null,
+                tags: ['list_created'],
+                event_type: 'list_created',
+                list_id: created.id,
+              },
+            ])
+        } catch (feedError) {
+          console.error('Failed to add list to feed', feedError)
+        }
+      }
+      
       if (created) {
         setListsTab('mine')
         await openList(created)
@@ -6238,6 +6261,31 @@ function App() {
               <div className="mt-6 space-y-2">
                 {feedItems.length > 0 ? (
                   feedItems.slice(0, feedDisplayCount).map((item) => {
+                    // Check if this is a list creation event
+                    if (item.event_type === 'list_created') {
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                        >
+                          <p className="text-sm text-white/80">
+                            <button
+                              type="button"
+                              onClick={() => viewFriendProfile(item.owner_username)}
+                              className="font-semibold text-white hover:text-aurora hover:underline transition"
+                            >
+                              {item.owner_username}
+                            </button>
+                            <span className="text-white/60"> created a new list: </span>
+                            <span className="font-semibold text-white">
+                              {item.book_title}
+                            </span>
+                          </p>
+                        </div>
+                      )
+                    }
+                    
+                    // Regular book event
                     const book = mapFeedItemToBook(item)
                     const status = (book.tags ?? []).find(t => ['to-read', 'Reading', 'Read'].includes(t)) || 'their library'
                     const statusText = status === 'to-read' ? 'to read list' : status === 'Reading' ? 'currently reading' : status === 'Read' ? 'read list' : 'library'
