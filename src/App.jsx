@@ -5735,7 +5735,7 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['read'])
+                          setLibraryFilterTags(['Read'])
                           setShowFullLibrary(true)
                         }}
                         className="text-white/60 hover:text-white transition"
@@ -5746,7 +5746,7 @@ function App() {
                       </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2">
-                      {tracker.filter(b => b.status === 'read').slice(0, 6).map((book) => (
+                      {tracker.filter(b => b.status === 'Read').slice(0, 6).map((book) => (
                         <button
                           key={book.title}
                           type="button"
@@ -5762,7 +5762,7 @@ function App() {
                           )}
                         </button>
                       ))}
-                      {tracker.filter(b => b.status === 'read').length === 0 && (
+                      {tracker.filter(b => b.status === 'Read').length === 0 && (
                         <p className="text-sm text-white/50">No books read yet</p>
                       )}
                     </div>
@@ -5813,9 +5813,9 @@ function App() {
                 <div className="space-y-6">
                   {/* Currently Reading Module */}
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <h4 className="text-sm uppercase tracking-[0.4em] text-pink-400 mb-4">Currently Reading ({tracker.filter(b => b.status === 'reading').length})</h4>
+                    <h4 className="text-sm uppercase tracking-[0.4em] text-pink-400 mb-4">Currently Reading ({tracker.filter(b => b.status === 'Reading').length})</h4>
                     <div className="space-y-4">
-                      {tracker.filter(b => b.status === 'reading').slice(0, 3).map((book) => (
+                      {tracker.filter(b => b.status === 'Reading').slice(0, 3).map((book) => (
                         <button
                           key={book.title}
                           type="button"
@@ -5837,15 +5837,15 @@ function App() {
                           </div>
                         </button>
                       ))}
-                      {tracker.filter(b => b.status === 'reading').length === 0 && (
+                      {tracker.filter(b => b.status === 'Reading').length === 0 && (
                         <p className="text-sm text-white/50">No books currently reading</p>
                       )}
                     </div>
-                    {tracker.filter(b => b.status === 'reading').length > 0 && (
+                    {tracker.filter(b => b.status === 'Reading').length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['reading'])
+                          setLibraryFilterTags(['Reading'])
                           setShowFullLibrary(true)
                         }}
                         className="mt-4 w-full rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
