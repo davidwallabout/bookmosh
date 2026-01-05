@@ -43,6 +43,12 @@ export const sendWithResend = async ({
       throw new Error('Not signed in (missing Supabase session)')
     }
 
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    if (!supabaseAnonKey) {
+      console.error('[EMAIL] Missing VITE_SUPABASE_ANON_KEY. Needed to call Edge Functions.')
+      throw new Error('VITE_SUPABASE_ANON_KEY not configured')
+    }
+
     // Normalize recipients
     const toEmails = normalizeEmails(to)
     if (toEmails.length === 0) {
@@ -67,6 +73,7 @@ export const sendWithResend = async ({
       },
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        apikey: supabaseAnonKey,
       },
     })
 
