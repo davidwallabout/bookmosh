@@ -5697,6 +5697,7 @@ function App() {
                         onClick={() => {
                           setLibraryFilterTags(['to-read'])
                           setShowFullLibrary(true)
+                          setTimeout(() => scrollToSection('library'), 100)
                         }}
                         className="text-white/60 hover:text-white transition"
                       >
@@ -5738,6 +5739,7 @@ function App() {
                         onClick={() => {
                           setLibraryFilterTags(['Read'])
                           setShowFullLibrary(true)
+                          setTimeout(() => scrollToSection('library'), 100)
                         }}
                         className="text-white/60 hover:text-white transition"
                       >
@@ -5779,6 +5781,7 @@ function App() {
                         onClick={() => {
                           setLibraryFilterTags(['Owned'])
                           setShowFullLibrary(true)
+                          setTimeout(() => scrollToSection('library'), 100)
                         }}
                         className="text-white/60 hover:text-white transition"
                       >
@@ -5850,6 +5853,7 @@ function App() {
                         onClick={() => {
                           setLibraryFilterTags(['Reading'])
                           setShowFullLibrary(true)
+                          setTimeout(() => scrollToSection('library'), 100)
                         }}
                         className="mt-4 w-full rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
                       >
