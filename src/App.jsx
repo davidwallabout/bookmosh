@@ -1146,25 +1146,63 @@ function App() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  // Send email notification via Supabase edge function
+  // Send email notification via Resend
   const sendEmailNotification = async (type, to, data) => {
-    if (!supabase) {
-      console.log('[EMAIL] No supabase client')
-      return
-    }
     try {
-      console.log('[EMAIL] Sending notification:', { type, to, data })
-      const { data: result, error } = await supabase.functions.invoke('send-notification-email', {
-        body: { type, to, data }
+      const apiKey = import.meta.env.VITE_RESEND_API_KEY
+      if (!apiKey) {
+        console.log('[EMAIL] No Resend API key configured')
+        return
+      }
+
+      let subject = ''
+      let html = ''
+      const appUrl = 'https://bookmosh.com'
+
+      if (type === 'pit_message') {
+        subject = `New message in ${data.pitTitle || 'your pit'}`
+        html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px;">
+            <h2>New message in your pit</h2>
+            <p><strong>${data.senderName}</strong> sent a message in <strong>${data.pitTitle}</strong></p>
+            ${data.messagePreview ? `<p style="background-color: rgba(255,255,255,0.1); padding: 16px; border-left: 3px solid #a78bfa; font-style: italic;">"${data.messagePreview}"</p>` : ''}
+            <a href="${appUrl}?mosh=1&moshId=${data.pitId}" style="display: inline-block; background: linear-gradient(135deg, #a78bfa 0%, rgba(255, 255, 255, 0.7) 100%); color: #0b1225; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; margin-top: 20px;">View Pit</a>
+          </div>
+        `
+      } else if (type === 'feed_like') {
+        subject = `${data.likerName} liked your post`
+        html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px;">
+            <h2>Someone liked your post!</h2>
+            <p><strong>${data.likerName}</strong> liked your addition of <strong>${data.bookTitle}</strong>${data.bookAuthor ? ` by ${data.bookAuthor}` : ''}</p>
+            <a href="${appUrl}#feed" style="display: inline-block; background: linear-gradient(135deg, #ec4899 0%, rgba(255, 255, 255, 0.7) 100%); color: #0b1225; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; margin-top: 20px;">View Feed</a>
+          </div>
+        `
+      }
+
+      console.log('[EMAIL] Sending via Resend:', { type, to })
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'BookMosh <notifications@bookmosh.com>',
+          to: [to],
+          subject,
+          html
+        })
       })
-      
-      if (error) {
-        console.error('[EMAIL] Error:', error)
+
+      const result = await response.json()
+      if (response.ok) {
+        console.log('[EMAIL] Sent successfully:', result)
       } else {
-        console.log('[EMAIL] Success:', result)
+        console.error('[EMAIL] Failed:', result)
       }
     } catch (error) {
-      console.error('[EMAIL] Failed to send notification:', error)
+      console.error('[EMAIL] Error:', error)
     }
   }
 
