@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
+import { sendPitMessageNotification, sendFeedLikeNotification } from './lib/email'
 
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
@@ -1145,66 +1146,6 @@ function App() {
     }
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  // Send email notification via Resend
-  const sendEmailNotification = async (type, to, data) => {
-    try {
-      const apiKey = import.meta.env.VITE_RESEND_API_KEY
-      if (!apiKey) {
-        console.log('[EMAIL] No Resend API key configured')
-        return
-      }
-
-      let subject = ''
-      let html = ''
-      const appUrl = 'https://bookmosh.com'
-
-      if (type === 'pit_message') {
-        subject = `New message in ${data.pitTitle || 'your pit'}`
-        html = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px;">
-            <h2>New message in your pit</h2>
-            <p><strong>${data.senderName}</strong> sent a message in <strong>${data.pitTitle}</strong></p>
-            ${data.messagePreview ? `<p style="background-color: rgba(255,255,255,0.1); padding: 16px; border-left: 3px solid #a78bfa; font-style: italic;">"${data.messagePreview}"</p>` : ''}
-            <a href="${appUrl}?mosh=1&moshId=${data.pitId}" style="display: inline-block; background: linear-gradient(135deg, #a78bfa 0%, rgba(255, 255, 255, 0.7) 100%); color: #0b1225; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; margin-top: 20px;">View Pit</a>
-          </div>
-        `
-      } else if (type === 'feed_like') {
-        subject = `${data.likerName} liked your post`
-        html = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px;">
-            <h2>Someone liked your post!</h2>
-            <p><strong>${data.likerName}</strong> liked your addition of <strong>${data.bookTitle}</strong>${data.bookAuthor ? ` by ${data.bookAuthor}` : ''}</p>
-            <a href="${appUrl}#feed" style="display: inline-block; background: linear-gradient(135deg, #ec4899 0%, rgba(255, 255, 255, 0.7) 100%); color: #0b1225; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; margin-top: 20px;">View Feed</a>
-          </div>
-        `
-      }
-
-      console.log('[EMAIL] Sending via Resend:', { type, to })
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: 'BookMosh <notifications@bookmosh.com>',
-          to: [to],
-          subject,
-          html
-        })
-      })
-
-      const result = await response.json()
-      if (response.ok) {
-        console.log('[EMAIL] Sent successfully:', result)
-      } else {
-        console.error('[EMAIL] Failed:', result)
-      }
-    } catch (error) {
-      console.error('[EMAIL] Error:', error)
-    }
   }
 
   // Track scroll position for sticky header
@@ -2713,10 +2654,13 @@ function App() {
             .single()
           
           if (ownerData?.email) {
-            sendEmailNotification('feed_like', ownerData.email, {
+            sendFeedLikeNotification(ownerData.email, {
               likerName: currentUser.username,
-              bookTitle: feedItem.title,
-              bookAuthor: feedItem.author,
+              bookTitle: feedItem.book_title,
+              bookAuthor: feedItem.book_author,
+              appUrl: 'https://bookmosh.com'
+            }).catch(err => {
+              console.error('[EMAIL] Failed to send feed like notification:', err)
             })
           }
         }
@@ -3109,11 +3053,14 @@ function App() {
         if (participantEmails && participantEmails.length > 0) {
           participantEmails.forEach(participant => {
             if (participant.email) {
-              sendEmailNotification('pit_message', participant.email, {
+              sendPitMessageNotification(participant.email, {
                 senderName: currentUser.username,
                 pitTitle: activeMosh.mosh_title || activeMosh.book_title,
                 pitId: activeMosh.id,
                 messagePreview: body.slice(0, 100),
+                appUrl: 'https://bookmosh.com'
+              }).catch(err => {
+                console.error('[EMAIL] Failed to send pit message notification:', err)
               })
             }
           })
