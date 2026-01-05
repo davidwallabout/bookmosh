@@ -5711,6 +5711,7 @@ function App() {
                           key={book.title}
                           type="button"
                           onClick={() => openModal(book)}
+                          title={`${book.title} by ${book.author}`}
                           className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
                         >
                           {book.cover ? (
@@ -5751,6 +5752,7 @@ function App() {
                           key={book.title}
                           type="button"
                           onClick={() => openModal(book)}
+                          title={`${book.title} by ${book.author}`}
                           className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
                         >
                           {book.cover ? (
@@ -5791,6 +5793,7 @@ function App() {
                           key={book.title}
                           type="button"
                           onClick={() => openModal(book)}
+                          title={`${book.title} by ${book.author}`}
                           className="flex-shrink-0 w-24 h-36 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/30 transition"
                         >
                           {book.cover ? (
