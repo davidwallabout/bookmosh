@@ -6159,7 +6159,6 @@ function App() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Feed</p>
-                  <h3 className="text-2xl font-semibold text-white">{feedItems.length}</h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {['everyone', 'friends', 'me'].map((scope) => (
