@@ -3,6 +3,8 @@
  * Avoids CORS issues by proxying email requests through serverless function
  */
 
+ import { supabase } from './supabaseClient'
+
 /**
  * Normalize email addresses
  * Filters out invalid emails and returns array
@@ -26,6 +28,11 @@ export const sendWithResend = async ({
   data
 }) => {
   try {
+    if (!supabase) {
+      console.error('[EMAIL] Supabase client not initialized')
+      throw new Error('Supabase client not initialized')
+    }
+
     // Normalize recipients
     const toEmails = normalizeEmails(to)
     if (toEmails.length === 0) {
@@ -35,60 +42,34 @@ export const sendWithResend = async ({
 
     const recipientEmail = toEmails[0] // Use first email
 
-    // Get Supabase URL
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    if (!supabaseUrl) {
-      console.error('[EMAIL] No Supabase URL configured')
-      throw new Error('VITE_SUPABASE_URL not configured')
-    }
-
-    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/send-notification-email`
-
-    // Get Supabase anon key for authentication
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    if (!supabaseAnonKey) {
-      console.error('[EMAIL] No Supabase anon key configured')
-      throw new Error('VITE_SUPABASE_ANON_KEY not configured')
-    }
-
     console.log('[EMAIL] Sending via Edge Function:', { 
       type, 
       to: recipientEmail
     })
 
-    // Call Supabase Edge Function with authentication
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-        'apikey': supabaseAnonKey
-      },
-      body: JSON.stringify({
+    // Call Supabase Edge Function via supabase-js.
+    // This automatically attaches the signed-in user's JWT (fixes 401).
+    const { data: result, error } = await supabase.functions.invoke('send-notification-email', {
+      body: {
         type,
         to: recipientEmail,
-        data
-      })
+        data,
+      },
     })
 
-    const result = await response.json()
-
-    if (!response.ok) {
-      console.error('[EMAIL] Edge Function error:', {
-        status: response.status,
-        error: result
-      })
-      throw new Error(`Edge Function error: ${result.error || 'Unknown error'}`)
+    if (error) {
+      console.error('[EMAIL] Edge Function error:', error)
+      throw new Error(`Edge Function error: ${error.message || 'Unknown error'}`)
     }
 
     console.log('[EMAIL] Sent successfully:', {
-      emailId: result.emailId,
-      to: recipientEmail
+      emailId: result?.emailId,
+      to: recipientEmail,
     })
 
     return {
       success: true,
-      messageId: result.emailId
+      messageId: result?.emailId
     }
 
   } catch (error) {
