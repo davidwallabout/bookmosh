@@ -8394,7 +8394,9 @@ function App() {
               <div className="mx-auto w-full max-w-3xl px-4 py-6">
                 <div className="space-y-4">
                 {(() => {
-                  const topBooks = Array.isArray(selectedFriend.top_books) ? selectedFriend.top_books : []
+                  const topBooks = Array.isArray(selectedFriend.top_books) 
+                    ? selectedFriend.top_books.filter(Boolean) 
+                    : []
                   if (topBooks.length === 0) return null
 
                   return (
