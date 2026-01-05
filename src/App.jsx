@@ -2657,8 +2657,7 @@ function App() {
             sendFeedLikeNotification(ownerData.email, {
               likerName: currentUser.username,
               bookTitle: feedItem.book_title,
-              bookAuthor: feedItem.book_author,
-              appUrl: 'https://bookmosh.com'
+              bookAuthor: feedItem.book_author
             }).catch(err => {
               console.error('[EMAIL] Failed to send feed like notification:', err)
             })
@@ -3057,8 +3056,7 @@ function App() {
                 senderName: currentUser.username,
                 pitTitle: activeMosh.mosh_title || activeMosh.book_title,
                 pitId: activeMosh.id,
-                messagePreview: body.slice(0, 100),
-                appUrl: 'https://bookmosh.com'
+                messagePreview: body.slice(0, 100)
               }).catch(err => {
                 console.error('[EMAIL] Failed to send pit message notification:', err)
               })

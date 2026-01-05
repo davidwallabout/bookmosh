@@ -1,35 +1,7 @@
 /**
- * Email helper using Resend API
- * Based on the sendWithResend pattern
+ * Email helper using Supabase Edge Function
+ * Avoids CORS issues by proxying email requests through serverless function
  */
-
-/**
- * Renders email HTML with proper wrapper and styling
- * Similar to renderEmailHtmlForDelivery
- */
-const renderEmailHtml = (content, variables = {}) => {
-  // Inject variables into content
-  let rendered = content
-  Object.keys(variables).forEach(key => {
-    const regex = new RegExp(`{{${key}}}`, 'g')
-    rendered = rendered.replace(regex, variables[key] || '')
-  })
-
-  // Wrap in full HTML document
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>BookMosh Notification</title>
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #0b1225;">
-      ${rendered}
-    </body>
-    </html>
-  `
-}
 
 /**
  * Normalize email addresses
@@ -45,30 +17,15 @@ const normalizeEmails = (emails) => {
 }
 
 /**
- * Send email via Resend
- * Core helper following sendWithResend pattern
+ * Send email via Supabase Edge Function (which calls Resend)
+ * This avoids CORS issues by proxying through a serverless function
  */
 export const sendWithResend = async ({
+  type,
   to,
-  subject,
-  html,
-  cc = null,
-  replyTo = null,
-  variables = {},
-  apiKey = null
+  data
 }) => {
   try {
-    // Get API key from env if not provided
-    // Try VITE_ prefixed first (for client-side), then fallback to non-prefixed (for server-side/Vercel)
-    const resendApiKey = apiKey || 
-                        import.meta.env.VITE_RESEND_API_KEY || 
-                        import.meta.env.RESEND_API_KEY
-    
-    if (!resendApiKey) {
-      console.error('[EMAIL] No Resend API key configured. Checked: VITE_RESEND_API_KEY, RESEND_API_KEY')
-      throw new Error('RESEND_API_KEY not configured')
-    }
-
     // Normalize recipients
     const toEmails = normalizeEmails(to)
     if (toEmails.length === 0) {
@@ -76,62 +33,53 @@ export const sendWithResend = async ({
       throw new Error('No valid recipient emails')
     }
 
-    const ccEmails = normalizeEmails(cc)
-    const replyToEmails = normalizeEmails(replyTo)
+    const recipientEmail = toEmails[0] // Use first email
 
-    // Render HTML with variables
-    const renderedHtml = renderEmailHtml(html, variables)
-
-    // Build payload
-    const payload = {
-      from: 'BookMosh <notifications@bookmosh.com>',
-      to: toEmails,
-      subject,
-      html: renderedHtml
+    // Get Supabase URL
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    if (!supabaseUrl) {
+      console.error('[EMAIL] No Supabase URL configured')
+      throw new Error('VITE_SUPABASE_URL not configured')
     }
 
-    if (ccEmails.length > 0) {
-      payload.cc = ccEmails
-    }
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/send-notification-email`
 
-    if (replyToEmails.length > 0) {
-      payload.reply_to = replyToEmails[0] // Resend accepts single reply_to
-    }
-
-    // Send via Resend API
-    console.log('[EMAIL] Sending via Resend:', { 
-      type: 'notification', 
-      to: toEmails,
-      subject 
+    console.log('[EMAIL] Sending via Edge Function:', { 
+      type, 
+      to: recipientEmail
     })
 
-    const response = await fetch('https://api.resend.com/emails', {
+    // Call Supabase Edge Function
+    const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        type,
+        to: recipientEmail,
+        data
+      })
     })
 
     const result = await response.json()
 
     if (!response.ok) {
-      console.error('[EMAIL] Resend API error:', {
+      console.error('[EMAIL] Edge Function error:', {
         status: response.status,
         error: result
       })
-      throw new Error(`Resend API error: ${result.message || 'Unknown error'}`)
+      throw new Error(`Edge Function error: ${result.error || 'Unknown error'}`)
     }
 
     console.log('[EMAIL] Sent successfully:', {
-      messageId: result.id,
-      to: toEmails
+      emailId: result.emailId,
+      to: recipientEmail
     })
 
     return {
       success: true,
-      messageId: result.id
+      messageId: result.emailId
     }
 
   } catch (error) {
@@ -144,110 +92,21 @@ export const sendWithResend = async ({
 }
 
 /**
- * Email templates
- */
-export const emailTemplates = {
-  pitMessage: (data) => ({
-    subject: `New message in ${data.pitTitle || 'your pit'}`,
-    html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px; border-radius: 12px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="color: #a78bfa; font-size: 28px; margin: 0;">BookMosh</h1>
-        </div>
-        
-        <h2 style="color: #ffffff; font-size: 22px; margin-bottom: 16px;">New message in your pit</h2>
-        
-        <p style="color: #e5e7eb; font-size: 16px; line-height: 1.6;">
-          <strong style="color: #a78bfa;">{{senderName}}</strong> sent a message in 
-          <strong style="color: #ffffff;">{{pitTitle}}</strong>
-        </p>
-        
-        ${data.messagePreview ? `
-          <div style="background-color: rgba(167, 139, 250, 0.1); padding: 20px; border-left: 4px solid #a78bfa; margin: 24px 0; border-radius: 8px;">
-            <p style="color: #d1d5db; font-style: italic; margin: 0; font-size: 15px;">"{{messagePreview}}"</p>
-          </div>
-        ` : ''}
-        
-        <div style="text-align: center; margin-top: 32px;">
-          <a href="{{appUrl}}?mosh=1&moshId={{pitId}}" 
-             style="display: inline-block; background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%); color: #0b1225; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(167, 139, 250, 0.3);">
-            View Pit
-          </a>
-        </div>
-        
-        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center;">
-          <p style="color: #9ca3af; font-size: 13px; margin: 0;">
-            You're receiving this because you're a participant in this pit.
-          </p>
-        </div>
-      </div>
-    `,
-    variables: {
-      senderName: data.senderName,
-      pitTitle: data.pitTitle,
-      messagePreview: data.messagePreview || '',
-      pitId: data.pitId,
-      appUrl: data.appUrl || 'https://bookmosh.com'
-    }
-  }),
-
-  feedLike: (data) => ({
-    subject: `${data.likerName} liked your post`,
-    html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b1225; color: #ffffff; padding: 40px; border-radius: 12px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="color: #ec4899; font-size: 28px; margin: 0;">BookMosh</h1>
-        </div>
-        
-        <h2 style="color: #ffffff; font-size: 22px; margin-bottom: 16px;">Someone liked your post! 💖</h2>
-        
-        <p style="color: #e5e7eb; font-size: 16px; line-height: 1.6;">
-          <strong style="color: #ec4899;">{{likerName}}</strong> liked your addition of 
-          <strong style="color: #ffffff;">{{bookTitle}}</strong>${data.bookAuthor ? ` by {{bookAuthor}}` : ''}
-        </p>
-        
-        <div style="text-align: center; margin-top: 32px;">
-          <a href="{{appUrl}}#feed" 
-             style="display: inline-block; background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);">
-            View Feed
-          </a>
-        </div>
-        
-        <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center;">
-          <p style="color: #9ca3af; font-size: 13px; margin: 0;">
-            You're receiving this because someone interacted with your post.
-          </p>
-        </div>
-      </div>
-    `,
-    variables: {
-      likerName: data.likerName,
-      bookTitle: data.bookTitle,
-      bookAuthor: data.bookAuthor || '',
-      appUrl: data.appUrl || 'https://bookmosh.com'
-    }
-  })
-}
-
-/**
  * High-level notification senders
+ * These call the Edge Function which has the email templates
  */
 export const sendPitMessageNotification = async (to, data) => {
-  const template = emailTemplates.pitMessage(data)
   return sendWithResend({
+    type: 'pit_message',
     to,
-    subject: template.subject,
-    html: template.html,
-    variables: template.variables
+    data
   })
 }
 
 export const sendFeedLikeNotification = async (to, data) => {
-  const template = emailTemplates.feedLike(data)
   return sendWithResend({
+    type: 'feed_like',
     to,
-    subject: template.subject,
-    html: template.html,
-    variables: template.variables
+    data
   })
 }
