@@ -526,6 +526,27 @@ const statusOptions = ['Reading', 'to-read', 'Read']
 const statusTags = ['to-read', 'Reading', 'Read']
 const allTags = ['to-read', 'Reading', 'Read', 'Owned']
 
+const formatTimeAgo = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now - date
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  const diffWeek = Math.floor(diffDay / 7)
+  const diffMonth = Math.floor(diffDay / 30)
+  
+  if (diffSec < 60) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHour < 24) return `${diffHour}h ago`
+  if (diffDay < 7) return `${diffDay}d ago`
+  if (diffWeek < 4) return `${diffWeek}w ago`
+  if (diffMonth < 12) return `${diffMonth}mo ago`
+  return date.toLocaleDateString()
+}
+
 const defaultUsers = []
 
 const matchesIdentifier = (user, identifier) => {
@@ -6530,19 +6551,22 @@ function App() {
                           key={item.id}
                           className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
                         >
-                          <p className="text-sm text-white/80">
-                            <button
-                              type="button"
-                              onClick={() => viewFriendProfile(item.owner_username)}
-                              className="font-semibold text-white hover:text-aurora hover:underline transition"
-                            >
-                              {item.owner_username}
-                            </button>
-                            <span className="text-white/60"> created a new list: </span>
-                            <span className="font-semibold text-white">
-                              {item.book_title}
-                            </span>
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-white/80">
+                              <button
+                                type="button"
+                                onClick={() => viewFriendProfile(item.owner_username)}
+                                className="font-semibold text-white hover:text-aurora hover:underline transition"
+                              >
+                                {item.owner_username}
+                              </button>
+                              <span className="text-white/60"> created a new list: </span>
+                              <span className="font-semibold text-white">
+                                {item.book_title}
+                              </span>
+                            </p>
+                            <span className="text-[10px] text-white/40 whitespace-nowrap">{formatTimeAgo(item.created_at)}</span>
+                          </div>
                         </div>
                       )
                     }
@@ -6557,35 +6581,38 @@ function App() {
                         key={item.id}
                         className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
                       >
-                        <p className="text-sm text-white/80">
-                          <button
-                            type="button"
-                            onClick={() => viewFriendProfile(item.owner_username)}
-                            className="font-semibold text-white hover:text-aurora hover:underline transition"
-                          >
-                            {item.owner_username}
-                          </button>
-                          <span className="text-white/60"> added </span>
-                          <button
-                            type="button"
-                            onClick={() => openModal(book)}
-                            className="font-semibold text-white hover:text-aurora hover:underline transition"
-                          >
-                            {book.title}
-                          </button>
-                          <span className="text-white/60"> by </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              scrollToDiscovery()
-                              openAuthorModal(book.author)
-                            }}
-                            className="font-semibold text-white hover:text-aurora hover:underline transition"
-                          >
-                            {book.author}
-                          </button>
-                          <span className="text-white/60"> to {statusText}</span>
-                        </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm text-white/80">
+                            <button
+                              type="button"
+                              onClick={() => viewFriendProfile(item.owner_username)}
+                              className="font-semibold text-white hover:text-aurora hover:underline transition"
+                            >
+                              {item.owner_username}
+                            </button>
+                            <span className="text-white/60"> added </span>
+                            <button
+                              type="button"
+                              onClick={() => openModal(book)}
+                              className="font-semibold text-white hover:text-aurora hover:underline transition"
+                            >
+                              {book.title}
+                            </button>
+                            <span className="text-white/60"> by </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                scrollToDiscovery()
+                                openAuthorModal(book.author)
+                              }}
+                              className="font-semibold text-white hover:text-aurora hover:underline transition"
+                            >
+                              {book.author}
+                            </button>
+                            <span className="text-white/60"> to {statusText}</span>
+                          </p>
+                          <span className="text-[10px] text-white/40 whitespace-nowrap">{formatTimeAgo(item.created_at)}</span>
+                        </div>
                         
                         <div className="mt-2 flex items-center gap-3">
                           <button
