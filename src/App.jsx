@@ -2479,47 +2479,158 @@ function App() {
     )
   }
 
-  const handleAddBook = (book, status = 'to-read') => {
-    setTracker((prev) => {
-      const incomingIsbn = (book?.isbn ?? '').toString().trim()
-      const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
-      const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
-      const already = prev.some((item) => {
-        const existingIsbn = (item?.isbn ?? '').toString().trim()
-        if (incomingIsbn && existingIsbn && incomingIsbn === existingIsbn) return true
-        const t1 = String(item?.title ?? '').trim().toLowerCase()
-        const a1 = String(item?.author ?? '').trim().toLowerCase()
-        return Boolean(incomingTitle && t1 && incomingTitle === t1 && incomingAuthor && a1 && incomingAuthor === a1)
-      })
-      if (already) {
-        setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
+  const handleAddBook = async (book, status = 'to-read') => {
+    const incomingIsbn = (book?.isbn ?? '').toString().trim()
+    const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
+    const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
+    
+    // Check if already in tracker
+    const already = tracker.some((item) => {
+      const existingIsbn = (item?.isbn ?? '').toString().trim()
+      if (incomingIsbn && existingIsbn && incomingIsbn === existingIsbn) return true
+      const t1 = String(item?.title ?? '').trim().toLowerCase()
+      const a1 = String(item?.author ?? '').trim().toLowerCase()
+      return Boolean(incomingTitle && t1 && incomingTitle === t1 && incomingAuthor && a1 && incomingAuthor === a1)
+    })
+    
+    if (already) {
+      setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
+      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+      return
+    }
+    
+    const entry = {
+      title: book.title,
+      author: book.author,
+      status: status,
+      tags: Array.from(new Set([status])),
+      cover: book.cover ?? null,
+      year: book.year ?? null,
+      isbn: book.isbn ?? null,
+      olKey: book.key ?? book.olKey ?? null,
+      publisher: book.publisher ?? null,
+      language: book.language ?? null,
+      editionCount: book.editionCount ?? 0,
+      progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
+      rating: 0,
+    }
+    
+    // Add to local tracker state
+    setTracker((prev) => [entry, ...prev])
+    
+    // Show success modal
+    const listName = status === 'Read' ? 'Read List' : status === 'Reading' ? 'Reading List' : 'To-Read List'
+    setSuccessModal({ show: true, book: entry, list: listName, alreadyAdded: false })
+    setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    
+    // Sync to database
+    if (supabase && currentUser) {
+      try {
+        await supabase.from('bookmosh_books').insert({
+          owner: currentUser.username,
+          title: entry.title,
+          author: entry.author,
+          cover: entry.cover,
+          status: entry.status,
+          tags: entry.tags,
+          progress: entry.progress,
+          rating: entry.rating,
+          review: '',
+        })
+      } catch (error) {
+        console.error('Failed to sync book to database:', error)
+      }
+    }
+    
+    logBookEvent(entry, 'created')
+  }
+
+  const handleAddBookOwned = async (book) => {
+    const incomingIsbn = (book?.isbn ?? '').toString().trim()
+    const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
+    const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
+    const existingIndex = tracker.findIndex((item) => {
+      const existingIsbn = (item?.isbn ?? '').toString().trim()
+      if (incomingIsbn && existingIsbn && incomingIsbn === existingIsbn) return true
+      const t1 = String(item?.title ?? '').trim().toLowerCase()
+      const a1 = String(item?.author ?? '').trim().toLowerCase()
+      return Boolean(incomingTitle && t1 && incomingTitle === t1 && incomingAuthor && a1 && incomingAuthor === a1)
+    })
+    
+    if (existingIndex >= 0) {
+      // Book exists - add Owned tag if not already present
+      const existing = tracker[existingIndex]
+      const currentTags = Array.isArray(existing.tags) ? existing.tags : []
+      if (currentTags.includes('Owned')) {
+        setSuccessModal({ show: true, book: existing, list: 'Already Owned', alreadyAdded: true })
         setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
-        return prev
+        return
       }
-      const entry = {
-        title: book.title,
-        author: book.author,
-        status: status,
-        tags: Array.from(new Set([status])),
-        cover: book.cover ?? null,
-        year: book.year ?? null,
-        isbn: book.isbn ?? null,
-        olKey: book.key ?? book.olKey ?? null,
-        publisher: book.publisher ?? null,
-        language: book.language ?? null,
-        editionCount: book.editionCount ?? 0,
-        progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
-        rating: 0,
-      }
-      logBookEvent(entry, 'created')
-      
-      // Show success modal
-      const listName = status === 'Read' ? 'Read List' : status === 'Reading' ? 'Reading List' : 'To-Read List'
-      setSuccessModal({ show: true, book: entry, list: listName, alreadyAdded: false })
+      const updatedTags = [...currentTags, 'Owned']
+      const updated = { ...existing, tags: updatedTags }
+      setTracker((prev) => {
+        const next = [...prev]
+        next[existingIndex] = updated
+        return next
+      })
+      setSuccessModal({ show: true, book: updated, list: 'Owned Collection', alreadyAdded: false })
       setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
       
-      return [entry, ...prev]
-    })
+      // Update in database
+      if (supabase && currentUser) {
+        try {
+          await supabase.from('bookmosh_books')
+            .update({ tags: updatedTags })
+            .eq('owner', currentUser.username)
+            .eq('title', existing.title)
+        } catch (error) {
+          console.error('Failed to update book tags in database:', error)
+        }
+      }
+      return
+    }
+    
+    // New book - add with Owned tag
+    const entry = {
+      title: book.title,
+      author: book.author,
+      status: 'to-read',
+      tags: ['to-read', 'Owned'],
+      cover: book.cover ?? null,
+      year: book.year ?? null,
+      isbn: book.isbn ?? null,
+      olKey: book.key ?? book.olKey ?? null,
+      publisher: book.publisher ?? null,
+      language: book.language ?? null,
+      editionCount: book.editionCount ?? 0,
+      progress: 0,
+      rating: 0,
+    }
+    
+    setTracker((prev) => [entry, ...prev])
+    setSuccessModal({ show: true, book: entry, list: 'Owned Collection', alreadyAdded: false })
+    setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    
+    // Sync to database
+    if (supabase && currentUser) {
+      try {
+        await supabase.from('bookmosh_books').insert({
+          owner: currentUser.username,
+          title: entry.title,
+          author: entry.author,
+          cover: entry.cover,
+          status: entry.status,
+          tags: entry.tags,
+          progress: entry.progress,
+          rating: entry.rating,
+          review: '',
+        })
+      } catch (error) {
+        console.error('Failed to sync book to database:', error)
+      }
+    }
+    
+    logBookEvent(entry, 'created')
   }
 
   const toggleLibraryFilterTag = (tag) => {
@@ -3522,6 +3633,10 @@ function App() {
     )
     updateBook(title, { tags: nextTags })
     logBookEvent({ ...(current ?? { title }), tags: nextTags, status }, 'tags_updated')
+    // Update selectedBook if it's the same book so modal UI reflects the change
+    if (selectedBook && selectedBook.title === title) {
+      setSelectedBook({ ...selectedBook, tags: nextTags })
+    }
   }
 
   const handleAuthModeSwitch = (mode) => {
@@ -4930,6 +5045,8 @@ function App() {
     setFindMatchLoading(false)
     setShowCoverPicker(false)
     setCoverPickerCovers([])
+    setShowEditionPicker(false)
+    setEditionPickerEditions([])
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -5134,6 +5251,7 @@ function App() {
               source: 'openlibrary',
               isbn,
               title: editionTitle,
+              author: Array.isArray(edition?.authors) ? edition.authors.map(a => a.name || a.key?.replace('/authors/', '') || '').filter(Boolean).join(', ') : (selectedBook.author || null),
               editionKey: typeof edition?.key === 'string' ? edition.key : null,
               publisher: Array.isArray(edition?.publishers) ? edition.publishers[0] : null,
               publishDate: edition?.publish_date ?? null,
@@ -5173,6 +5291,7 @@ function App() {
             source: 'isbndb',
             isbn,
             title: b?.title || b?.title_long || selectedBook.title,
+            author: (Array.isArray(b?.authors) ? b.authors.join(', ') : b?.authors) || selectedBook.author || null,
             publisher: (Array.isArray(b?.publisher) ? b.publisher[0] : b?.publisher) ?? null,
             publishDate: b?.date_published ?? null,
             coverUrl: url || null,
@@ -5624,6 +5743,16 @@ function App() {
                           >
                             + Read
                           </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAddBookOwned(book)
+                            }}
+                            className="flex-1 rounded-2xl border border-[#ee6bfe]/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#ee6bfe] transition hover:border-[#ee6bfe]/80 hover:bg-[#ee6bfe]/10"
+                          >
+                            + Own
+                          </button>
                         </div>
 
                         <button
@@ -5769,6 +5898,31 @@ function App() {
                     + Add book
                   </button>
                 </div>
+              </div>
+
+              {/* Always visible library search */}
+              <div id="library-search-always" className="mb-6 relative">
+                <input
+                  type="text"
+                  value={librarySearch}
+                  onChange={(e) => {
+                    setLibrarySearch(e.target.value)
+                    if (e.target.value.trim() && !showFullLibrary) {
+                      setShowFullLibrary(true)
+                    }
+                  }}
+                  placeholder="Search your library..."
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                {librarySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setLibrarySearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Two Column Layout */}
@@ -8203,6 +8357,7 @@ function App() {
                                   <div className="min-w-0 flex-1">
                                     <p className="text-xs uppercase tracking-[0.3em] text-white/40">{e.source} {e.isEnglish && '🇬🇧'}</p>
                                     <p className="text-sm font-semibold text-white break-words">{e.title}</p>
+                                    {e.author && <p className="text-xs text-white/70">{e.author}</p>}
                                     <p className="text-xs text-white/60">
                                       ISBN {e.isbn}
                                     </p>
@@ -8270,17 +8425,30 @@ function App() {
 
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
-                  <select
-                    value={modalStatus}
-                    onChange={(e) => setModalStatus(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={modalStatus}
+                      onChange={(e) => setModalStatus(e.target.value)}
+                      className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => toggleBookOwned(selectedBook.title)}
+                      className={`rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                        (selectedBook.tags ?? []).includes('Owned')
+                          ? 'border-[#ee6bfe]/60 bg-[#ee6bfe]/20 text-[#ee6bfe]'
+                          : 'border-white/20 text-white/60 hover:border-[#ee6bfe]/40 hover:text-[#ee6bfe]'
+                      }`}
+                    >
+                      {(selectedBook.tags ?? []).includes('Owned') ? '✓ Owned' : 'Owned'}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
