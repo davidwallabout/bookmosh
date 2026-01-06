@@ -972,6 +972,8 @@ function App() {
   const [discoveryDisplayCount, setDiscoveryDisplayCount] = useState(6)
   const [searchDebounce, setSearchDebounce] = useState(null)
   const [selectedBook, setSelectedBook] = useState(null)
+  const [bookActivityFeed, setBookActivityFeed] = useState([])
+  const [bookActivityLoading, setBookActivityLoading] = useState(false)
   const [modalRating, setModalRating] = useState(0)
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
@@ -2810,6 +2812,32 @@ function App() {
         ])
     } catch (error) {
       console.error('book_events insert failed', error)
+    }
+  }
+
+  const fetchBookActivity = async (bookTitle) => {
+    if (!supabase || !currentUser || !bookTitle) return
+    setBookActivityLoading(true)
+    try {
+      // Get activity for this book from user and their friends
+      const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
+      const usernames = [currentUser.username, ...friends]
+      
+      const { data, error } = await supabase
+        .from('book_events')
+        .select('*')
+        .eq('book_title', bookTitle)
+        .in('owner_username', usernames)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      
+      if (error) throw error
+      setBookActivityFeed(data || [])
+    } catch (error) {
+      console.error('Failed to fetch book activity:', error)
+      setBookActivityFeed([])
+    } finally {
+      setBookActivityLoading(false)
     }
   }
 
@@ -4828,6 +4856,9 @@ function App() {
     setModalReview(book.review ?? '')
     setModalDescription('')
     setModalDescriptionLoading(false)
+    
+    // Fetch book activity feed
+    fetchBookActivity(normalized.title)
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -8371,6 +8402,49 @@ function App() {
 
               <div className="mx-auto w-full max-w-3xl px-4 py-6">
                 <div className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Activity</label>
+                  {bookActivityLoading ? (
+                    <p className="text-sm text-white/60">Loading activity…</p>
+                  ) : bookActivityFeed.length > 0 ? (
+                    <div className="space-y-2">
+                      {bookActivityFeed.map((item) => (
+                        <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-white/80">
+                              <button
+                                type="button"
+                                onClick={() => viewFriendProfile(item.owner_username)}
+                                className="font-semibold text-white hover:text-aurora hover:underline transition"
+                              >
+                                {item.owner_username}
+                              </button>
+                              <span className="text-white/60">
+                                {item.event_type === 'created' ? ' added this book' : 
+                                 item.event_type === 'tags_updated' ? ' updated tags' :
+                                 item.event_type === 'status_changed' ? ' changed status' :
+                                 ' updated this book'}
+                              </span>
+                              {item.tags && item.tags.length > 0 && (
+                                <span className="text-white/60"> to </span>
+                              )}
+                              {item.tags && item.tags.map((tag, idx) => (
+                                <span key={idx}>
+                                  <span className="font-semibold text-white">{tag}</span>
+                                  {idx < item.tags.length - 1 && <span className="text-white/60">, </span>}
+                                </span>
+                              ))}
+                            </p>
+                            <span className="text-[10px] text-white/40 whitespace-nowrap">{formatTimeAgo(item.created_at)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/60">No activity yet for this book.</p>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Moshes</label>
                   {publicMoshesForBookLoading ? (
