@@ -1362,6 +1362,59 @@ function App() {
     }
   }
 
+  const loadBooksFromDatabase = async () => {
+    if (!supabase || !currentUser?.username) return
+    try {
+      console.log('[LIBRARY] Loading books from database for:', currentUser.username)
+      const { data, error } = await supabase
+        .from('bookmosh_books')
+        .select('*')
+        .eq('owner', currentUser.username)
+        .order('updated_at', { ascending: false })
+      
+      if (error) throw error
+      
+      const dbBooks = (data || []).map((row) => ({
+        title: row.title,
+        author: row.author,
+        cover: row.cover ?? row.cover_url ?? null,
+        status: row.status ?? 'to-read',
+        tags: Array.isArray(row.tags) ? row.tags : [row.status ?? 'to-read'],
+        progress: row.progress ?? 0,
+        rating: row.rating ?? 0,
+        review: row.review ?? '',
+        isbn: row.isbn ?? null,
+        olKey: row.ol_key ?? null,
+        year: row.year ?? null,
+      }))
+      
+      console.log('[LIBRARY] Loaded', dbBooks.length, 'books from database')
+      
+      // Merge with localStorage - database is source of truth
+      setTracker((prev) => {
+        // Create a map of database books by title
+        const dbMap = new Map(dbBooks.map(b => [b.title.toLowerCase(), b]))
+        
+        // Keep local books that aren't in database (newly added offline)
+        const localOnly = prev.filter(b => !dbMap.has(b.title.toLowerCase()))
+        
+        // Combine: database books + local-only books
+        const merged = [...dbBooks, ...localOnly]
+        console.log('[LIBRARY] Merged library:', merged.length, 'books')
+        return merged
+      })
+    } catch (error) {
+      console.error('[LIBRARY] Failed to load books from database:', error)
+    }
+  }
+
+  // Load books from database when user is available
+  useEffect(() => {
+    if (currentUser?.username) {
+      loadBooksFromDatabase()
+    }
+  }, [currentUser?.username])
+
   const fetchOutgoingListInvites = async (listId) => {
     if (!supabase || !currentUser || !listId) return
     try {
