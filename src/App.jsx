@@ -165,6 +165,10 @@ const openLibraryCoverIdUrl = (coverId, size = 'L') => {
 
 const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
   if (!supabase) return null
+  
+  // Always log ISBNdb calls to verify it's being used
+  console.log('[ISBNDB] Search called with:', { q, isbn, mode, pageSize })
+  
   try {
     if (supabase.functions?.invoke) {
       try {
@@ -172,10 +176,8 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
           body: { q, isbn, mode, pageSize },
         })
         if (!error && data) {
-          if (import.meta.env.DEV) {
-            const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
-            console.log('[ISBNDB] via supabase.functions.invoke', { q, isbn, mode, count })
-          }
+          const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
+          console.log('[ISBNDB] ✅ Success via supabase.functions.invoke', { q, isbn, mode, count })
           return data
         }
         if (error) {
@@ -188,7 +190,10 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
 
     const baseUrl = import.meta.env.VITE_SUPABASE_URL
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    if (!baseUrl || !anonKey) return null
+    if (!baseUrl || !anonKey) {
+      console.error('[ISBNDB] Missing Supabase config')
+      return null
+    }
 
     const headers = {
       'Content-Type': 'application/json',
@@ -206,13 +211,11 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
       return null
     }
     const data = await res.json()
-    if (import.meta.env.DEV) {
-      const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
-      console.log('[ISBNDB] via HTTP fetch', { q, isbn, mode, count })
-    }
+    const count = Array.isArray(data?.books) ? data.books.length : (Array.isArray(data?.data) ? data.data.length : (data?.book ? 1 : 0))
+    console.log('[ISBNDB] ✅ Success via HTTP fetch', { q, isbn, mode, count })
     return data
   } catch (error) {
-    console.error('ISBNdb search invoke failed', error)
+    console.error('[ISBNDB] ❌ Search failed:', error)
     return null
   }
 }
