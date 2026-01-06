@@ -1078,9 +1078,21 @@ function App() {
   const isUpdatingUserRef = useRef(false)
   const [authMode, setAuthMode] = useState('login')
   const [successModal, setSuccessModal] = useState({ show: false, book: null, list: '' })
+  const [addedButtons, setAddedButtons] = useState({}) // Track which buttons show checkmark: { "bookKey:status": true }
   const showSuccessMessage = (message, timeoutMs = 2500) => {
     setSuccessModal({ show: true, book: null, list: message, alreadyAdded: false })
     setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), timeoutMs)
+  }
+  const markButtonAdded = (bookKey, status) => {
+    const key = `${bookKey}:${status}`
+    setAddedButtons((prev) => ({ ...prev, [key]: true }))
+    setTimeout(() => {
+      setAddedButtons((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }, 2000)
   }
 
   const [emailInvite, setEmailInvite] = useState('')
@@ -2479,10 +2491,11 @@ function App() {
     )
   }
 
-  const handleAddBook = async (book, status = 'to-read') => {
+  const handleAddBook = async (book, status = 'to-read', showInlineSuccess = false) => {
     const incomingIsbn = (book?.isbn ?? '').toString().trim()
     const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
     const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
+    const bookKey = book.key || book.olKey || incomingIsbn || incomingTitle
     
     // Check if already in tracker
     const already = tracker.some((item) => {
@@ -2494,8 +2507,12 @@ function App() {
     })
     
     if (already) {
-      setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
-      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+      if (showInlineSuccess) {
+        markButtonAdded(bookKey, status)
+      } else {
+        setSuccessModal({ show: true, book, list: 'Already in Library', alreadyAdded: true })
+        setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+      }
       return
     }
     
@@ -2518,10 +2535,14 @@ function App() {
     // Add to local tracker state
     setTracker((prev) => [entry, ...prev])
     
-    // Show success modal
-    const listName = status === 'Read' ? 'Read List' : status === 'Reading' ? 'Reading List' : 'To-Read List'
-    setSuccessModal({ show: true, book: entry, list: listName, alreadyAdded: false })
-    setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    // Show inline success or modal
+    if (showInlineSuccess) {
+      markButtonAdded(bookKey, status)
+    } else {
+      const listName = status === 'Read' ? 'Read List' : status === 'Reading' ? 'Reading List' : 'To-Read List'
+      setSuccessModal({ show: true, book: entry, list: listName, alreadyAdded: false })
+      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    }
     
     // Sync to database
     if (supabase && currentUser) {
@@ -2545,10 +2566,11 @@ function App() {
     logBookEvent(entry, 'created')
   }
 
-  const handleAddBookOwned = async (book) => {
+  const handleAddBookOwned = async (book, showInlineSuccess = false) => {
     const incomingIsbn = (book?.isbn ?? '').toString().trim()
     const incomingTitle = String(book?.title ?? '').trim().toLowerCase()
     const incomingAuthor = String(book?.author ?? '').trim().toLowerCase()
+    const bookKey = book.key || book.olKey || incomingIsbn || incomingTitle
     const existingIndex = tracker.findIndex((item) => {
       const existingIsbn = (item?.isbn ?? '').toString().trim()
       if (incomingIsbn && existingIsbn && incomingIsbn === existingIsbn) return true
@@ -2562,8 +2584,12 @@ function App() {
       const existing = tracker[existingIndex]
       const currentTags = Array.isArray(existing.tags) ? existing.tags : []
       if (currentTags.includes('Owned')) {
-        setSuccessModal({ show: true, book: existing, list: 'Already Owned', alreadyAdded: true })
-        setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+        if (showInlineSuccess) {
+          markButtonAdded(bookKey, 'Owned')
+        } else {
+          setSuccessModal({ show: true, book: existing, list: 'Already Owned', alreadyAdded: true })
+          setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+        }
         return
       }
       const updatedTags = [...currentTags, 'Owned']
@@ -2573,8 +2599,12 @@ function App() {
         next[existingIndex] = updated
         return next
       })
-      setSuccessModal({ show: true, book: updated, list: 'Owned Collection', alreadyAdded: false })
-      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+      if (showInlineSuccess) {
+        markButtonAdded(bookKey, 'Owned')
+      } else {
+        setSuccessModal({ show: true, book: updated, list: 'Owned Collection', alreadyAdded: false })
+        setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+      }
       
       // Update in database
       if (supabase && currentUser) {
@@ -2608,8 +2638,12 @@ function App() {
     }
     
     setTracker((prev) => [entry, ...prev])
-    setSuccessModal({ show: true, book: entry, list: 'Owned Collection', alreadyAdded: false })
-    setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    if (showInlineSuccess) {
+      markButtonAdded(bookKey, 'Owned')
+    } else {
+      setSuccessModal({ show: true, book: entry, list: 'Owned Collection', alreadyAdded: false })
+      setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2500)
+    }
     
     // Sync to database
     if (supabase && currentUser) {
@@ -5713,46 +5747,69 @@ function App() {
                           </div>
                         </div>
                         <div className="mt-2 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddBook(book, 'to-read')
-                            }}
-                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                          >
-                            + to-read
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddBook(book, 'Reading')
-                            }}
-                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                          >
-                            + Reading
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddBook(book, 'Read')
-                            }}
-                            className="flex-1 rounded-2xl border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                          >
-                            + Read
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddBookOwned(book)
-                            }}
-                            className="flex-1 rounded-2xl border border-[#ee6bfe]/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#ee6bfe] transition hover:border-[#ee6bfe]/80 hover:bg-[#ee6bfe]/10"
-                          >
-                            + Own
-                          </button>
+                          {(() => {
+                            const bookKey = book.key || book.olKey || book.isbn || book.title?.toLowerCase()
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddBook(book, 'to-read', true)
+                                  }}
+                                  className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                                    addedButtons[`${bookKey}:to-read`]
+                                      ? 'border-green-500/60 bg-green-500/20 text-green-400'
+                                      : 'border-white/20 text-white hover:border-white/60'
+                                  }`}
+                                >
+                                  {addedButtons[`${bookKey}:to-read`] ? '✓' : '+ to-read'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddBook(book, 'Reading', true)
+                                  }}
+                                  className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                                    addedButtons[`${bookKey}:Reading`]
+                                      ? 'border-green-500/60 bg-green-500/20 text-green-400'
+                                      : 'border-white/20 text-white hover:border-white/60'
+                                  }`}
+                                >
+                                  {addedButtons[`${bookKey}:Reading`] ? '✓' : '+ Reading'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddBook(book, 'Read', true)
+                                  }}
+                                  className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                                    addedButtons[`${bookKey}:Read`]
+                                      ? 'border-green-500/60 bg-green-500/20 text-green-400'
+                                      : 'border-white/20 text-white hover:border-white/60'
+                                  }`}
+                                >
+                                  {addedButtons[`${bookKey}:Read`] ? '✓' : '+ Read'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddBookOwned(book, true)
+                                  }}
+                                  className={`flex-1 rounded-2xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                                    addedButtons[`${bookKey}:Owned`]
+                                      ? 'border-green-500/60 bg-green-500/20 text-green-400'
+                                      : 'border-[#ee6bfe]/40 text-[#ee6bfe] hover:border-[#ee6bfe]/80 hover:bg-[#ee6bfe]/10'
+                                  }`}
+                                >
+                                  {addedButtons[`${bookKey}:Owned`] ? '✓' : '+ Own'}
+                                </button>
+                              </>
+                            )
+                          })()}
                         </div>
 
                         <button
@@ -5898,31 +5955,6 @@ function App() {
                     + Add book
                   </button>
                 </div>
-              </div>
-
-              {/* Always visible library search */}
-              <div id="library-search-always" className="mb-6 relative">
-                <input
-                  type="text"
-                  value={librarySearch}
-                  onChange={(e) => {
-                    setLibrarySearch(e.target.value)
-                    if (e.target.value.trim() && !showFullLibrary) {
-                      setShowFullLibrary(true)
-                    }
-                  }}
-                  placeholder="Search your library..."
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
-                />
-                {librarySearch && (
-                  <button
-                    type="button"
-                    onClick={() => setLibrarySearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
 
               {/* Two Column Layout */}
@@ -6103,6 +6135,31 @@ function App() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Always visible library search at bottom of carousels */}
+              <div id="library-search-bottom" className="mt-6 relative">
+                <input
+                  type="text"
+                  value={librarySearch}
+                  onChange={(e) => {
+                    setLibrarySearch(e.target.value)
+                    if (e.target.value.trim() && !showFullLibrary) {
+                      setShowFullLibrary(true)
+                    }
+                  }}
+                  placeholder="Search your library..."
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
+                />
+                {librarySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setLibrarySearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Full Library View */}
