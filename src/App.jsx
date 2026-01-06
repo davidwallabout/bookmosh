@@ -565,7 +565,6 @@ const buildBookEntry = (book) => {
     status,
     tags: [status],
     progress,
-    mood: book.mood ?? book.tag ?? 'Imported',
     rating: Number(book.rating ?? book.score ?? 0) || 0,
   }
   return entry
@@ -584,7 +583,6 @@ const parseGoodreadsCSV = (text) => {
   const shelfIdx = getIndex('shelf')
   const exclusiveShelfIdx = getIndex('exclusive')
   const progressIdx = getIndex('percent')
-  const moodIdx = getIndex('review')
   const ratingIdx = getIndex('rating')
 
   return rows.slice(1).reduce((acc, row) => {
@@ -596,10 +594,8 @@ const parseGoodreadsCSV = (text) => {
     const status = (exclusiveShelfIdx >= 0 ? values[exclusiveShelfIdx] : null) ?? (shelfIdx >= 0 ? values[shelfIdx] : '')
     const progress =
       progressIdx >= 0 ? Number(values[progressIdx]) || 0 : 0
-    const mood =
-      (moodIdx >= 0 ? values[moodIdx] : '') || 'Imported from Goodreads'
     const rating = ratingIdx >= 0 ? Number(values[ratingIdx]) || 0 : 0
-    acc.push(buildBookEntry({ title, author, status, progress, mood, rating }))
+    acc.push(buildBookEntry({ title, author, status, progress, rating }))
     return acc
   }, [])
 }
@@ -681,7 +677,6 @@ const parseStoryGraphCSV = (text) => {
         tags: tags,
         rating: parseInt(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
         progress: parseInt(item['Read Progress'] || item.progress) || 0,
-        mood: item.Review || item.Notes || item.Mood || item.mood || '',
       }
     })
     .filter(book => book.title && book.author)
@@ -698,7 +693,6 @@ const parseStoryGraphJSON = (text) => {
     status: item.readStatus || 'to-read',
     rating: item.rating || 0,
     progress: item.progress || 0,
-    mood: item.mood || '',
   }))
 }
 
@@ -856,7 +850,6 @@ const mapSupabaseRow = (row) => ({
     row.status ?? 'to-read',
   ),
   progress: Number(row.progress ?? 0) || 0,
-  mood: row.mood ?? 'Supabase sync',
   rating: Number(row.rating ?? 0) || 0,
 })
 
@@ -868,7 +861,6 @@ const buildSupabasePayload = (book, owner) => ({
   status: book.status,
   tags: Array.isArray(book.tags) ? book.tags : undefined,
   progress: book.progress,
-  mood: book.mood,
   rating: book.rating,
 })
 
@@ -959,7 +951,6 @@ function App() {
   const [modalRating, setModalRating] = useState(0)
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
-  const [modalMood, setModalMood] = useState('')
   const [modalReview, setModalReview] = useState('')
   const [modalDescription, setModalDescription] = useState('')
   const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
@@ -1976,22 +1967,24 @@ function App() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tracker))
   }, [tracker])
 
-  // Debounced search effect
+  // Debounced search effect - matches mobile app behavior
   useEffect(() => {
     if (searchDebounce) {
       clearTimeout(searchDebounce)
     }
     
-    if (searchQuery.trim()) {
-      setDiscoveryDisplayCount(6)
-      const newDebounce = setTimeout(() => {
-        fetchResults(searchQuery.trim(), 60)
-      }, 300)
-      setSearchDebounce(newDebounce)
-    } else {
-      setHasSearched(false)
+    // Don't search if query is empty or too short (minimum 2 characters)
+    if (!searchQuery || searchQuery.trim().length < 2) {
       setSearchResults([])
+      setHasSearched(false)
+      return
     }
+    
+    setDiscoveryDisplayCount(6)
+    const newDebounce = setTimeout(() => {
+      fetchResults(searchQuery.trim(), 60)
+    }, 500) // 500ms debounce to match mobile app
+    setSearchDebounce(newDebounce)
     
     return () => {
       if (searchDebounce) {
@@ -2513,7 +2506,6 @@ function App() {
         language: book.language ?? null,
         editionCount: book.editionCount ?? 0,
         progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
-        mood: 'Open shelf',
         rating: 0,
       }
       logBookEvent(entry, 'created')
@@ -4578,7 +4570,6 @@ function App() {
     setModalRating(book.rating ?? 0)
     setModalProgress(book.progress ?? 0)
     setModalStatus(normalized.status ?? statusOptions[0])
-    setModalMood(book.mood ?? '')
     setModalReview(book.review ?? '')
     setModalDescription('')
     setModalDescriptionLoading(false)
@@ -4921,7 +4912,6 @@ function App() {
     updateBook(selectedBook.title, {
       progress: modalProgress,
       status: modalStatus,
-      mood: modalMood,
       review: modalReview,
       rating: modalRating,
     })
@@ -5225,7 +5215,6 @@ function App() {
       cover: item.book_cover ?? null,
       tags,
       status,
-      mood: 'Feed',
       rating: 0,
       progress: status === 'Read' ? 100 : 0,
     })
@@ -5541,7 +5530,7 @@ function App() {
                           setSearchQuery(e.target.value)
                           setShowAllResults(false)
                         }}
-                        placeholder="Search authors, themes, or moods..."
+                        placeholder="Search authors, titles, or themes..."
                         className="w-full bg-transparent px-4 py-3 pr-10 text-white placeholder:text-white/40 focus:outline-none"
                       />
                       {searchQuery && (
@@ -8317,17 +8306,6 @@ function App() {
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Mood / Notes</label>
-                  <textarea
-                    value={modalMood}
-                    onChange={(e) => setModalMood(e.target.value)}
-                    placeholder="How did this book make you feel?"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                    rows="3"
-                  />
                 </div>
 
                 <div>
