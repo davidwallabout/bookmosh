@@ -161,3 +161,11 @@ export const sendFeedLikeNotification = async (to, data) => {
     data
   })
 }
+
+export const sendFriendInviteNotification = async (to, data) => {
+  return sendWithResend({
+    type: 'friend_invite',
+    to,
+    data,
+  })
+}

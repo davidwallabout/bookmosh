@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
-import { sendPitMessageNotification, sendFeedLikeNotification } from './lib/email'
+import { sendPitMessageNotification, sendFeedLikeNotification, sendFriendInviteNotification } from './lib/email'
 
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
@@ -4665,34 +4665,10 @@ function App() {
     try {
       setEmailInviteSending(true)
       setEmailInviteMessage('')
-      const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.bookmosh.com'
-      const inviteUrl = 'https://www.bookmosh.com'
-
-      const inviteUrlWithRef = `${inviteUrl}?invitedBy=${encodeURIComponent(currentUser.username)}`
-      
-      const response = await fetch('/api/invite-friend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          inviterName: currentUser.username,
-          appUrl,
-          inviteUrl: inviteUrlWithRef,
-        }),
+      await sendFriendInviteNotification(email, {
+        inviterName: currentUser.username,
+        inviterEmail: currentUser.email,
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        const combined = [
-          `HTTP ${response.status}`,
-          data?.error,
-          data?.details ? JSON.stringify(data.details) : '',
-        ]
-          .filter(Boolean)
-          .join(' - ')
-        throw new Error(combined || 'Invite failed to send.')
-      }
 
       setEmailInviteMessage(`Invite sent to ${email}.`)
       setEmailInvite('')
