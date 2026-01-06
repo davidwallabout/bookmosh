@@ -2482,7 +2482,9 @@ function App() {
     }
   }
 
-  const updateBook = (title, updates) => {
+  const updateBook = async (title, updates) => {
+    let finalUpdates = updates
+    
     setTracker((prev) =>
       prev.map((book) => {
         if (book.title !== title) return book
@@ -2492,6 +2494,7 @@ function App() {
         if (Object.prototype.hasOwnProperty.call(updates, 'tags')) {
           const nextTags = Array.isArray(merged.tags) ? merged.tags : []
           const status = deriveStatusFromTags(nextTags, merged.status ?? 'to-read')
+          finalUpdates = { ...updates, status, tags: Array.from(new Set(nextTags)) }
           return { ...merged, status, tags: Array.from(new Set(nextTags)) }
         }
 
@@ -2501,6 +2504,7 @@ function App() {
           const nextTags = Array.from(
             new Set([updates.status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
           )
+          finalUpdates = { ...updates, tags: nextTags, status: updates.status }
           return { ...merged, tags: nextTags, status: updates.status }
         }
 
@@ -2510,6 +2514,31 @@ function App() {
     setSelectedBook((book) =>
       book?.title === title ? { ...book, ...updates } : book,
     )
+    
+    // Sync to database
+    if (supabase && currentUser) {
+      try {
+        const dbUpdates = {}
+        if (finalUpdates.status !== undefined) dbUpdates.status = finalUpdates.status
+        if (finalUpdates.tags !== undefined) dbUpdates.tags = finalUpdates.tags
+        if (finalUpdates.progress !== undefined) dbUpdates.progress = finalUpdates.progress
+        if (finalUpdates.rating !== undefined) dbUpdates.rating = finalUpdates.rating
+        if (finalUpdates.review !== undefined) dbUpdates.review = finalUpdates.review
+        if (finalUpdates.cover !== undefined) dbUpdates.cover = finalUpdates.cover
+        if (finalUpdates.isbn !== undefined) dbUpdates.isbn = finalUpdates.isbn
+        
+        if (Object.keys(dbUpdates).length > 0) {
+          dbUpdates.updated_at = new Date().toISOString()
+          await supabase
+            .from('bookmosh_books')
+            .update(dbUpdates)
+            .eq('owner', currentUser.username)
+            .eq('title', title)
+        }
+      } catch (error) {
+        console.error('Failed to sync book update to database:', error)
+      }
+    }
   }
 
   const handleAddBook = async (book, status = 'to-read', showInlineSuccess = false) => {
