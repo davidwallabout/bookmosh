@@ -131,3 +131,11 @@ export const sendFriendInviteNotification = async (to, data) => {
     data,
   })
 }
+
+export const sendRecommendationNotification = async (to, data) => {
+  return sendWithResend({
+    type: 'recommendation',
+    to,
+    data,
+  })
+}

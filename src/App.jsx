@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
-import { sendPitMessageNotification, sendFeedLikeNotification, sendFriendInviteNotification } from './lib/email'
+import { sendPitMessageNotification, sendFeedLikeNotification, sendFriendInviteNotification, sendRecommendationNotification } from './lib/email'
 
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
@@ -1760,6 +1760,23 @@ function App() {
       const { error } = await supabase.from('recommendations').insert(recommendations)
 
       if (error) throw error
+
+      // Send email notifications to recipients
+      for (const recipient of recommendRecipients) {
+        if (recipient.email) {
+          try {
+            await sendRecommendationNotification(recipient.email, {
+              senderName: currentUser.username,
+              bookTitle: recommendBookData.title,
+              bookAuthor: recommendBookData.author,
+              note: recommendNote.trim() || null,
+            })
+          } catch (emailError) {
+            console.error('[RECOMMENDATIONS] Email notification failed:', emailError)
+            // Don't fail the whole operation if email fails
+          }
+        }
+      }
 
       setIsRecommendBookOpen(false)
       setRecommendNote('')
