@@ -993,6 +993,7 @@ function App() {
   const [modalProgress, setModalProgress] = useState(0)
   const [modalStatus, setModalStatus] = useState(statusOptions[0])
   const [modalReview, setModalReview] = useState('')
+  const [modalSpoilerWarning, setModalSpoilerWarning] = useState(false)
   const [modalDescription, setModalDescription] = useState('')
   const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
   const isbndbCoverLookupRef = useRef(new Set())
@@ -1037,6 +1038,8 @@ function App() {
   const [publicLists, setPublicLists] = useState([])
   const [pendingListInvites, setPendingListInvites] = useState([])
   const [outgoingListInvites, setOutgoingListInvites] = useState([])
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
   const [selectedList, setSelectedList] = useState(null)
   const [selectedListItems, setSelectedListItems] = useState([])
   const [selectedListItemsLoading, setSelectedListItemsLoading] = useState(false)
@@ -1422,6 +1425,7 @@ function App() {
         progress: row.progress ?? 0,
         rating: row.rating ?? 0,
         review: row.review ?? '',
+        spoiler_warning: row.spoiler_warning ?? false,
         isbn: row.isbn ?? null,
         olKey: row.ol_key ?? null,
         year: row.year ?? null,
@@ -1552,6 +1556,27 @@ function App() {
     } catch (error) {
       console.error('Open list by id failed', error)
       setListsMessage(error?.message || 'Failed to open list.')
+    }
+  }
+
+  const fetchRecommendations = async () => {
+    if (!supabase || !currentUser) return
+    setRecommendationsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('recommendations')
+        .select('*')
+        .or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (error) throw error
+      setRecommendations(data || [])
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Load error:', error)
+      setRecommendations([])
+    } finally {
+      setRecommendationsLoading(false)
     }
   }
 
@@ -2011,6 +2036,7 @@ function App() {
   useEffect(() => {
     if (!currentUser) return
     fetchLists()
+    fetchRecommendations()
   }, [currentUser?.id])
 
   useEffect(() => {
@@ -2635,6 +2661,7 @@ function App() {
         if (finalUpdates.progress !== undefined) dbUpdates.progress = finalUpdates.progress
         if (finalUpdates.rating !== undefined) dbUpdates.rating = finalUpdates.rating
         if (finalUpdates.review !== undefined) dbUpdates.review = finalUpdates.review
+        if (finalUpdates.spoiler_warning !== undefined) dbUpdates.spoiler_warning = finalUpdates.spoiler_warning
         if (finalUpdates.cover !== undefined) dbUpdates.cover = finalUpdates.cover
         if (finalUpdates.isbn !== undefined) dbUpdates.isbn = finalUpdates.isbn
         if (finalUpdates.read_at !== undefined) dbUpdates.read_at = finalUpdates.read_at
@@ -4846,6 +4873,7 @@ function App() {
     setModalProgress(book.progress ?? 0)
     setModalStatus(normalized.status ?? statusOptions[0])
     setModalReview(book.review ?? '')
+    setModalSpoilerWarning(book.spoiler_warning ?? false)
     setModalDescription('')
     setModalDescriptionLoading(false)
     
@@ -5191,6 +5219,7 @@ function App() {
       progress: modalProgress,
       status: modalStatus,
       review: modalReview,
+      spoiler_warning: modalSpoilerWarning,
       rating: modalRating,
     })
     logBookEvent(selectedBook, 'updated')
@@ -7696,6 +7725,67 @@ function App() {
                 </div>
               </div>
             </section>
+
+            <section id="recommendations" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Recommendations</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchRecommendations}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              <div className="mt-5">
+                {recommendationsLoading ? (
+                  <p className="text-sm text-white/60">Loading recommendations…</p>
+                ) : recommendations.length > 0 ? (
+                  <div className="space-y-3">
+                    {recommendations.map((rec) => {
+                      const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
+                      const headline = isSent
+                        ? `You recommended to @${rec.recipient_username}`
+                        : `@${rec.sender_username} recommended to you`
+
+                      return (
+                        <div key={rec.id} className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
+                          <div className="flex gap-4">
+                            {rec.book_cover ? (
+                              <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                                <img src={rec.book_cover} alt={rec.book_title} className="h-full w-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-2xl">
+                                📚
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-white line-clamp-2">{rec.book_title}</p>
+                              {rec.book_author && (
+                                <p className="text-xs text-white/60 mt-1">{rec.book_author}</p>
+                              )}
+                              {rec.note && (
+                                <p className="text-xs text-white/50 mt-2 line-clamp-2 italic">"{rec.note}"</p>
+                              )}
+                              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mt-2">
+                                {formatTimeAgo(rec.created_at)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/60">No recommendations yet.</p>
+                )}
+              </div>
+            </section>
           </>
         )}
 
@@ -8755,6 +8845,17 @@ function App() {
 
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Review</label>
+                  <div className="mb-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={modalSpoilerWarning}
+                        onChange={(e) => setModalSpoilerWarning(e.target.checked)}
+                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-rose-500 focus:ring-rose-500 focus:ring-offset-0"
+                      />
+                      <span className="text-xs text-white/70">⚠️ Contains spoilers</span>
+                    </label>
+                  </div>
                   <textarea
                     value={modalReview}
                     onChange={(e) => setModalReview(e.target.value)}
