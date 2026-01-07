@@ -20,6 +20,7 @@ export default function BookDetailScreen({ user }) {
   const navigation = useNavigation()
   const route = useRoute()
   const bookId = route.params?.bookId
+  const searchBook = route.params?.book
 
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -54,8 +55,22 @@ export default function BookDetailScreen({ user }) {
     loadCurrentUser()
     if (bookId) {
       loadBook()
+    } else if (searchBook) {
+      // New book from search results - set up for adding to library
+      setTitle(searchBook.title || '')
+      setAuthor(searchBook.author || '')
+      setBook({
+        title: searchBook.title,
+        author: searchBook.author,
+        cover: searchBook.cover,
+        isbn: searchBook.isbn,
+        year: searchBook.year,
+      })
+      setLoading(false)
+    } else {
+      setLoading(false)
     }
-  }, [bookId])
+  }, [bookId, searchBook])
 
   const openReviewThread = async (eventItem) => {
     if (!currentUser?.id || !eventItem?.owner_username || !eventItem?.book_title) return
