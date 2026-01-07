@@ -228,10 +228,10 @@ export default function DiscoveryScreen({ user }) {
         ? isbndbData.data
         : []
 
-      // If query contains apostrophes, always try without apostrophes as fallback
+      // If query contains apostrophes (straight ' or curly '), always try without apostrophes as fallback
       // ISBNdb API often fails to find books with apostrophes in titles
-      if (trimmed.includes("'")) {
-        const queryWithoutApostrophes = trimmed.replace(/'/g, '')
+      if (trimmed.includes("'") || trimmed.includes("'") || trimmed.includes("'")) {
+        const queryWithoutApostrophes = trimmed.replace(/[''']/g, '')
         const fallbackData = await invokeIsbndbSearch({ q: queryWithoutApostrophes, pageSize: 50 })
         const fallbackBooks = Array.isArray(fallbackData?.books)
           ? fallbackData.books
