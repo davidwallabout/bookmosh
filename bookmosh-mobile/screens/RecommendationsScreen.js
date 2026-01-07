@@ -42,14 +42,22 @@ export default function RecommendationsScreen({ user, route }) {
   }, [currentUser?.id, isFocused])
 
   useEffect(() => {
-    if (route?.params?.selectedRecommendation && currentUser) {
+    if (route?.params?.selectedRecommendation) {
       const rec = route.params.selectedRecommendation
       setActiveRecommendation(rec)
       setShowRecommendationModal(true)
-      loadComments(rec.id)
+      if (currentUser) {
+        loadComments(rec.id)
+      }
       navigation.setParams({ selectedRecommendation: null })
     }
-  }, [route?.params?.selectedRecommendation, currentUser])
+  }, [route?.params?.selectedRecommendation])
+
+  useEffect(() => {
+    if (activeRecommendation && currentUser && showRecommendationModal) {
+      loadComments(activeRecommendation.id)
+    }
+  }, [currentUser])
 
   const loadCurrentUser = async () => {
     try {
