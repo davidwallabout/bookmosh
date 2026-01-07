@@ -6879,12 +6879,12 @@ function App() {
                                     updateBook(book.title, { rating: star })
                                   }}
                                 />
-                                <span className="text-sm text-white/20 pointer-events-none">☆</span>
+                                <span className="text-sm text-white/20 pointer-events-none absolute inset-0 flex items-center justify-center">☆</span>
                                 <span 
-                                  className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none flex items-center justify-center"
+                                  className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none"
                                   style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
                                 >
-                                  <span className="text-sm text-yellow-400">★</span>
+                                  <span className="text-sm text-yellow-400 absolute inset-0 flex items-center justify-center">★</span>
                                 </span>
                               </div>
                             )
@@ -9363,12 +9363,12 @@ function App() {
                             }}
                             onClick={() => handleModalRating(star)}
                           />
-                          <span className="text-2xl text-white/20 pointer-events-none">☆</span>
+                          <span className="text-2xl text-white/20 pointer-events-none absolute inset-0 flex items-center justify-center">☆</span>
                           <span 
-                            className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none flex items-center justify-center"
+                            className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none"
                             style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
                           >
-                            <span className="text-2xl text-yellow-400">★</span>
+                            <span className="text-2xl text-yellow-400 absolute inset-0 flex items-center justify-center">★</span>
                           </span>
                         </div>
                       )
