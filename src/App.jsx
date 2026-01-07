@@ -1040,6 +1040,12 @@ function App() {
   const [outgoingListInvites, setOutgoingListInvites] = useState([])
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(false)
+  const [selectedRecommendation, setSelectedRecommendation] = useState(null)
+  const [isRecommendBookOpen, setIsRecommendBookOpen] = useState(false)
+  const [recommendBookData, setRecommendBookData] = useState(null)
+  const [recommendNote, setRecommendNote] = useState('')
+  const [recommendRecipients, setRecommendRecipients] = useState([])
+  const [recommendLoading, setRecommendLoading] = useState(false)
   const [selectedList, setSelectedList] = useState(null)
   const [selectedListItems, setSelectedListItems] = useState([])
   const [selectedListItemsLoading, setSelectedListItemsLoading] = useState(false)
@@ -1577,6 +1583,39 @@ function App() {
       setRecommendations([])
     } finally {
       setRecommendationsLoading(false)
+    }
+  }
+
+  const sendRecommendation = async () => {
+    if (!supabase || !currentUser || !recommendBookData || recommendRecipients.length === 0) return
+
+    setRecommendLoading(true)
+    try {
+      const recommendations = recommendRecipients.map(recipientUsername => ({
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        recipient_id: recipientUsername.id || currentUser.id,
+        recipient_username: recipientUsername.username || recipientUsername,
+        book_title: recommendBookData.title,
+        book_author: recommendBookData.author,
+        book_cover: recommendBookData.cover,
+        note: recommendNote.trim() || null,
+      }))
+
+      const { error } = await supabase.from('recommendations').insert(recommendations)
+
+      if (error) throw error
+
+      setIsRecommendBookOpen(false)
+      setRecommendNote('')
+      setRecommendRecipients([])
+      showSuccessMessage(`Recommended "${recommendBookData.title}" to ${recommendRecipients.length} friend${recommendRecipients.length > 1 ? 's' : ''}!`)
+      await fetchRecommendations()
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Send error:', error)
+      alert(error.message || 'Failed to send recommendation')
+    } finally {
+      setRecommendLoading(false)
     }
   }
 
@@ -6180,8 +6219,8 @@ function App() {
                       {[...tracker]
                         .filter((b) => b.status === 'Read')
                         .sort((a, b) => {
-                          const aKey = new Date(a.read_at ?? a.updated_at ?? 0).getTime()
-                          const bKey = new Date(b.read_at ?? b.updated_at ?? 0).getTime()
+                          const aKey = new Date(a.read_at ?? a.status_updated_at ?? a.updated_at ?? 0).getTime()
+                          const bKey = new Date(b.read_at ?? b.status_updated_at ?? b.updated_at ?? 0).getTime()
                           return bKey - aKey
                         })
                         .slice(0, 6)
@@ -7752,7 +7791,12 @@ function App() {
                         : `@${rec.sender_username} recommended to you`
 
                       return (
-                        <div key={rec.id} className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
+                        <button
+                          key={rec.id}
+                          type="button"
+                          onClick={() => setSelectedRecommendation(rec)}
+                          className="w-full rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
+                        >
                           <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
                           <div className="flex gap-4">
                             {rec.book_cover ? (
@@ -7777,7 +7821,7 @@ function App() {
                               </p>
                             </div>
                           </div>
-                        </div>
+                        </button>
                       )
                     })}
                   </div>
@@ -8866,35 +8910,49 @@ function App() {
                 </div>
 
                 {!showFindMatch ? (
-                  <div className="flex gap-2 pt-4">
+                  <div className="space-y-2 pt-4">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecommendBookData(selectedBook)
+                          setRecommendNote('')
+                          setRecommendRecipients([])
+                          setIsRecommendBookOpen(true)
+                        }}
+                        className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Recommend
+                      </button>
+                      {!selectedBook.cover && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowFindMatch(true)
+                            setFindMatchQuery(`${selectedBook.title} ${selectedBook.author}`)
+                          }}
+                          className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                        >
+                          Find Match
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleModalSave}
+                        className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
+                      >
+                        Save
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         handleDeleteBook(selectedBook.title)
                         closeModal()
                       }}
-                      className="flex-1 rounded-2xl border border-rose-500/50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10"
+                      className="w-full rounded-2xl border border-rose-500/50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10"
                     >
-                      Delete
-                    </button>
-                    {!selectedBook.cover && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowFindMatch(true)
-                          setFindMatchQuery(`${selectedBook.title} ${selectedBook.author}`)
-                        }}
-                        className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                      >
-                        Find Match
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleModalSave}
-                      className="flex-1 rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80"
-                    >
-                      Save
+                      Delete Book
                     </button>
                   </div>
                 ) : (
@@ -8979,6 +9037,234 @@ function App() {
                     </button>
                   </div>
                 )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recommendation Detail Modal */}
+        {selectedRecommendation && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-3xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Recommendation</p>
+                      <h2 className="text-xl font-semibold text-white break-words">{selectedRecommendation.book_title}</h2>
+                      <p className="text-sm text-white/60 break-words">{selectedRecommendation.book_author || 'Unknown author'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRecommendation(null)}
+                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mx-auto w-full max-w-3xl px-4 py-6">
+                <div className="space-y-6">
+                  {/* Book Cover and Info */}
+                  <div className="flex gap-6">
+                    <div className="h-64 w-44 flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                      {selectedRecommendation.book_cover ? (
+                        <img src={selectedRecommendation.book_cover} alt={selectedRecommendation.book_title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-4xl">📚</div>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Recommended by</p>
+                        <p className="text-lg font-semibold text-white">@{selectedRecommendation.sender_username}</p>
+                        <p className="text-xs text-white/40 mt-1">{formatTimeAgo(selectedRecommendation.created_at)}</p>
+                      </div>
+                      {selectedRecommendation.note && (
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Note</p>
+                          <p className="text-sm text-white/70 italic">"{selectedRecommendation.note}"</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add to Library Section */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <h3 className="text-sm uppercase tracking-[0.4em] text-white/50 mb-4">Add to Library</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
+                        <div className="flex gap-2">
+                          {statusOptions.map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => {
+                                const bookExists = tracker.find(b => 
+                                  b.title.toLowerCase() === selectedRecommendation.book_title.toLowerCase() &&
+                                  b.author.toLowerCase() === (selectedRecommendation.book_author || '').toLowerCase()
+                                )
+                                if (bookExists) {
+                                  updateBook(bookExists.title, { status: s, tags: [s, ...(bookExists.tags.includes('Owned') ? ['Owned'] : [])] })
+                                  setSuccessModal({ show: true, book: bookExists, list: s, alreadyAdded: false })
+                                  setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+                                } else {
+                                  const newBook = {
+                                    title: selectedRecommendation.book_title,
+                                    author: selectedRecommendation.book_author || 'Unknown author',
+                                    cover: selectedRecommendation.book_cover,
+                                    status: s,
+                                    tags: [s],
+                                    progress: s === 'Read' ? 100 : 0,
+                                    rating: 0,
+                                    review: '',
+                                    spoiler_warning: false,
+                                    read_at: s === 'Read' ? new Date().toISOString() : null,
+                                    status_updated_at: new Date().toISOString(),
+                                  }
+                                  addBook(newBook)
+                                  setSuccessModal({ show: true, book: newBook, list: s, alreadyAdded: false })
+                                  setTimeout(() => setSuccessModal({ show: false, book: null, list: '' }), 2000)
+                                }
+                              }}
+                              className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            onChange={(e) => {
+                              const bookExists = tracker.find(b => 
+                                b.title.toLowerCase() === selectedRecommendation.book_title.toLowerCase() &&
+                                b.author.toLowerCase() === (selectedRecommendation.book_author || '').toLowerCase()
+                              )
+                              if (bookExists) {
+                                const nextTags = e.target.checked 
+                                  ? [...new Set([...bookExists.tags, 'Owned'])]
+                                  : bookExists.tags.filter(t => t !== 'Owned')
+                                updateBook(bookExists.title, { tags: nextTags })
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-white/20 bg-white/5 text-aurora focus:ring-aurora focus:ring-offset-0"
+                          />
+                          <span className="text-sm text-white/70">I own this book</span>
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const bookExists = tracker.find(b => 
+                            b.title.toLowerCase() === selectedRecommendation.book_title.toLowerCase() &&
+                            b.author.toLowerCase() === (selectedRecommendation.book_author || '').toLowerCase()
+                          )
+                          if (bookExists) {
+                            openModal(bookExists)
+                            setSelectedRecommendation(null)
+                          }
+                        }}
+                        className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        View Full Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recommend Book Modal */}
+        {isRecommendBookOpen && recommendBookData && (
+          <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-2xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Recommend Book</p>
+                      <h2 className="text-xl font-semibold text-white break-words">{recommendBookData.title}</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsRecommendBookOpen(false)}
+                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mx-auto w-full max-w-2xl px-4 py-6">
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <h3 className="text-sm uppercase tracking-[0.4em] text-white/50 mb-4">Select Friends</h3>
+                    <div className="space-y-2 max-h-60 overflow-auto">
+                      {(currentUser?.friends || []).map((friendUsername) => {
+                        const isSelected = recommendRecipients.some(r => (r.username || r) === friendUsername)
+                        return (
+                          <button
+                            key={friendUsername}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setRecommendRecipients(prev => prev.filter(r => (r.username || r) !== friendUsername))
+                              } else {
+                                setRecommendRecipients(prev => [...prev, { username: friendUsername }])
+                              }
+                            }}
+                            className={`w-full flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                              isSelected
+                                ? 'border-aurora bg-aurora/10'
+                                : 'border-white/10 bg-white/5 hover:border-white/30'
+                            }`}
+                          >
+                            <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                              isSelected ? 'border-aurora bg-aurora' : 'border-white/30'
+                            }`}>
+                              {isSelected && <span className="text-midnight text-xs font-bold">✓</span>}
+                            </div>
+                            <span className="text-sm font-semibold text-white">@{friendUsername}</span>
+                          </button>
+                        )
+                      })}
+                      {(!currentUser?.friends || currentUser.friends.length === 0) && (
+                        <p className="text-sm text-white/60 text-center py-4">No friends yet. Add friends in the Community section.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <h3 className="text-sm uppercase tracking-[0.4em] text-white/50 mb-4">Add a Note (Optional)</h3>
+                    <textarea
+                      value={recommendNote}
+                      onChange={(e) => setRecommendNote(e.target.value)}
+                      placeholder="Why do you recommend this book?"
+                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                      rows="4"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={sendRecommendation}
+                    disabled={recommendLoading || recommendRecipients.length === 0}
+                    className="w-full rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {recommendLoading ? 'Sending...' : `Send to ${recommendRecipients.length} friend${recommendRecipients.length !== 1 ? 's' : ''}`}
+                  </button>
                 </div>
               </div>
             </div>
