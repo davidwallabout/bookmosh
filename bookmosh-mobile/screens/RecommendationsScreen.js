@@ -10,11 +10,12 @@ import {
   Modal,
   TextInput,
 } from 'react-native'
-import { useNavigation, useIsFocused } from '@react-navigation/native'
+import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 
-export default function RecommendationsScreen({ user, route }) {
+export default function RecommendationsScreen({ user }) {
   const navigation = useNavigation()
+  const route = useRoute()
   const isFocused = useIsFocused()
 
   const [currentUser, setCurrentUser] = useState(null)
@@ -42,16 +43,19 @@ export default function RecommendationsScreen({ user, route }) {
   }, [currentUser?.id, isFocused])
 
   useEffect(() => {
-    if (route?.params?.selectedRecommendation) {
-      const rec = route.params.selectedRecommendation
-      setActiveRecommendation(rec)
-      setShowRecommendationModal(true)
-      if (currentUser) {
-        loadComments(rec.id)
-      }
-      navigation.setParams({ selectedRecommendation: null })
+    const rec = route?.params?.selectedRecommendation
+    if (!rec) return
+    setActiveRecommendation(rec)
+    setSelectedStatus('To Read')
+    setIsOwned(false)
+    setCommentDraft('')
+    setComments([])
+    setShowRecommendationModal(true)
+    if (currentUser && rec?.id) {
+      loadComments(rec.id)
     }
-  }, [route?.params?.selectedRecommendation])
+    navigation.setParams({ selectedRecommendation: null })
+  }, [route?.params?.selectedRecommendation, currentUser?.id])
 
   useEffect(() => {
     if (activeRecommendation && currentUser && showRecommendationModal) {
