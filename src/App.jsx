@@ -4701,80 +4701,11 @@ function App() {
   const acceptFriendInvite = async (request) => {
     if (!supabase || !request?.id) return
     try {
-      const { error } = await supabase
-        .from('friend_requests')
-        .update({ status: 'accepted', responded_at: new Date().toISOString() })
-        .eq('id', request.id)
+      const { error } = await supabase.rpc('accept_friend_request', {
+        request_id: request.id,
+      })
+
       if (error) throw error
-
-      // Persist the friendship in both users' profiles.
-      // friends is stored as a text[] of usernames in this app.
-      const requesterId = String(request.requester_id ?? '').trim()
-      const recipientId = String(request.recipient_id ?? currentUser?.id ?? '').trim()
-      const requesterUsername = String(request.requester_username ?? '').trim()
-      const recipientUsername = String(request.recipient_username ?? currentUser?.username ?? '').trim()
-      if (requesterId && recipientId && requesterUsername && recipientUsername) {
-        const { data: usersRows, error: usersErr } = await supabase
-          .from('users')
-          .select('id, username, friends')
-          .in('id', [requesterId, recipientId])
-        if (usersErr) throw usersErr
-
-        const rowById = new Map((Array.isArray(usersRows) ? usersRows : []).map((u) => [String(u.id), u]))
-        const requesterRow = rowById.get(requesterId)
-        const recipientRow = rowById.get(recipientId)
-
-        // Safety check: abort if we couldn't fetch user rows (prevents overwriting with empty array)
-        if (!requesterRow || !recipientRow) {
-          console.error('[FRIEND] Could not fetch user rows for friend update', { requesterId, recipientId, usersRows })
-          throw new Error('Could not fetch user data for friend update')
-        }
-
-        const normalizeList = (list) =>
-          (Array.isArray(list) ? list : [])
-            .map((v) => String(v ?? '').trim())
-            .filter(Boolean)
-
-        const requesterFriendsList = normalizeList(requesterRow.friends)
-        const recipientFriendsList = normalizeList(recipientRow.friends)
-        
-        console.log('[FRIEND] Current friends before update:', { 
-          requester: requesterUsername, 
-          requesterFriends: requesterFriendsList,
-          recipient: recipientUsername,
-          recipientFriends: recipientFriendsList 
-        })
-        
-        // Deduplicate case-insensitively but preserve original casing
-        const nextRequesterFriends = [...requesterFriendsList]
-        if (!requesterFriendsList.some(f => f.toLowerCase() === recipientUsername.toLowerCase())) {
-          nextRequesterFriends.push(recipientUsername)
-        }
-
-        const nextRecipientFriends = [...recipientFriendsList]
-        if (!recipientFriendsList.some(f => f.toLowerCase() === requesterUsername.toLowerCase())) {
-          nextRecipientFriends.push(requesterUsername)
-        }
-
-        console.log('[FRIEND] Friends after update:', { 
-          requester: requesterUsername, 
-          nextRequesterFriends,
-          recipient: recipientUsername,
-          nextRecipientFriends 
-        })
-
-        const { error: u1Err } = await supabase
-          .from('users')
-          .update({ friends: nextRequesterFriends })
-          .eq('id', requesterId)
-        if (u1Err) throw u1Err
-
-        const { error: u2Err } = await supabase
-          .from('users')
-          .update({ friends: nextRecipientFriends })
-          .eq('id', recipientId)
-        if (u2Err) throw u2Err
-      }
 
       await refreshCurrentUser()
       await loadFriendRequests()
