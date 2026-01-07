@@ -886,6 +886,8 @@ const mapSupabaseRow = (row) => ({
   ),
   progress: Number(row.progress ?? 0) || 0,
   rating: Number(row.rating ?? 0) || 0,
+  read_at: row.read_at ?? null,
+  status_updated_at: row.status_updated_at ?? null,
 })
 
 const buildSupabasePayload = (book, owner) => ({
@@ -897,6 +899,8 @@ const buildSupabasePayload = (book, owner) => ({
   tags: Array.isArray(book.tags) ? book.tags : undefined,
   progress: book.progress,
   rating: book.rating,
+  read_at: book.read_at ?? null,
+  status_updated_at: book.status_updated_at ?? null,
 })
 
 const loadSupabaseBooks = async (owner) => {
@@ -2592,8 +2596,27 @@ function App() {
           const nextTags = Array.from(
             new Set([updates.status, ...(owned ? ['Owned'] : [])].filter(Boolean)),
           )
-          finalUpdates = { ...updates, tags: nextTags, status: updates.status }
-          return { ...merged, tags: nextTags, status: updates.status }
+
+          const nowIso = new Date().toISOString()
+          const isMarkingRead = updates.status === 'Read' && book.status !== 'Read'
+          const isLeavingRead = updates.status !== 'Read' && book.status === 'Read'
+          const nextReadAt = isMarkingRead ? nowIso : isLeavingRead ? null : (book.read_at ?? null)
+          const nextStatusUpdatedAt = updates.status !== book.status ? nowIso : (book.status_updated_at ?? null)
+
+          finalUpdates = {
+            ...updates,
+            tags: nextTags,
+            status: updates.status,
+            read_at: nextReadAt,
+            status_updated_at: nextStatusUpdatedAt,
+          }
+          return {
+            ...merged,
+            tags: nextTags,
+            status: updates.status,
+            read_at: nextReadAt,
+            status_updated_at: nextStatusUpdatedAt,
+          }
         }
 
         return normalizeBookTags(merged)
@@ -2614,6 +2637,8 @@ function App() {
         if (finalUpdates.review !== undefined) dbUpdates.review = finalUpdates.review
         if (finalUpdates.cover !== undefined) dbUpdates.cover = finalUpdates.cover
         if (finalUpdates.isbn !== undefined) dbUpdates.isbn = finalUpdates.isbn
+        if (finalUpdates.read_at !== undefined) dbUpdates.read_at = finalUpdates.read_at
+        if (finalUpdates.status_updated_at !== undefined) dbUpdates.status_updated_at = finalUpdates.status_updated_at
         
         if (Object.keys(dbUpdates).length > 0) {
           dbUpdates.updated_at = new Date().toISOString()
@@ -2668,6 +2693,8 @@ function App() {
       editionCount: book.editionCount ?? 0,
       progress: status === 'Reading' ? 0 : (status === 'Read' ? 100 : 0),
       rating: 0,
+      read_at: status === 'Read' ? new Date().toISOString() : null,
+      status_updated_at: new Date().toISOString(),
     }
     
     // Add to local tracker state
@@ -2695,6 +2722,8 @@ function App() {
           progress: entry.progress,
           rating: entry.rating,
           review: '',
+          read_at: entry.read_at,
+          status_updated_at: entry.status_updated_at,
         })
       } catch (error) {
         console.error('Failed to sync book to database:', error)
@@ -6119,7 +6148,15 @@ function App() {
                       </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2">
-                      {tracker.filter(b => b.status === 'Read').slice(0, 6).map((book) => (
+                      {[...tracker]
+                        .filter((b) => b.status === 'Read')
+                        .sort((a, b) => {
+                          const aKey = new Date(a.read_at ?? a.updated_at ?? 0).getTime()
+                          const bKey = new Date(b.read_at ?? b.updated_at ?? 0).getTime()
+                          return bKey - aKey
+                        })
+                        .slice(0, 6)
+                        .map((book) => (
                         <button
                           key={book.title}
                           type="button"
@@ -6136,7 +6173,7 @@ function App() {
                           )}
                         </button>
                       ))}
-                      {tracker.filter(b => b.status === 'Read').length === 0 && (
+                      {tracker.filter((b) => b.status === 'Read').length === 0 && (
                         <p className="text-sm text-white/50">No books read yet</p>
                       )}
                     </div>
@@ -6400,6 +6437,10 @@ function App() {
 
                       <div className="min-w-0 flex-1">
                         <p className="text-sm uppercase tracking-[0.4em] text-white/40">{book.status}</p>
+                        <p className="mt-1 text-xs text-white/40">
+                          Marked {book.status}{' '}
+                          {formatTimeAgo(book.status_updated_at ?? book.read_at ?? book.updated_at)}
+                        </p>
                         <button
                           type="button"
                           onClick={() => openModal(book)}

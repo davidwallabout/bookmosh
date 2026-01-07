@@ -9,7 +9,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -41,24 +41,30 @@ serve(async (req) => {
       )
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
+    const bearerToken = authHeader.slice('bearer '.length)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const allowSystem = Boolean(serviceRoleKey && bearerToken === serviceRoleKey)
 
-    const { data: userData, error: userError } = await supabase.auth.getUser()
-    if (userError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: invalid token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+    if (!allowSystem) {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData?.user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: invalid token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      }
     }
 
     const { type, to, data } = await req.json()
@@ -123,6 +129,65 @@ serve(async (req) => {
                         <td style="padding: 20px 40px; background-color: rgba(0, 0, 0, 0.2); border-top: 1px solid rgba(255, 255, 255, 0.1);">
                           <p style="color: rgba(255, 255, 255, 0.5); font-size: 12px; margin: 0; text-align: center;">
                             You're receiving this because you're part of this pit on BookMosh
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+          </html>
+        `
+        break
+
+      case 'recommendation':
+        subject = `${data.senderName || 'A friend'} recommended you a book`
+        html = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0b1225;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0b1225; padding: 40px 20px;">
+                <tr>
+                  <td align="center">
+                    <table width="600" cellpadding="0" cellspacing="0" style="background-color: #141b2d; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.1);">
+                      <tr>
+                        <td align="center" style="padding: 40px 40px 20px;">
+                          <img src="${logoUrl}" alt="BookMosh" style="height: 120px; width: auto;">
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0 40px 40px;">
+                          <h2 style="color: #ffffff; font-size: 24px; margin: 0 0 20px; font-weight: 600;">New book recommendation</h2>
+                          <p style="color: rgba(255, 255, 255, 0.7); font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+                            <strong style="color: #ffffff;">${data.senderName || 'A friend'}</strong> recommended <strong style="color: #ffffff;">${data.bookTitle}</strong>${data.bookAuthor ? ` by ${data.bookAuthor}` : ''}
+                          </p>
+                          ${data.note ? `
+                            <div style="background-color: rgba(255, 255, 255, 0.05); border-left: 3px solid #ee6bfe; padding: 16px; margin: 20px 0; border-radius: 8px;">
+                              <p style="color: rgba(255, 255, 255, 0.8); font-size: 14px; line-height: 1.5; margin: 0; font-style: italic;">
+                                "${data.note}"
+                              </p>
+                            </div>
+                          ` : ''}
+                          <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 30px;">
+                            <tr>
+                              <td align="center">
+                                <a href="${appUrl}#library" style="display: inline-block; background: linear-gradient(135deg, #ee6bfe 0%, rgba(255, 255, 255, 0.7) 100%); color: #0b1225; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em;">
+                                  View in BookMosh
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 20px 40px; background-color: rgba(0, 0, 0, 0.2); border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                          <p style="color: rgba(255, 255, 255, 0.5); font-size: 12px; margin: 0; text-align: center;">
+                            You're receiving this because a friend recommended a book to you on BookMosh
                           </p>
                         </td>
                       </tr>
@@ -375,7 +440,7 @@ serve(async (req) => {
       JSON.stringify({ success: true, emailId: emailData?.id }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
