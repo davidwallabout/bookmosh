@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { sendPitMessageNotification, sendFeedLikeNotification, sendFriendInviteNotification, sendRecommendationNotification } from './lib/email'
 
@@ -1004,6 +1005,11 @@ const deriveUsernameFromSupabase = (email = '', metadata = {}) => {
 const getOwnerId = (user) => user?.id ?? user?.username
 
 function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  const isBookPage = location.pathname === '/book'
+
   const [tracker, setTracker] = useState(initialTracker)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -1012,17 +1018,6 @@ function App() {
   const [showAllResults, setShowAllResults] = useState(false)
   const [discoveryDisplayCount, setDiscoveryDisplayCount] = useState(6)
   const [searchDebounce, setSearchDebounce] = useState(null)
-  const [selectedBook, setSelectedBook] = useState(null)
-  const [bookActivityFeed, setBookActivityFeed] = useState([])
-  const [bookActivityLoading, setBookActivityLoading] = useState(false)
-  const [modalRating, setModalRating] = useState(0)
-  const [modalProgress, setModalProgress] = useState(0)
-  const [modalStatus, setModalStatus] = useState(statusOptions[0])
-  const [modalReview, setModalReview] = useState('')
-  const [modalSpoilerWarning, setModalSpoilerWarning] = useState(false)
-  const [modalDescription, setModalDescription] = useState('')
-  const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
-  const isbndbCoverLookupRef = useRef(new Set())
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
   const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
@@ -4061,7 +4056,6 @@ function App() {
       const moshParam = params.get('mosh')
       const moshIdParam = params.get('moshId')
       const profileParam = params.get('profile')
-      const bookTitleParam = params.get('bookTitle')
       const listIdParam = params.get('listId')
 
       // Handle profile navigation
@@ -4078,11 +4072,6 @@ function App() {
         setFriendBooksHasMore(false)
         setFriendBooksStatusFilter('all')
         setFriendLists([])
-      }
-
-      // Handle book modal navigation
-      if (!bookTitleParam && selectedBook) {
-        closeModal()
       }
 
       // Handle list navigation
@@ -4115,7 +4104,7 @@ function App() {
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [selectedFriend, selectedBook])
+  }, [selectedFriend, selectedList])
 
   const setBookStatusTag = (title, nextStatus) => {
     const current = tracker.find((b) => b.title === title)
@@ -5115,7 +5104,7 @@ function App() {
     }
   }
 
-  const openModal = (book) => {
+  const openModal = (book, options = {}) => {
     const normalized = normalizeBookTags(book)
     setSelectedBook(normalized)
     setModalRating(book.rating ?? 0)
@@ -5129,22 +5118,19 @@ function App() {
     // Fetch book activity feed
     fetchBookActivity(normalized.title)
 
+    if (options.skipNavigate) return
+
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
+      const params = new URLSearchParams()
       const source = normalized?.source ?? null
       const olKey = source === 'isbndb' ? null : (normalized?.olKey ?? normalized?.key ?? null)
       const isbn = normalized?.isbn ?? null
       if (olKey) params.set('olKey', olKey)
-      else params.delete('olKey')
       if (isbn) params.set('isbn', isbn)
-      else params.delete('isbn')
       if (source) params.set('source', source)
-      else params.delete('source')
       params.set('bookTitle', normalized?.title ?? '')
       params.set('bookAuthor', normalized?.author ?? '')
-      const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ''}`
-      // Use pushState so back button works
-      window.history.pushState({ book: normalized?.title }, '', next)
+      navigate({ pathname: '/book', search: `?${params.toString()}` }, { replace: false })
     }
   }
 
@@ -5497,22 +5483,16 @@ function App() {
     setShowEditionPicker(false)
     setEditionPickerEditions([])
 
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      params.delete('olKey')
-      params.delete('isbn')
-      params.delete('source')
-      params.delete('bookTitle')
-      params.delete('bookAuthor')
-      const qs = params.toString()
-      const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
-      window.history.replaceState({}, '', next)
+    if (isBookPage) {
+      navigate('/', { replace: true })
     }
   }
 
+  // Load book details when routed to /book?bookTitle=...
   useEffect(() => {
+    if (!isBookPage) return
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(location.search)
     const bookTitle = (params.get('bookTitle') ?? '').trim()
     const bookAuthor = (params.get('bookAuthor') ?? '').trim()
     const olKey = (params.get('olKey') ?? '').trim()
@@ -5526,18 +5506,17 @@ function App() {
         const data = await invokeIsbndbSearch({ isbn })
         const book = data?.book ?? null
         if (!book) {
-          openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' })
+          openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' }, { skipNavigate: true })
           return
         }
         const mapped = mapIsbndbBookToResult(book, bookTitle.toLowerCase(), '', '', '', [])
-        openModal(mapped || { title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' })
+        openModal(mapped || { title: bookTitle, author: bookAuthor || 'Unknown author', isbn, source: 'isbndb' }, { skipNavigate: true })
       })()
       return
     }
 
-    openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', olKey: olKey || null, isbn: isbn || null })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    openModal({ title: bookTitle, author: bookAuthor || 'Unknown author', olKey: olKey || null, isbn: isbn || null }, { skipNavigate: true })
+  }, [isBookPage, location.search, selectedBook])
 
   useEffect(() => {
     if (!selectedBook) return
@@ -5808,6 +5787,237 @@ function App() {
     }
 
     setBookStatusTag(existing.title, nextStatus)
+  }
+
+  if (isBookPage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
+        {selectedBook ? (
+          <div className="min-h-screen bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+            <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+              <div className="mx-auto w-full max-w-3xl px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.4em] text-white/40">Book Details</p>
+                    <h2 className="text-xl font-semibold text-white break-words">{selectedBook.title}</h2>
+                    <p className="text-sm text-white/60 break-words">{selectedBook.author}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Delete this book?')) {
+                          handleDeleteBook(selectedBook.title)
+                          closeModal()
+                        }
+                      }}
+                      className="rounded-full border border-rose-500/30 p-2 text-rose-400 transition hover:border-rose-500/60 hover:bg-rose-500/10"
+                      title="Delete book"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window === 'undefined') return
+                        const url = window.location.href
+                        if (navigator?.clipboard?.writeText) {
+                          navigator.clipboard.writeText(url)
+                        }
+                      }}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                    >
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mx-auto w-full max-w-3xl px-4 py-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Activity</label>
+                  {bookActivityLoading ? (
+                    <p className="text-sm text-white/60">Loading activity…</p>
+                  ) : bookActivityFeed.length > 0 ? (
+                    <div className="space-y-2">
+                      {bookActivityFeed.map((item) => (
+                        <div
+                          key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openReviewThreadForEvent(item)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openReviewThreadForEvent(item)
+                            }
+                          }}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-white/30 cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-white/80">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  viewFriendProfile(item.owner_username)
+                                }}
+                                className="font-semibold text-white hover:text-aurora hover:underline transition"
+                              >
+                                {item.owner_username}
+                              </button>
+                              <span className="text-white/60">
+                                {item.event_type === 'created' ? ' added this book' :
+                                 item.event_type === 'tags_updated' ? ' updated tags' :
+                                 item.event_type === 'status_changed' ? ' changed status' :
+                                 ' updated this book'}
+                              </span>
+                              {item.tags && item.tags.length > 0 && (
+                                <span className="text-white/60"> to </span>
+                              )}
+                              {item.tags && item.tags.map((tag, idx) => (
+                                <span key={idx}>
+                                  <span className="font-semibold text-white">{tag}</span>
+                                  {idx < item.tags.length - 1 && <span className="text-white/60">, </span>}
+                                </span>
+                              ))}
+                            </p>
+                            <span className="text-[10px] text-white/40 whitespace-nowrap">{formatTimeAgo(item.created_at)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/60">No activity yet for this book.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Moshes</label>
+                  {publicMoshesForBookLoading ? (
+                    <p className="text-sm text-white/60">Loading public moshes…</p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-white/60">{publicMoshesForBook.length} public moshes</p>
+                      {publicMoshesForBook.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Popular public</p>
+                          {publicMoshesForBook.slice(0, 3).map((mosh) => (
+                            <div key={mosh.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white line-clamp-1">{mosh.mosh_title || mosh.book_title}</p>
+                                <p className="text-xs text-white/50">by {mosh.created_by_username || 'reader'}</p>
+                              </div>
+                              <div className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+                                {(mosh.participants_usernames?.length ?? 0)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Progress: {modalProgress}%</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={modalProgress}
+                    onChange={(e) => setModalProgress(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Rating</label>
+                  <div className="flex gap-1 items-center select-none">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pendingModalRatingRef.current = 0
+                        setModalRating(0)
+                        commitModalRating()
+                      }}
+                      className="mr-2 text-sm text-white/30 hover:text-white/60 transition"
+                    >
+                      ✕
+                    </button>
+                    <div
+                      ref={modalStarsRef}
+                      className="flex gap-1 items-center touch-none"
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDraggingRating('modal')
+                        const rect = modalStarsRef.current?.getBoundingClientRect()
+                        const next = calculateRatingFromClientX(e.clientX, rect)
+                        setModalRatingValue(next)
+                        if (typeof e.currentTarget?.setPointerCapture === 'function') {
+                          e.currentTarget.setPointerCapture(e.pointerId)
+                        }
+                      }}
+                      onPointerMove={(e) => {
+                        if (draggingRating !== 'modal') return
+                        const rect = modalStarsRef.current?.getBoundingClientRect()
+                        const next = calculateRatingFromClientX(e.clientX, rect)
+                        setModalRatingValueThrottled(next)
+                      }}
+                      onPointerUp={(e) => {
+                        if (draggingRating !== 'modal') return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDraggingRating(null)
+                        if (typeof e.currentTarget?.releasePointerCapture === 'function') {
+                          try {
+                            e.currentTarget.releasePointerCapture(e.pointerId)
+                          } catch {}
+                        }
+                        commitModalRating()
+                      }}
+                      onPointerCancel={() => {
+                        if (draggingRating !== 'modal') return
+                        setDraggingRating(null)
+                        commitModalRating()
+                      }}
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isFull = modalRating >= star
+                        const isHalf = !isFull && modalRating >= star - 0.5
+                        return (
+                          <div key={star} className="relative w-8 h-8 flex items-center justify-center">
+                            <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} className="w-8 h-8 pointer-events-none" />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-3xl px-4 py-10">
+            <p className="text-sm text-white/60">Loading…</p>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -8967,7 +9177,7 @@ function App() {
           </div>
         )}
 
-        {selectedBook && (
+        {selectedBook && !isBookPage && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
             <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
               <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
