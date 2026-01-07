@@ -428,18 +428,21 @@ export default function BookDetailScreen({ user }) {
   }
 
   const handleStatusChange = async (nextStatus) => {
-    const prevStatus = book?.status
+    const currentStatus = status || book?.status || ''
+    const isTogglingOff = currentStatus === nextStatus
+    const finalStatus = isTogglingOff ? '' : nextStatus
+
     const owned = Boolean(isOwned)
-    const nextTags = Array.from(new Set([nextStatus, ...(owned ? ['Owned'] : [])]))
+    const nextTags = Array.from(new Set([...(finalStatus ? [finalStatus] : []), ...(owned ? ['Owned'] : [])]))
     const nowIso = new Date().toISOString()
 
-    const isMarkingRead = nextStatus === 'Read' && prevStatus !== 'Read'
-    const isLeavingRead = nextStatus !== 'Read' && prevStatus === 'Read'
+    const isMarkingRead = finalStatus === 'Read' && currentStatus !== 'Read'
+    const isLeavingRead = finalStatus !== 'Read' && currentStatus === 'Read'
     const nextReadAt = isMarkingRead ? nowIso : isLeavingRead ? null : (book?.read_at ?? null)
 
-    const nextProgress = nextStatus === 'Read' ? 100 : nextStatus === 'To Read' ? 0 : progress
+    const nextProgress = finalStatus === 'Read' ? 100 : finalStatus === 'To Read' ? 0 : finalStatus ? progress : 0
 
-    setStatus(nextStatus)
+    setStatus(finalStatus)
     setProgress(nextProgress)
 
     // If this is a new book from search (no bookId), add it to library
@@ -450,7 +453,7 @@ export default function BookDetailScreen({ user }) {
           title: book.title,
           author: book.author,
           cover: book.cover,
-          status: nextStatus,
+          status: finalStatus,
           tags: nextTags,
           progress: nextProgress,
           rating: 0,
@@ -464,7 +467,7 @@ export default function BookDetailScreen({ user }) {
         if (error) {
           console.error('[ADD BOOK] Insert error:', error)
         } else {
-          showButtonFeedback(nextStatus, 'check')
+          showButtonFeedback(nextStatus, isTogglingOff ? 'x' : 'check')
         }
       } catch (error) {
         console.error('[ADD BOOK] Error:', error)
@@ -474,7 +477,7 @@ export default function BookDetailScreen({ user }) {
 
     await updateBookRow(
       {
-        status: nextStatus,
+        status: finalStatus,
         tags: nextTags,
         progress: nextProgress,
         read_at: nextReadAt,
@@ -482,7 +485,7 @@ export default function BookDetailScreen({ user }) {
       },
       { eventType: 'status_changed', nextTags }
     )
-    showButtonFeedback(nextStatus, 'check')
+    showButtonFeedback(nextStatus, isTogglingOff ? 'x' : 'check')
   }
 
   const handleOwnedToggle = async () => {
@@ -1359,11 +1362,14 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
   },
   buttonContent: {
-    flexDirection: 'row',
+    position: 'relative',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
   },
   feedbackIcon: {
+    position: 'absolute',
+    right: -12,
+    top: -6,
     fontSize: 14,
     fontWeight: '700',
   },
