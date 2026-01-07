@@ -7495,6 +7495,12 @@ function App() {
                       type="email"
                       value={emailInvite}
                       onChange={(e) => setEmailInvite(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleSendEmailInvite()
+                        }
+                      }}
                       placeholder="friend@email.com"
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                     />
@@ -8044,13 +8050,28 @@ function App() {
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Recommendations</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={fetchRecommendations}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRecommendModal(true)
+                      setRecommendBookData(null)
+                      setRecommendRecipients([])
+                      setRecommendNote('')
+                    }}
+                    className="rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                    title="Create recommendation"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchRecommendations}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               <div className="mt-5">
@@ -8191,6 +8212,12 @@ function App() {
                   type="text"
                   value={authIdentifier}
                   onChange={(e) => setAuthIdentifier(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleLogin()
+                    }
+                  }}
                   placeholder="Email or username"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
@@ -8230,6 +8257,12 @@ function App() {
                   type="text"
                   value={signupData.username}
                   onChange={(e) => setSignupData((prev) => ({ ...prev, username: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleSignup()
+                    }
+                  }}
                   placeholder="Username"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
@@ -8237,6 +8270,12 @@ function App() {
                   type="email"
                   value={signupData.email}
                   onChange={(e) => setSignupData((prev) => ({ ...prev, email: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleSignup()
+                    }
+                  }}
                   placeholder="Email"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
@@ -8244,6 +8283,12 @@ function App() {
                   type="password"
                   value={signupData.password}
                   onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleSignup()
+                    }
+                  }}
                   placeholder="Password"
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/60 focus:border-white/40 focus:outline-none"
                 />
@@ -9349,13 +9394,38 @@ function App() {
                       <h2 className="text-xl font-semibold text-white break-words">{selectedRecommendation.book_title}</h2>
                       <p className="text-sm text-white/60 break-words">{selectedRecommendation.book_author || 'Unknown author'}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRecommendation(null)}
-                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
-                    >
-                      Close
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {currentUser?.id === selectedRecommendation.sender_id && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm('Delete this recommendation?')) return
+                            try {
+                              const { error } = await supabase
+                                .from('recommendations')
+                                .delete()
+                                .eq('id', selectedRecommendation.id)
+                              if (error) throw error
+                              setSelectedRecommendation(null)
+                              await fetchRecommendations()
+                            } catch (error) {
+                              console.error('Delete recommendation error:', error)
+                              alert('Failed to delete recommendation')
+                            }
+                          }}
+                          className="rounded-full border border-red-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-red-400 transition hover:border-red-500/60 hover:bg-red-500/10"
+                        >
+                          Delete
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRecommendation(null)}
+                        className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
