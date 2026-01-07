@@ -1841,20 +1841,37 @@ function App() {
 
       if (error) throw error
 
+      // Fetch recipient emails from users table
+      const recipientUsernames = recommendRecipients.map(r => r.username || r)
+      const { data: recipientUsers, error: emailError } = await supabase
+        .from('users')
+        .select('username, email')
+        .in('username', recipientUsernames)
+
+      if (emailError) {
+        console.error('[RECOMMENDATIONS] Failed to fetch recipient emails:', emailError)
+      }
+
       // Send email notifications to recipients
+      const emailMap = new Map((recipientUsers || []).map(u => [u.username, u.email]))
       for (const recipient of recommendRecipients) {
-        if (recipient.email) {
+        const username = recipient.username || recipient
+        const email = emailMap.get(username)
+        if (email) {
           try {
-            await sendRecommendationNotification(recipient.email, {
+            await sendRecommendationNotification(email, {
               senderName: currentUser.username,
               bookTitle: recommendBookData.title,
               bookAuthor: recommendBookData.author,
               note: recommendNote.trim() || null,
             })
+            console.log(`[RECOMMENDATIONS] Email sent to ${username} (${email})`)
           } catch (emailError) {
-            console.error('[RECOMMENDATIONS] Email notification failed:', emailError)
+            console.error(`[RECOMMENDATIONS] Email notification failed for ${username}:`, emailError)
             // Don't fail the whole operation if email fails
           }
+        } else {
+          console.warn(`[RECOMMENDATIONS] No email found for ${username}`)
         }
       }
 

@@ -926,6 +926,47 @@ export default function BookDetailScreen({ user }) {
       const { error } = await supabase.from('recommendations').insert(payload)
       if (error) throw error
 
+      // Fetch recipient emails and send notifications
+      const { data: recipientUsers, error: emailFetchError } = await supabase
+        .from('users')
+        .select('username, email')
+        .in('username', recipients)
+
+      if (emailFetchError) {
+        console.error('[RECOMMENDATIONS] Failed to fetch recipient emails:', emailFetchError)
+      }
+
+      // Send email notifications via Edge Function
+      const emailMap = new Map((recipientUsers || []).map(u => [u.username, u.email]))
+      for (const username of recipients) {
+        const email = emailMap.get(username)
+        if (email) {
+          try {
+            const { error: emailError } = await supabase.functions.invoke('send-notification-email', {
+              body: {
+                type: 'recommendation',
+                to: email,
+                data: {
+                  senderName: currentUser.username,
+                  bookTitle: bookTitle,
+                  bookAuthor: (author || '').trim() || null,
+                  note: recommendationNote.trim() || null,
+                },
+              },
+            })
+            if (emailError) {
+              console.error(`[RECOMMENDATIONS] Email failed for ${username}:`, emailError)
+            } else {
+              console.log(`[RECOMMENDATIONS] Email sent to ${username} (${email})`)
+            }
+          } catch (emailError) {
+            console.error(`[RECOMMENDATIONS] Email exception for ${username}:`, emailError)
+          }
+        } else {
+          console.warn(`[RECOMMENDATIONS] No email found for ${username}`)
+        }
+      }
+
       setShowRecommendationModal(false)
       Alert.alert('Sent!', 'Your recommendation was sent.')
     } catch (error) {
