@@ -103,13 +103,24 @@ const iconDataUrl = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}
 const getProfileAvatarUrl = (user) => {
   if (!user) return null
   if (user.avatar_url) return user.avatar_url
-  const iconId = user.avatar_icon
-  const icon = PROFILE_ICONS.find((i) => i.id === iconId) ?? PROFILE_ICONS[0]
+  const iconId = user.avatar_icon || 'pixel_book_1'
+  const icon = PROFILE_ICONS.find((i) => i.id === iconId) || PROFILE_ICONS[0]
   return iconDataUrl(icon.svg)
 }
 
+const isCoverUrlValue = (value) => {
+  const v = String(value ?? '').trim()
+  return v.startsWith('http') || v.startsWith('data:image')
+}
+
+const normalizeTitleValue = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+
 const computeMeaningfulRelevance = (title, author, termWords) => {
-  const titleLower = String(title ?? '').toLowerCase()
+  const titleLower = normalizeTitleValue(title)
   const authorLower = String(author ?? '').toLowerCase()
   const stopwords = new Set([
     'a',
@@ -1998,7 +2009,7 @@ function App() {
     setIsPrivate(Boolean(currentUser.is_private))
     setProfileAvatarIcon(currentUser.avatar_icon || 'pixel_book_1')
     setProfileAvatarUrl(currentUser.avatar_url || '')
-    const incoming = Array.isArray(currentUser.top_books) ? currentUser.top_books.filter(Boolean) : []
+    const incoming = Array.isArray(currentUser.top_books) ? currentUser.top_books : []
     const slots = [incoming[0] ?? '', incoming[1] ?? '', incoming[2] ?? '', incoming[3] ?? '']
     setProfileTopBooks(slots)
   }, [currentUser?.id])
@@ -6901,28 +6912,34 @@ function App() {
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">Top 4 books</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {profileTopBooks.map((title, idx) => {
-                          const book = title ? tracker.find((b) => b.title === title) : null
+                        {profileTopBooks.map((slotValue, idx) => {
+                          const isCover = isCoverUrlValue(slotValue)
+                          const title = isCover ? '' : String(slotValue ?? '').trim()
+                          const book = title
+                            ? tracker.find((b) => normalizeTitleValue(b.title) === normalizeTitleValue(title))
+                            : null
+                          const cover = isCover ? String(slotValue) : (book?.cover ?? null)
                           return (
                             <div
-                              key={`${idx}-${title || 'empty'}`}
+                              key={`${idx}-${String(slotValue || 'empty')}`}
                               className="rounded-2xl border border-white/10 bg-white/5 p-2 flex flex-col"
                             >
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (!title) {
+                                  if (!slotValue) {
                                     openTopBookModal(idx)
                                     return
                                   }
                                   // Default action = edit cover/details
-                                  openModal(book ?? { title, author: 'Unknown author', cover: null })
+                                  const fallbackTitle = title || 'Top book'
+                                  openModal(book ?? { title: fallbackTitle, author: 'Unknown author', cover })
                                 }}
                                 className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
                               >
-                                {title ? (
-                                  book?.cover ? (
-                                    <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                {slotValue ? (
+                                  cover ? (
+                                    <img src={cover} alt={title || 'Top book'} className="h-full w-full object-cover" />
                                   ) : (
                                     <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">No cover</div>
                                   )
@@ -6931,18 +6948,21 @@ function App() {
                                 )}
                               </button>
 
-                              {title && (
+                              {slotValue && (
                                 <div className="mt-2 flex flex-col gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => openTopBookModal(idx, `${title}`)}
+                                    onClick={() => openTopBookModal(idx, isCover ? '' : `${title}`)}
                                     className="w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
                                   >
                                     Change
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => openModal(book ?? { title, author: 'Unknown author', cover: null })}
+                                    onClick={() => {
+                                      const fallbackTitle = title || 'Top book'
+                                      openModal(book ?? { title: fallbackTitle, author: 'Unknown author', cover })
+                                    }}
                                     className="w-full rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 transition hover:border-white/40"
                                   >
                                     Cover
@@ -8842,24 +8862,30 @@ function App() {
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">Top 4</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {topBooks.slice(0, 4).map((title, idx) => {
-                          const book = title ? (friendBooks || []).find((b) => b.title === title) : null
+                        {topBooks.slice(0, 4).map((slotValue, idx) => {
+                          const isCover = isCoverUrlValue(slotValue)
+                          const title = isCover ? '' : String(slotValue ?? '').trim()
+                          const book = title
+                            ? (friendBooks || []).find((b) => normalizeTitleValue(b.title) === normalizeTitleValue(title))
+                            : null
+                          const cover = isCover ? String(slotValue) : (book?.cover ?? null)
                           return (
                             <div
-                              key={`${idx}-${title || 'empty'}`}
+                              key={`${idx}-${String(slotValue || 'empty')}`}
                               className="rounded-2xl border border-white/10 bg-white/5 p-2 flex flex-col"
                             >
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (!title) return
-                                  openModal(book ?? { title, author: 'Unknown author', cover: null })
+                                  if (!slotValue) return
+                                  const fallbackTitle = title || 'Top book'
+                                  openModal(book ?? { title: fallbackTitle, author: 'Unknown author', cover })
                                 }}
                                 className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 aspect-[2/3]"
                               >
-                                {title ? (
-                                  book?.cover ? (
-                                    <img src={book.cover} alt={title} className="h-full w-full object-cover" />
+                                {slotValue ? (
+                                  cover ? (
+                                    <img src={cover} alt={title || 'Top book'} className="h-full w-full object-cover" />
                                   ) : (
                                     <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">No cover</div>
                                   )
