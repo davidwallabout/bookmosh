@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -33,6 +34,13 @@ export default function BookDetailScreen({ user }) {
   const [rating, setRating] = useState(0)
   const [progress, setProgress] = useState(0)
   const [review, setReview] = useState('')
+  const [spoilerWarning, setSpoilerWarning] = useState(false)
+  const [isOwned, setIsOwned] = useState(false)
+
+  const [showRecommendationModal, setShowRecommendationModal] = useState(false)
+  const [recommendationNote, setRecommendationNote] = useState('')
+  const [selectedRecommendationRecipients, setSelectedRecommendationRecipients] = useState([])
+  const [sendingRecommendation, setSendingRecommendation] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -40,6 +48,11 @@ export default function BookDetailScreen({ user }) {
       loadBook()
     }
   }, [bookId])
+
+  useEffect(() => {
+    if (!currentUser || !book?.title) return
+    loadBookActivity(book.title)
+  }, [currentUser?.id, book?.title])
 
   const loadCurrentUser = async () => {
     try {
@@ -73,9 +86,8 @@ export default function BookDetailScreen({ user }) {
       setRating(data.rating || 0)
       setProgress(data.progress || 0)
       setReview(data.review || '')
-      
-      // Load activity for this book
-      loadBookActivity(data.title)
+      setSpoilerWarning(data.spoiler_warning || false)
+      setIsOwned(Array.isArray(data.tags) && data.tags.includes('Owned'))
     } catch (error) {
       console.error('Load book error:', error)
       Alert.alert('Error', 'Failed to load book details')
@@ -130,36 +142,127 @@ export default function BookDetailScreen({ user }) {
     return date.toLocaleDateString()
   }
 
-  const saveBook = async () => {
-    if (!title.trim()) {
-      Alert.alert('Error', 'Title is required')
-      return
-    }
+  const debounceRef = useRef(null)
+
+  const updateBookRow = async (dbUpdates, { eventType, nextTags } = {}) => {
+    if (!bookId) return
+    if (!currentUser?.id || !currentUser?.username) return
 
     setSaving(true)
     try {
-      const { error } = await supabase
+      const nowIso = new Date().toISOString()
+      const payload = { ...dbUpdates, updated_at: nowIso }
+
+      let { error } = await supabase
         .from('bookmosh_books')
-        .update({
-          title: title.trim(),
-          author: author.trim() || 'Unknown author',
-          status,
-          rating,
-          progress,
-          review: review.trim(),
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', bookId)
 
+      if (error && String(error.code) === '42703') {
+        const msg = String(error.message || '')
+        const fallbackPayload = { ...payload }
+        if (msg.includes('read_at')) delete fallbackPayload.read_at
+        if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
+        if (msg.includes('spoiler_warning')) delete fallbackPayload.spoiler_warning
+
+        ;({ error } = await supabase
+          .from('bookmosh_books')
+          .update(fallbackPayload)
+          .eq('id', bookId))
+      }
+
       if (error) throw error
-      Alert.alert('Success', 'Book updated successfully')
-      navigation.goBack()
+
+      if (eventType) {
+        try {
+          await supabase
+            .from('book_events')
+            .insert([
+              {
+                owner_id: currentUser.id,
+                owner_username: currentUser.username,
+                book_title: title.trim(),
+                book_author: (author.trim() || 'Unknown author'),
+                book_cover: book?.cover ?? null,
+                tags: nextTags,
+                event_type: eventType,
+              },
+            ])
+        } catch (eventErr) {
+          console.error('book_events insert failed:', eventErr)
+        }
+      }
+
+      setBook((prev) => ({ ...(prev || {}), ...payload }))
+      if (eventType) {
+        await loadBookActivity(title.trim())
+      }
     } catch (error) {
-      console.error('Save book error:', error)
+      console.error('Auto-save book error:', error)
       Alert.alert('Error', error.message)
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleStatusChange = async (nextStatus) => {
+    const prevStatus = book?.status
+    const owned = Boolean(isOwned)
+    const nextTags = Array.from(new Set([nextStatus, ...(owned ? ['Owned'] : [])]))
+    const nowIso = new Date().toISOString()
+
+    const isMarkingRead = nextStatus === 'Read' && prevStatus !== 'Read'
+    const isLeavingRead = nextStatus !== 'Read' && prevStatus === 'Read'
+    const nextReadAt = isMarkingRead ? nowIso : isLeavingRead ? null : (book?.read_at ?? null)
+
+    const nextProgress = nextStatus === 'Read' ? 100 : nextStatus === 'To Read' ? 0 : progress
+
+    setStatus(nextStatus)
+    setProgress(nextProgress)
+
+    await updateBookRow(
+      {
+        status: nextStatus,
+        tags: nextTags,
+        progress: nextProgress,
+        read_at: nextReadAt,
+        status_updated_at: nowIso,
+      },
+      { eventType: 'status_changed', nextTags }
+    )
+  }
+
+  const handleOwnedToggle = async () => {
+    const nextOwned = !isOwned
+    const nextTags = Array.from(new Set([status, ...(nextOwned ? ['Owned'] : [])]))
+
+    setIsOwned(nextOwned)
+    await updateBookRow(
+      {
+        tags: nextTags,
+      },
+      { eventType: 'tags_updated', nextTags }
+    )
+  }
+
+  const handleRatingChange = async (value) => {
+    setRating(value)
+    await updateBookRow({ rating: value })
+  }
+
+  const scheduleDebouncedUpdate = (updates) => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+    debounceRef.current = setTimeout(() => {
+      updateBookRow(updates)
+    }, 800)
+  }
+
+  const handleSpoilerToggle = async () => {
+    const newValue = !spoilerWarning
+    setSpoilerWarning(newValue)
+    await updateBookRow({ spoiler_warning: newValue })
   }
 
   const deleteBook = async () => {
@@ -198,6 +301,97 @@ export default function BookDetailScreen({ user }) {
     })
   }
 
+  const openRecommendationComposer = () => {
+    const friends = Array.isArray(currentUser?.friends) ? currentUser.friends : []
+    if (!currentUser?.username) {
+      Alert.alert('Error', 'Your profile is still loading. Try again in a moment.')
+      return
+    }
+    if (friends.length === 0) {
+      Alert.alert('No friends yet', 'Add friends first, then you can send recommendations.')
+      return
+    }
+
+    setRecommendationNote('')
+    setSelectedRecommendationRecipients([])
+    setShowRecommendationModal(true)
+  }
+
+  const toggleRecipient = (username) => {
+    setSelectedRecommendationRecipients((prev) => {
+      if (prev.includes(username)) return prev.filter((u) => u !== username)
+      return [...prev, username]
+    })
+  }
+
+  const sendRecommendations = async () => {
+    if (!currentUser?.id || !currentUser?.username) return
+    const recipients = Array.isArray(selectedRecommendationRecipients)
+      ? selectedRecommendationRecipients
+      : []
+
+    if (recipients.length === 0) {
+      Alert.alert('Select friends', 'Pick at least one friend to send this recommendation to.')
+      return
+    }
+
+    const bookTitle = title.trim()
+    if (!bookTitle) {
+      Alert.alert('Error', 'Book title is required to send a recommendation.')
+      return
+    }
+
+    setSendingRecommendation(true)
+    try {
+      const { data: recipientRows, error: recipientErr } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('username', recipients)
+        .limit(200)
+
+      if (recipientErr) throw recipientErr
+
+      const byUsername = new Map((recipientRows || []).map((u) => [u.username, u]))
+      const missing = recipients.filter((u) => !byUsername.has(u))
+      if (missing.length > 0) {
+        Alert.alert('Some friends missing', `Could not find: ${missing.join(', ')}`)
+      }
+
+      const payload = recipients
+        .map((u) => {
+          const row = byUsername.get(u)
+          if (!row?.id) return null
+          return {
+            sender_id: currentUser.id,
+            sender_username: currentUser.username,
+            recipient_id: row.id,
+            recipient_username: row.username,
+            book_title: bookTitle,
+            book_author: (author || '').trim() || null,
+            book_cover: book?.cover ?? null,
+            note: recommendationNote.trim() || null,
+          }
+        })
+        .filter(Boolean)
+
+      if (payload.length === 0) {
+        Alert.alert('Error', 'No valid recipients found to send to.')
+        return
+      }
+
+      const { error } = await supabase.from('recommendations').insert(payload)
+      if (error) throw error
+
+      setShowRecommendationModal(false)
+      Alert.alert('Sent!', 'Your recommendation was sent.')
+    } catch (error) {
+      console.error('Send recommendation error:', error)
+      Alert.alert('Error', error.message)
+    } finally {
+      setSendingRecommendation(false)
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -230,7 +424,10 @@ export default function BookDetailScreen({ user }) {
           <TextInput
             style={styles.input}
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(v) => {
+              setTitle(v)
+              scheduleDebouncedUpdate({ title: v.trim() })
+            }}
             placeholder="Book title"
             placeholderTextColor="#666"
           />
@@ -242,7 +439,10 @@ export default function BookDetailScreen({ user }) {
             <TextInput
               style={[styles.input, styles.authorInput]}
               value={author}
-              onChangeText={setAuthor}
+              onChangeText={(v) => {
+                setAuthor(v)
+                scheduleDebouncedUpdate({ author: v.trim() || 'Unknown author' })
+              }}
               placeholder="Author name"
               placeholderTextColor="#666"
             />
@@ -265,7 +465,7 @@ export default function BookDetailScreen({ user }) {
                   styles.statusButton,
                   status === s && styles.statusButtonActive,
                 ]}
-                onPress={() => setStatus(s)}
+                onPress={() => handleStatusChange(s)}
               >
                 <Text
                   style={[
@@ -277,6 +477,17 @@ export default function BookDetailScreen({ user }) {
                 </Text>
               </TouchableOpacity>
             ))}
+
+            <TouchableOpacity
+              style={[styles.statusButton, isOwned && styles.statusButtonActive]}
+              onPress={handleOwnedToggle}
+            >
+              <Text
+                style={[styles.statusButtonText, isOwned && styles.statusButtonTextActive]}
+              >
+                Owned
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -286,7 +497,7 @@ export default function BookDetailScreen({ user }) {
             {[1, 2, 3, 4, 5].map((star) => (
               <TouchableOpacity
                 key={star}
-                onPress={() => setRating(star)}
+                onPress={() => handleRatingChange(star)}
                 style={styles.starButton}
               >
                 <Text style={styles.star}>
@@ -305,7 +516,9 @@ export default function BookDetailScreen({ user }) {
               value={progress.toString()}
               onChangeText={(text) => {
                 const num = parseInt(text) || 0
-                setProgress(Math.min(100, Math.max(0, num)))
+                const next = Math.min(100, Math.max(0, num))
+                setProgress(next)
+                scheduleDebouncedUpdate({ progress: next })
               }}
               keyboardType="number-pad"
               placeholder="0"
@@ -321,10 +534,23 @@ export default function BookDetailScreen({ user }) {
 
         <View style={styles.section}>
           <Text style={styles.label}>Review/Notes</Text>
+          <TouchableOpacity
+            style={styles.spoilerCheckbox}
+            onPress={handleSpoilerToggle}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, spoilerWarning && styles.checkboxChecked]}>
+              {spoilerWarning && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.spoilerLabel}>⚠️ Contains spoilers</Text>
+          </TouchableOpacity>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={review}
-            onChangeText={setReview}
+            onChangeText={(v) => {
+              setReview(v)
+              scheduleDebouncedUpdate({ review: v.trim() })
+            }}
             placeholder="Your thoughts about this book..."
             placeholderTextColor="#666"
             multiline
@@ -371,17 +597,83 @@ export default function BookDetailScreen({ user }) {
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={saveBook}
-          disabled={saving}
+          style={styles.recommendButton}
+          onPress={openRecommendationComposer}
         >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save Changes</Text>
-          )}
+          <Text style={styles.recommendButtonText}>Make Recommendation</Text>
         </TouchableOpacity>
+
       </ScrollView>
+
+      <Modal
+        visible={showRecommendationModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRecommendationModal(false)}
+      >
+        <View style={styles.recommendationModalOverlay}>
+          <View style={styles.recommendationModalCard}>
+            <Text style={styles.recommendationModalTitle}>Recommend to Friends</Text>
+
+            <Text style={styles.recommendationModalSubtitle}>
+              {title ? title : 'This book'}
+            </Text>
+
+            <ScrollView style={styles.recommendationRecipients}>
+              {(Array.isArray(currentUser?.friends) ? currentUser.friends : []).map((u) => {
+                const selected = selectedRecommendationRecipients.includes(u)
+                return (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.recipientRow, selected && styles.recipientRowSelected]}
+                    onPress={() => toggleRecipient(u)}
+                  >
+                    <View style={[styles.recipientCheckbox, selected && styles.recipientCheckboxSelected]}>
+                      {selected ? <Text style={styles.recipientCheckmark}>✓</Text> : null}
+                    </View>
+                    <Text style={styles.recipientUsername}>@{u}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+
+            <TextInput
+              style={styles.recommendationNoteInput}
+              value={recommendationNote}
+              onChangeText={setRecommendationNote}
+              placeholder="Write a note (optional)"
+              placeholderTextColor="#666"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <View style={styles.recommendationModalButtons}>
+              <TouchableOpacity
+                style={styles.recommendationCancelButton}
+                onPress={() => setShowRecommendationModal(false)}
+                disabled={sendingRecommendation}
+              >
+                <Text style={styles.recommendationCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.recommendationSendButton,
+                  sendingRecommendation && styles.recommendationSendButtonDisabled,
+                ]}
+                onPress={sendRecommendations}
+                disabled={sendingRecommendation}
+              >
+                {sendingRecommendation ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.recommendationSendButtonText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -606,5 +898,168 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  recommendButton: {
+    backgroundColor: 'rgba(238, 107, 254, 0.12)',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(238, 107, 254, 0.35)',
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  recommendButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#ee6bfe',
+    textTransform: 'uppercase',
+  },
+  recommendationModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  recommendationModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    maxHeight: '85%',
+  },
+  recommendationModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  recommendationModalSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  recommendationRecipients: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 12,
+  },
+  recipientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  recipientRowSelected: {
+    backgroundColor: 'rgba(238, 107, 254, 0.10)',
+  },
+  recipientCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipientCheckboxSelected: {
+    borderColor: 'rgba(238, 107, 254, 0.6)',
+    backgroundColor: 'rgba(238, 107, 254, 0.18)',
+  },
+  recipientCheckmark: {
+    color: '#ee6bfe',
+    fontWeight: '900',
+  },
+  recipientUsername: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recommendationNoteInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 14,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 12,
+    minHeight: 90,
+  },
+  recommendationModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  recommendationCancelButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  recommendationCancelButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  recommendationSendButton: {
+    flex: 1,
+    backgroundColor: '#ee6bfe',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  recommendationSendButtonDisabled: {
+    opacity: 0.6,
+  },
+  recommendationSendButtonText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#020617',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  spoilerCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  checkboxChecked: {
+    borderColor: '#f87171',
+    backgroundColor: 'rgba(248, 113, 113, 0.2)',
+  },
+  checkmark: {
+    color: '#f87171',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  spoilerLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
 })

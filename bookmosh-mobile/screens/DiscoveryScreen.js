@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -11,15 +11,36 @@ import {
   Alert,
   Modal,
   ScrollView,
+  Animated,
 } from 'react-native'
-import { useNavigation, useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
 
+const PIXEL_DISCOVERY_ICON = (color) => `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="8" y="4" width="2" height="2" fill="${color}"/>
+  <rect x="10" y="4" width="2" height="2" fill="${color}"/>
+  <rect x="6" y="6" width="2" height="2" fill="${color}"/>
+  <rect x="12" y="6" width="2" height="2" fill="${color}"/>
+  <rect x="4" y="8" width="2" height="2" fill="${color}"/>
+  <rect x="14" y="8" width="2" height="2" fill="${color}"/>
+  <rect x="4" y="10" width="2" height="2" fill="${color}"/>
+  <rect x="14" y="10" width="2" height="2" fill="${color}"/>
+  <rect x="6" y="12" width="2" height="2" fill="${color}"/>
+  <rect x="12" y="12" width="2" height="2" fill="${color}"/>
+  <rect x="8" y="14" width="2" height="2" fill="${color}"/>
+  <rect x="10" y="14" width="2" height="2" fill="${color}"/>
+  <rect x="14" y="14" width="2" height="2" fill="${color}"/>
+  <rect x="16" y="16" width="2" height="2" fill="${color}"/>
+  <rect x="18" y="18" width="2" height="2" fill="${color}"/>
+  <rect x="20" y="20" width="2" height="2" fill="${color}"/>
+</svg>`
+
 export default function DiscoveryScreen({ user }) {
   const navigation = useNavigation()
   const route = useRoute()
+  const isFocused = useIsFocused()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
@@ -36,9 +57,32 @@ export default function DiscoveryScreen({ user }) {
   const [showBookDetail, setShowBookDetail] = useState(false)
   const [detailBook, setDetailBook] = useState(null)
 
+  const placeholderScale = useRef(new Animated.Value(1)).current
+
   useEffect(() => {
     loadCurrentUser()
   }, [])
+
+  useEffect(() => {
+    const shouldAnimate = isFocused && !hasSearched && !isSearching
+    if (!shouldAnimate) return
+
+    placeholderScale.setValue(0.85)
+    Animated.sequence([
+      Animated.spring(placeholderScale, {
+        toValue: 1.08,
+        friction: 4,
+        tension: 120,
+        useNativeDriver: true,
+      }),
+      Animated.spring(placeholderScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 110,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [isFocused, hasSearched, isSearching, placeholderScale])
 
   // Auto-search as user types with debounce
   useEffect(() => {
@@ -75,6 +119,15 @@ export default function DiscoveryScreen({ user }) {
       // Auto-search will trigger via the searchQuery useEffect
     }
   }, [route.params?.authorSearch])
+
+  useEffect(() => {
+    const initialQuery = route.params?.initialQuery
+    if (initialQuery) {
+      setSearchQuery(initialQuery)
+      setAuthorSearchMode(false)
+      // Auto-search will trigger via the searchQuery useEffect
+    }
+  }, [route.params?.initialQuery])
 
   const loadCurrentUser = async () => {
     try {
@@ -246,18 +299,28 @@ export default function DiscoveryScreen({ user }) {
         tags.push('Owned')
       }
 
-      const { error } = await supabase.from('bookmosh_books').insert([
-        {
-          owner: currentUser.username,
-          title: bookToAdd.title,
-          author: bookToAdd.author,
-          cover: bookToAdd.cover,
-          status: selectedStatus,
-          tags: tags,
-          progress: selectedStatus === 'Read' ? 100 : 0,
-          rating: 0,
-        },
-      ])
+      const payload = {
+        owner: currentUser.username,
+        title: bookToAdd.title,
+        author: bookToAdd.author,
+        cover: bookToAdd.cover,
+        status: selectedStatus,
+        tags: tags,
+        progress: selectedStatus === 'Read' ? 100 : 0,
+        rating: 0,
+        read_at: selectedStatus === 'Read' ? new Date().toISOString() : null,
+        status_updated_at: new Date().toISOString(),
+      }
+
+      let { error } = await supabase.from('bookmosh_books').insert([payload])
+
+      if (error && String(error.code) === '42703') {
+        const msg = String(error.message || '')
+        const fallbackPayload = { ...payload }
+        if (msg.includes('read_at')) delete fallbackPayload.read_at
+        if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
+        ;({ error } = await supabase.from('bookmosh_books').insert([fallbackPayload]))
+      }
 
       if (error) throw error
       setShowAddModal(false)
@@ -404,7 +467,9 @@ export default function DiscoveryScreen({ user }) {
 
       {!hasSearched && !isSearching && (
         <View style={styles.placeholderContainer}>
-          <Text style={styles.placeholderEmoji}>🔍</Text>
+          <Animated.View style={[styles.placeholderEmoji, { transform: [{ scale: placeholderScale }] }]}>
+            <SvgXml xml={PIXEL_DISCOVERY_ICON('#ee6bfe')} width={104} height={104} />
+          </Animated.View>
           <Text style={styles.placeholderText}>
             Search for books by title or author
           </Text>
@@ -649,8 +714,7 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   placeholderEmoji: {
-    fontSize: 60,
-    marginBottom: 20,
+    marginBottom: 28,
   },
   placeholderText: {
     fontSize: 16,

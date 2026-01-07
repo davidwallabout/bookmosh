@@ -138,10 +138,20 @@ export default function CommunityScreen({ user }) {
     if (!currentUser) return
 
     try {
+      const { data: recipientRows, error: recipientErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', toUsername)
+        .limit(1)
+
+      if (recipientErr) throw recipientErr
+
+      const recipientId = recipientRows?.[0]?.id
       const { error } = await supabase.from('friend_requests').insert([
         {
           requester_id: currentUser.id,
           requester_username: currentUser.username,
+          recipient_id: recipientId || null,
           recipient_username: toUsername,
           status: 'pending',
         },
@@ -158,20 +168,11 @@ export default function CommunityScreen({ user }) {
     if (!currentUser) return
 
     try {
-      await supabase
-        .from('friend_requests')
-        .update({ status: 'accepted', responded_at: new Date().toISOString() })
-        .eq('id', request.id)
+      const { error } = await supabase.rpc('accept_friend_request', {
+        request_id: request.id,
+      })
 
-      const updatedFriends = [
-        ...(Array.isArray(currentUser.friends) ? currentUser.friends : []),
-        request.requester_username,
-      ]
-
-      await supabase
-        .from('users')
-        .update({ friends: updatedFriends })
-        .eq('id', currentUser.id)
+      if (error) throw error
 
       await loadCurrentUser()
       await loadFriendRequests()

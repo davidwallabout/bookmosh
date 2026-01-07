@@ -16,6 +16,10 @@ import FullLibraryScreen from './screens/FullLibraryScreen'
 import DiscoveryScreen from './screens/DiscoveryScreen'
 import BookDetailScreen from './screens/BookDetailScreen'
 import FriendProfileScreen from './screens/FriendProfileScreen'
+import ReadByYearScreen from './screens/ReadByYearScreen'
+import ListsScreen from './screens/ListsScreen'
+import ListDetailScreen from './screens/ListDetailScreen'
+import RecommendationsScreen from './screens/RecommendationsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
@@ -200,6 +204,18 @@ function MainStack({ user, onSignOut }) {
       </Stack.Screen>
       <Stack.Screen name="FriendProfileScreen">
         {() => <FriendProfileScreen user={user} />}
+      </Stack.Screen>
+      <Stack.Screen name="ReadByYearScreen">
+        {() => <ReadByYearScreen user={user} />}
+      </Stack.Screen>
+      <Stack.Screen name="ListsScreen">
+        {() => <ListsScreen user={user} />}
+      </Stack.Screen>
+      <Stack.Screen name="ListDetailScreen">
+        {() => <ListDetailScreen user={user} />}
+      </Stack.Screen>
+      <Stack.Screen name="RecommendationsScreen">
+        {() => <RecommendationsScreen user={user} />}
       </Stack.Screen>
     </Stack.Navigator>
   )
