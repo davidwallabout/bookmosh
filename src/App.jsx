@@ -10255,6 +10255,19 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="border-t border-white/10 bg-midnight/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 py-6">
+          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+            <p className="text-sm text-white/60">© 2026 BookMosh. All rights reserved.</p>
+            <div className="flex gap-6">
+              <a href="/privacy" className="text-sm text-white/60 hover:text-white transition">Privacy Policy</a>
+              <a href="mailto:support@bookmosh.com" className="text-sm text-white/60 hover:text-white transition">Contact</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
