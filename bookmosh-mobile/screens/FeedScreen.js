@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
 
@@ -65,7 +66,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       if (setFeedBadgeCount) {
         setFeedBadgeCount(0)
         const lastViewedKey = `feed_last_viewed_${user.id}`
-        localStorage.setItem(lastViewedKey, new Date().toISOString())
+        AsyncStorage.setItem(lastViewedKey, new Date().toISOString())
       }
     }
   }, [currentUser, feedScope])

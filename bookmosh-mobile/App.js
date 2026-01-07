@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createStackNavigator } from '@react-navigation/stack'
 import { SvgXml } from 'react-native-svg'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './lib/supabase'
 import AuthScreen from './screens/AuthScreen'
 import HomeScreen from './screens/HomeScreen'
@@ -423,7 +424,7 @@ export default function App() {
     const checkFeedActivity = async () => {
       try {
         const lastViewedKey = `feed_last_viewed_${session.user.id}`
-        const lastViewed = localStorage.getItem(lastViewedKey) || new Date(0).toISOString()
+        const lastViewed = await AsyncStorage.getItem(lastViewedKey) || new Date(0).toISOString()
 
         // Count new likes on user's books
         const { data: likesData } = await supabase
