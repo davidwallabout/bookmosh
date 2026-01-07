@@ -1010,6 +1010,22 @@ function App() {
 
   const isBookPage = location.pathname === '/book'
 
+  if (!supabase) {
+    return (
+      <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="text-xs uppercase tracking-[0.4em] text-white/50 mb-2">Configuration error</div>
+          <div className="text-xl font-extrabold mb-2">BookMosh is not configured</div>
+          <div className="text-sm text-white/70 leading-relaxed">
+            Missing <code className="text-white/90">VITE_SUPABASE_URL</code> or{' '}
+            <code className="text-white/90">VITE_SUPABASE_ANON_KEY</code>. Add these environment variables to your
+            deployment and redeploy.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const [tracker, setTracker] = useState(initialTracker)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
