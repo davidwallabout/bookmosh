@@ -65,6 +65,11 @@ export default function BookDetailScreen({ user }) {
   const [reviewCommentDraft, setReviewCommentDraft] = useState('')
   const [showSpoiler, setShowSpoiler] = useState(false)
 
+  const [editingReview, setEditingReview] = useState(false)
+  const [editReviewBody, setEditReviewBody] = useState('')
+  const [editSpoilerWarning, setEditSpoilerWarning] = useState(false)
+  const [savingReviewEdit, setSavingReviewEdit] = useState(false)
+
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [status, setStatus] = useState('')
@@ -176,6 +181,52 @@ export default function BookDetailScreen({ user }) {
     setShowSpoiler(false)
 
     try {
+      const eventReviewId = eventItem?.review_id ?? null
+
+      // New multi-review model: event points at a specific review row
+      if (eventReviewId) {
+        const { data: r, error: rErr } = await supabase
+          .from('book_reviews')
+          .select('*')
+          .eq('id', eventReviewId)
+          .maybeSingle()
+
+        if (rErr) throw rErr
+        if (!r?.id) {
+          setReviewThread(null)
+          return
+        }
+
+        setReviewThread({
+          ...r,
+          title: r.book_title,
+          author: r.book_author,
+          review: r.body,
+          reviewer_username: r.owner_username,
+          __reviewTable: 'book_reviews',
+        })
+
+        const [{ data: likesData }, { data: commentsData }] = await Promise.all([
+          supabase.from('book_review_likes').select('review_id, user_id, username').eq('review_id', r.id),
+          supabase
+            .from('book_review_comments')
+            .select('*')
+            .eq('review_id', r.id)
+            .order('created_at', { ascending: true }),
+        ])
+
+        const likes = likesData || []
+        setReviewLikes({
+          count: likes.length,
+          likedByMe: likes.some((l) => l.user_id === currentUser.id),
+          users: likes.map((l) => l.username),
+        })
+
+        setReviewComments(commentsData || [])
+        return
+      }
+
+      // Legacy model: review is stored on bookmosh_books.review; comments/likes reference bookmosh_books.id
       const { data: books, error: bookError } = await supabase
         .from('bookmosh_books')
         .select('id, owner, title, author, cover, review, spoiler_warning, created_at, updated_at')
@@ -193,6 +244,7 @@ export default function BookDetailScreen({ user }) {
       setReviewThread({
         ...bookRow,
         reviewer_username: eventItem.owner_username,
+        __reviewTable: 'bookmosh_books',
       })
 
       const reviewId = bookRow.id
@@ -220,16 +272,18 @@ export default function BookDetailScreen({ user }) {
     const reviewId = reviewThread.id
     const current = reviewLikes || { count: 0, likedByMe: false, users: [] }
 
+    const likesTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_likes' : 'review_likes'
+
     try {
       if (current.likedByMe) {
-        await supabase.from('review_likes').delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
+        await supabase.from(likesTable).delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
         setReviewLikes((prev) => ({
           count: Math.max(0, (prev?.count ?? 1) - 1),
           likedByMe: false,
           users: (prev?.users ?? []).filter((u) => u !== currentUser.username),
         }))
       } else {
-        const { error } = await supabase.from('review_likes').insert({
+        const { error } = await supabase.from(likesTable).insert({
           review_id: reviewId,
           user_id: currentUser.id,
           username: currentUser.username,
@@ -251,8 +305,10 @@ export default function BookDetailScreen({ user }) {
     const body = String(reviewCommentDraft || '').trim()
     if (!body) return
 
+    const commentsTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_comments' : 'review_comments'
+
     try {
-      const { error } = await supabase.from('review_comments').insert({
+      const { error } = await supabase.from(commentsTable).insert({
         review_id: reviewThread.id,
         commenter_id: currentUser.id,
         commenter_username: currentUser.username,
@@ -261,13 +317,132 @@ export default function BookDetailScreen({ user }) {
       if (error) throw error
       setReviewCommentDraft('')
       const { data } = await supabase
-        .from('review_comments')
+        .from(commentsTable)
         .select('*')
         .eq('review_id', reviewThread.id)
         .order('created_at', { ascending: true })
       setReviewComments(data || [])
     } catch (error) {
       console.error('[BOOK] Post review comment failed:', error)
+    }
+  }
+
+  const submitReview = async () => {
+    if (!currentUser?.id || !currentUser?.username) return
+    if (!bookId) return
+    const body = String(review || '').trim()
+    if (!body) return
+
+    try {
+      setSaving(true)
+      const payload = {
+        book_id: bookId,
+        owner_id: currentUser.id,
+        owner_username: currentUser.username,
+        book_title: title.trim(),
+        book_author: (author.trim() || 'Unknown author'),
+        book_cover: book?.cover ?? null,
+        body,
+        spoiler_warning: Boolean(spoilerWarning),
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('book_reviews')
+        .insert([payload])
+        .select('id')
+        .single()
+
+      if (error) throw error
+
+      // Log an event pointing at this specific review
+      try {
+        await supabase.from('book_events').insert([
+          {
+            owner_id: currentUser.id,
+            owner_username: currentUser.username,
+            book_title: title.trim(),
+            book_author: (author.trim() || 'Unknown author'),
+            book_cover: book?.cover ?? null,
+            tags: Array.isArray(book?.tags) ? book.tags : [],
+            event_type: 'review_created',
+            review_id: inserted?.id ?? null,
+          },
+        ])
+      } catch (eventErr) {
+        console.error('book_events insert failed:', eventErr)
+      }
+
+      setReview('')
+      await loadBookActivity(title.trim())
+    } catch (error) {
+      console.error('Submit review error:', error)
+      Alert.alert('Error', error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const beginEditReview = () => {
+    if (!reviewThread || reviewThread.__reviewTable !== 'book_reviews') return
+    if (reviewThread.owner_id !== currentUser?.id) return
+    setEditingReview(true)
+    setEditReviewBody(String(reviewThread.review || ''))
+    setEditSpoilerWarning(Boolean(reviewThread.spoiler_warning))
+  }
+
+  const saveReviewEdit = async () => {
+    if (!reviewThread || reviewThread.__reviewTable !== 'book_reviews') return
+    if (!currentUser?.id) return
+    if (reviewThread.owner_id !== currentUser.id) return
+    const body = String(editReviewBody || '').trim()
+    if (!body) return
+
+    setSavingReviewEdit(true)
+    try {
+      const nowIso = new Date().toISOString()
+      const { error } = await supabase
+        .from('book_reviews')
+        .update({ body, spoiler_warning: Boolean(editSpoilerWarning), edited_at: nowIso, updated_at: nowIso })
+        .eq('id', reviewThread.id)
+
+      if (error) throw error
+
+      try {
+        await supabase.from('book_events').insert([
+          {
+            owner_id: currentUser.id,
+            owner_username: currentUser.username,
+            book_title: title.trim(),
+            book_author: (author.trim() || 'Unknown author'),
+            book_cover: book?.cover ?? null,
+            tags: Array.isArray(book?.tags) ? book.tags : [],
+            event_type: 'review_updated',
+            review_id: reviewThread.id,
+          },
+        ])
+      } catch (eventErr) {
+        console.error('book_events insert failed:', eventErr)
+      }
+
+      setReviewThread((prev) =>
+        prev
+          ? {
+              ...prev,
+              review: body,
+              body,
+              spoiler_warning: Boolean(editSpoilerWarning),
+              edited_at: nowIso,
+              updated_at: nowIso,
+            }
+          : prev,
+      )
+      setEditingReview(false)
+      await loadBookActivity(title.trim())
+    } catch (error) {
+      console.error('Edit review error:', error)
+      Alert.alert('Error', error.message)
+    } finally {
+      setSavingReviewEdit(false)
     }
   }
 
@@ -560,7 +735,6 @@ export default function BookDetailScreen({ user }) {
   const handleSpoilerToggle = async () => {
     const newValue = !spoilerWarning
     setSpoilerWarning(newValue)
-    await updateBookRow({ spoiler_warning: newValue })
   }
 
   const deleteBook = async () => {
@@ -974,7 +1148,6 @@ export default function BookDetailScreen({ user }) {
             value={review}
             onChangeText={(v) => {
               setReview(v)
-              scheduleDebouncedUpdate({ review: v.trim() })
             }}
             placeholder="Your thoughts about this book..."
             placeholderTextColor="#666"
@@ -982,6 +1155,18 @@ export default function BookDetailScreen({ user }) {
             numberOfLines={6}
             textAlignVertical="top"
           />
+
+          <TouchableOpacity
+            style={[styles.submitReviewButton, (!String(review || '').trim() || saving) && styles.submitReviewButtonDisabled]}
+            onPress={submitReview}
+            disabled={!String(review || '').trim() || saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.submitReviewButtonText}>Submit Review</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -995,15 +1180,21 @@ export default function BookDetailScreen({ user }) {
                   key={item.id}
                   style={styles.activityItem}
                   activeOpacity={0.8}
-                  onPress={() => openReviewThread(item)}
+                  onPress={() => {
+                    if (item?.review_id || item?.event_type === 'review_created' || item?.event_type === 'review_updated') {
+                      openReviewThread(item)
+                    }
+                  }}
                 >
                   <View style={styles.activityContent}>
                     <Text style={styles.activityText}>
                       <Text style={styles.activityUsername}>{item.owner_username}</Text>
                       <Text style={styles.activityAction}>
-                        {item.event_type === 'created' ? ' added this book' : 
+                        {item.event_type === 'created' ? ' added this book' :
                          item.event_type === 'tags_updated' ? ' updated tags' :
                          item.event_type === 'status_changed' ? ' changed status' :
+                         item.event_type === 'review_created' ? ' posted a review' :
+                         item.event_type === 'review_updated' ? ' edited a review' :
                          ' updated this book'}
                       </Text>
                       {item.tags && item.tags.length > 0 && (
@@ -1044,15 +1235,70 @@ export default function BookDetailScreen({ user }) {
                     @{reviewThread.reviewer_username} · {reviewThread.title}
                   </Text>
 
-                  {reviewThread.spoiler_warning && !showSpoiler ? (
-                    <View style={styles.spoilerBox}>
-                      <Text style={styles.spoilerText}>⚠️ Contains spoilers</Text>
-                      <TouchableOpacity style={styles.spoilerButton} onPress={() => setShowSpoiler(true)}>
-                        <Text style={styles.spoilerButtonText}>Show Spoiler</Text>
+                  {reviewThread.__reviewTable === 'book_reviews' && reviewThread.owner_id === currentUser?.id && !editingReview ? (
+                    <TouchableOpacity style={styles.editReviewButton} onPress={beginEditReview}>
+                      <Text style={styles.editReviewButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {editingReview ? (
+                    <>
+                      <TouchableOpacity
+                        style={styles.spoilerCheckbox}
+                        onPress={() => setEditSpoilerWarning((v) => !v)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.checkbox, editSpoilerWarning && styles.checkboxChecked]}>
+                          {editSpoilerWarning && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                        <Text style={styles.spoilerLabel}>⚠️ Contains spoilers</Text>
                       </TouchableOpacity>
-                    </View>
+
+                      <TextInput
+                        style={[styles.input, styles.textArea]}
+                        value={editReviewBody}
+                        onChangeText={setEditReviewBody}
+                        placeholder="Edit your review..."
+                        placeholderTextColor="#666"
+                        multiline
+                        numberOfLines={6}
+                        textAlignVertical="top"
+                      />
+
+                      <View style={styles.recommendationModalButtons}>
+                        <TouchableOpacity
+                          style={styles.recommendationCancelButton}
+                          onPress={() => setEditingReview(false)}
+                          disabled={savingReviewEdit}
+                        >
+                          <Text style={styles.recommendationCancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.recommendationSendButton, savingReviewEdit && styles.recommendationSendButtonDisabled]}
+                          onPress={saveReviewEdit}
+                          disabled={savingReviewEdit}
+                        >
+                          {savingReviewEdit ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.recommendationSendButtonText}>Save</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
                   ) : (
-                    <Text style={styles.reviewBody}>{reviewThread.review || 'No review text yet.'}</Text>
+                    <>
+                      {reviewThread.spoiler_warning && !showSpoiler ? (
+                        <View style={styles.spoilerBox}>
+                          <Text style={styles.spoilerText}>⚠️ Contains spoilers</Text>
+                          <TouchableOpacity style={styles.spoilerButton} onPress={() => setShowSpoiler(true)}>
+                            <Text style={styles.spoilerButtonText}>Show Spoiler</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <Text style={styles.reviewBody}>{reviewThread.review || 'No review text yet.'}</Text>
+                      )}
+                    </>
                   )}
 
                   <View style={styles.reviewMetaRow}>
@@ -1836,6 +2082,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginBottom: 10,
+  },
+  submitReviewButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.85)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+    marginTop: 10,
+  },
+  submitReviewButtonDisabled: {
+    opacity: 0.55,
+  },
+  submitReviewButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    fontSize: 12,
+  },
+  editReviewButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 10,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  editReviewButtonText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    fontSize: 11,
   },
   checkbox: {
     width: 20,

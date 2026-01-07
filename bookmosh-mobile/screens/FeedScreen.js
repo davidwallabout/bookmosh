@@ -195,6 +195,51 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     setShowSpoiler(false)
 
     try {
+      const eventReviewId = eventItem?.review_id ?? null
+
+      if (eventReviewId) {
+        const { data: r, error: rErr } = await supabase
+          .from('book_reviews')
+          .select('*')
+          .eq('id', eventReviewId)
+          .maybeSingle()
+
+        if (rErr) throw rErr
+        if (!r?.id) {
+          setReviewThread(null)
+          return
+        }
+
+        setReviewThread({
+          ...r,
+          title: r.book_title,
+          author: r.book_author,
+          cover: r.book_cover,
+          review: r.body,
+          reviewer_username: r.owner_username,
+          __reviewTable: 'book_reviews',
+        })
+
+        const [{ data: likesData }, { data: commentsData }] = await Promise.all([
+          supabase.from('book_review_likes').select('review_id, user_id, username').eq('review_id', r.id),
+          supabase
+            .from('book_review_comments')
+            .select('*')
+            .eq('review_id', r.id)
+            .order('created_at', { ascending: true }),
+        ])
+
+        const likes = likesData || []
+        setReviewLikes({
+          count: likes.length,
+          likedByMe: likes.some((l) => l.user_id === currentUser.id),
+          users: likes.map((l) => l.username),
+        })
+
+        setReviewComments(commentsData || [])
+        return
+      }
+
       const { data: books, error: bookError } = await supabase
         .from('bookmosh_books')
         .select('id, owner, title, author, cover, review, spoiler_warning, created_at, updated_at')
@@ -212,6 +257,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       setReviewThread({
         ...bookRow,
         reviewer_username: eventItem.owner_username,
+        __reviewTable: 'bookmosh_books',
       })
 
       const reviewId = bookRow.id
@@ -240,16 +286,18 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     const reviewId = reviewThread.id
     const current = reviewLikes || { count: 0, likedByMe: false, users: [] }
 
+    const likesTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_likes' : 'review_likes'
+
     try {
       if (current.likedByMe) {
-        await supabase.from('review_likes').delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
+        await supabase.from(likesTable).delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
         setReviewLikes((prev) => ({
           count: Math.max(0, (prev?.count ?? 1) - 1),
           likedByMe: false,
           users: (prev?.users ?? []).filter((u) => u !== currentUser.username),
         }))
       } else {
-        const { error } = await supabase.from('review_likes').insert({
+        const { error } = await supabase.from(likesTable).insert({
           review_id: reviewId,
           user_id: currentUser.id,
           username: currentUser.username,
@@ -271,8 +319,10 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     const body = String(reviewCommentDraft || '').trim()
     if (!body) return
 
+    const commentsTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_comments' : 'review_comments'
+
     try {
-      const { error } = await supabase.from('review_comments').insert({
+      const { error } = await supabase.from(commentsTable).insert({
         review_id: reviewThread.id,
         commenter_id: currentUser.id,
         commenter_username: currentUser.username,
@@ -281,7 +331,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       if (error) throw error
       setReviewCommentDraft('')
       const { data } = await supabase
-        .from('review_comments')
+        .from(commentsTable)
         .select('*')
         .eq('review_id', reviewThread.id)
         .order('created_at', { ascending: true })
@@ -298,6 +348,10 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
         ? 'added'
         : item.event_type === 'tags_updated'
         ? 'updated'
+        : item.event_type === 'review_created'
+        ? 'reviewed'
+        : item.event_type === 'review_updated'
+        ? 'edited review'
         : item.event_type
 
     return (
