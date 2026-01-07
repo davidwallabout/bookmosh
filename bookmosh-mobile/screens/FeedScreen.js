@@ -455,7 +455,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => navigation.navigate('ProfileScreen')}
+          onPress={() => navigation.navigate('Profile')}
           style={styles.avatarButton}
         >
           {userAvatar ? (

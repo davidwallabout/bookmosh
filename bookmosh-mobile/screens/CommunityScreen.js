@@ -464,7 +464,7 @@ export default function CommunityScreen({ user }) {
           />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => navigation.navigate('ProfileScreen')}
+          onPress={() => navigation.navigate('Profile')}
           style={styles.avatarButton}
         >
           {userAvatar ? (

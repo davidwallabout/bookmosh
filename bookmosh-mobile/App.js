@@ -124,6 +124,17 @@ const PIXEL_ICONS = {
     <rect x="11" y="10" width="2" height="8" fill="${color}"/>
     <rect x="13" y="10" width="2" height="8" fill="${color}"/>
   </svg>`,
+
+  // Profile - pixelated face
+  profile: (color) => `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="7" y="4" width="10" height="2" fill="${color}"/>
+    <rect x="6" y="6" width="12" height="2" fill="${color}"/>
+    <rect x="5" y="8" width="14" height="10" fill="${color}"/>
+    <rect x="7" y="10" width="2" height="2" fill="#020617"/>
+    <rect x="15" y="10" width="2" height="2" fill="#020617"/>
+    <rect x="9" y="14" width="6" height="2" fill="#020617"/>
+    <rect x="6" y="18" width="12" height="2" fill="${color}"/>
+  </svg>`,
 }
 
 const TabIcon = ({ name, color, size }) => (
@@ -192,6 +203,15 @@ function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
         options={{
           tabBarLabel: 'Community',
           tabBarIcon: ({ color, size }) => <TabIcon name="community" color={color} size={size} />,
+        }}
+      />
+
+      <Tab.Screen
+        name="Profile"
+        children={() => <ProfileScreen user={user} onSignOut={onSignOut} />}
+        options={{
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ color, size }) => <TabIcon name="profile" color={color} size={size} />,
         }}
       />
     </Tab.Navigator>

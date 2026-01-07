@@ -278,7 +278,7 @@ export default function HomeScreen({ user }) {
           resizeMode="contain"
         />
         <TouchableOpacity
-          onPress={() => navigation.navigate('ProfileScreen')}
+          onPress={() => navigation.navigate('Profile')}
           style={styles.avatarButton}
         >
           {currentUser?.avatar_url ? (
