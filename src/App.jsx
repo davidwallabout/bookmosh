@@ -4244,10 +4244,7 @@ function App() {
     )
     updateBook(title, { tags: nextTags })
     logBookEvent({ ...(current ?? { title }), tags: nextTags, status }, 'tags_updated')
-    // Update selectedBook if it's the same book so modal UI reflects the change
-    if (selectedBook && selectedBook.title === title) {
-      setSelectedBook({ ...selectedBook, tags: nextTags })
-    }
+    setSelectedBook((prev) => (prev && prev.title === title ? { ...prev, tags: nextTags } : prev))
   }
 
   const handleAuthModeSwitch = (mode) => {
