@@ -13,7 +13,7 @@ import {
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 
-export default function RecommendationsScreen({ user }) {
+export default function RecommendationsScreen({ user, route }) {
   const navigation = useNavigation()
   const isFocused = useIsFocused()
 
@@ -40,6 +40,16 @@ export default function RecommendationsScreen({ user }) {
     if (!isFocused) return
     loadRecommendations()
   }, [currentUser?.id, isFocused])
+
+  useEffect(() => {
+    if (route?.params?.selectedRecommendation && currentUser) {
+      const rec = route.params.selectedRecommendation
+      setActiveRecommendation(rec)
+      setShowRecommendationModal(true)
+      loadComments(rec.id)
+      navigation.setParams({ selectedRecommendation: null })
+    }
+  }, [route?.params?.selectedRecommendation, currentUser])
 
   const loadCurrentUser = async () => {
     try {

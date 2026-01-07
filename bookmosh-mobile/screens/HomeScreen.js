@@ -221,8 +221,9 @@ export default function HomeScreen({ user }) {
   }
 
   const openRecommendation = (rec) => {
-    setActiveRecommendation(rec)
-    setShowRecommendationModal(true)
+    navigation.navigate('RecommendationsScreen', { 
+      selectedRecommendation: rec 
+    })
   }
 
   const openDiscoveryForRecommendation = (rec) => {
