@@ -191,6 +191,7 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
           console.log('[ISBNDB] ✅ Success via supabase.functions.invoke', { q, isbn, mode, count })
           return data
         }
+
         if (error) {
           console.warn('[ISBNDB] invoke failed, falling back to HTTP fetch', error)
         }
@@ -230,6 +231,7 @@ const invokeIsbndbSearch = async ({ q, isbn, mode, pageSize = 20 } = {}) => {
     return null
   }
 }
+
 
 const mapIsbndbBookToResult = (b, searchLower, last1Lower, last2Lower, last3Lower, termWords) => {
   if (!b) return null
@@ -1041,11 +1043,20 @@ function App() {
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(false)
   const [selectedRecommendation, setSelectedRecommendation] = useState(null)
+  const [recommendationComments, setRecommendationComments] = useState([])
+  const [recommendationCommentsLoading, setRecommendationCommentsLoading] = useState(false)
+  const [recommendationCommentDraft, setRecommendationCommentDraft] = useState('')
   const [isRecommendBookOpen, setIsRecommendBookOpen] = useState(false)
   const [recommendBookData, setRecommendBookData] = useState(null)
   const [recommendNote, setRecommendNote] = useState('')
   const [recommendRecipients, setRecommendRecipients] = useState([])
   const [recommendLoading, setRecommendLoading] = useState(false)
+  const [reviewThread, setReviewThread] = useState(null)
+  const [reviewThreadLoading, setReviewThreadLoading] = useState(false)
+  const [reviewThreadLikes, setReviewThreadLikes] = useState({ count: 0, likedByMe: false, users: [] })
+  const [reviewThreadComments, setReviewThreadComments] = useState([])
+  const [reviewThreadCommentDraft, setReviewThreadCommentDraft] = useState('')
+  const [reviewThreadShowSpoiler, setReviewThreadShowSpoiler] = useState(false)
   const [selectedList, setSelectedList] = useState(null)
   const [selectedListItems, setSelectedListItems] = useState([])
   const [selectedListItemsLoading, setSelectedListItemsLoading] = useState(false)
@@ -1583,6 +1594,150 @@ function App() {
       setRecommendations([])
     } finally {
       setRecommendationsLoading(false)
+    }
+  }
+
+  const loadRecommendationComments = async (recommendationId) => {
+    if (!supabase || !currentUser?.id || !recommendationId) return
+    setRecommendationCommentsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('recommendation_comments')
+        .select('*')
+        .eq('recommendation_id', recommendationId)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      setRecommendationComments(data || [])
+    } catch (error) {
+      console.error('[RECOMMENDATION_COMMENTS] Load error:', error)
+      setRecommendationComments([])
+    } finally {
+      setRecommendationCommentsLoading(false)
+    }
+  }
+
+  const postRecommendationComment = async () => {
+    if (!supabase || !currentUser?.id || !selectedRecommendation?.id) return
+    const body = String(recommendationCommentDraft || '').trim()
+    if (!body) return
+    try {
+      const { error } = await supabase.from('recommendation_comments').insert({
+        recommendation_id: selectedRecommendation.id,
+        commenter_id: currentUser.id,
+        commenter_username: currentUser.username,
+        body,
+      })
+      if (error) throw error
+      setRecommendationCommentDraft('')
+      await loadRecommendationComments(selectedRecommendation.id)
+    } catch (error) {
+      console.error('[RECOMMENDATION_COMMENTS] Insert error:', error)
+      alert(error?.message || 'Failed to post comment')
+    }
+  }
+
+  const openReviewThreadForEvent = async (eventItem) => {
+    if (!supabase || !currentUser?.id || !eventItem?.owner_username || !eventItem?.book_title) return
+    setReviewThreadLoading(true)
+    setReviewThread(null)
+    setReviewThreadComments([])
+    setReviewThreadLikes({ count: 0, likedByMe: false, users: [] })
+    setReviewThreadCommentDraft('')
+    setReviewThreadShowSpoiler(false)
+    try {
+      const { data: bookRow, error: bookError } = await supabase
+        .from('bookmosh_books')
+        .select('id, owner, title, author, cover, review, spoiler_warning, created_at, updated_at')
+        .eq('owner', eventItem.owner_username)
+        .eq('title', eventItem.book_title)
+        .limit(1)
+        .maybeSingle()
+
+      if (bookError) throw bookError
+      if (!bookRow?.id) {
+        alert('Could not find this review in the database yet.')
+        return
+      }
+
+      setReviewThread({
+        ...bookRow,
+        reviewer_username: eventItem.owner_username,
+      })
+
+      const reviewId = bookRow.id
+      const [likesRes, commentsRes] = await Promise.all([
+        supabase.from('review_likes').select('review_id, user_id, username').eq('review_id', reviewId),
+        supabase.from('review_comments').select('*').eq('review_id', reviewId).order('created_at', { ascending: true }),
+      ])
+
+      const likes = likesRes.data || []
+      setReviewThreadLikes({
+        count: likes.length,
+        likedByMe: likes.some((l) => l.user_id === currentUser.id),
+        users: likes.map((l) => l.username),
+      })
+      setReviewThreadComments(commentsRes.data || [])
+    } catch (error) {
+      console.error('[REVIEW_THREAD] Open error:', error)
+      alert(error?.message || 'Failed to load review thread')
+    } finally {
+      setReviewThreadLoading(false)
+    }
+  }
+
+  const toggleReviewLike = async () => {
+    if (!supabase || !currentUser?.id || !reviewThread?.id) return
+    const reviewId = reviewThread.id
+    const current = reviewThreadLikes ?? { count: 0, likedByMe: false, users: [] }
+    try {
+      if (current.likedByMe) {
+        await supabase.from('review_likes').delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
+        setReviewThreadLikes((prev) => ({
+          count: Math.max(0, (prev?.count ?? 1) - 1),
+          likedByMe: false,
+          users: (prev?.users ?? []).filter((u) => u !== currentUser.username),
+        }))
+      } else {
+        const { error } = await supabase.from('review_likes').insert({
+          review_id: reviewId,
+          user_id: currentUser.id,
+          username: currentUser.username,
+        })
+        if (error) throw error
+        setReviewThreadLikes((prev) => ({
+          count: (prev?.count ?? 0) + 1,
+          likedByMe: true,
+          users: [...(prev?.users ?? []), currentUser.username],
+        }))
+      }
+    } catch (error) {
+      console.error('[REVIEW_THREAD] Toggle like failed:', error)
+    }
+  }
+
+  const postReviewComment = async () => {
+    if (!supabase || !currentUser?.id || !reviewThread?.id) return
+    const body = String(reviewThreadCommentDraft || '').trim()
+    if (!body) return
+    try {
+      const { error } = await supabase.from('review_comments').insert({
+        review_id: reviewThread.id,
+        commenter_id: currentUser.id,
+        commenter_username: currentUser.username,
+        body,
+      })
+      if (error) throw error
+      setReviewThreadCommentDraft('')
+      const { data, error: loadErr } = await supabase
+        .from('review_comments')
+        .select('*')
+        .eq('review_id', reviewThread.id)
+        .order('created_at', { ascending: true })
+      if (loadErr) throw loadErr
+      setReviewThreadComments(data || [])
+    } catch (error) {
+      console.error('[REVIEW_THREAD] Insert comment failed:', error)
+      alert(error?.message || 'Failed to post comment')
     }
   }
 
@@ -5828,6 +5983,118 @@ function App() {
           </div>
         )}
 
+        {reviewThread && (
+          <div className="fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
+                <div className="mx-auto w-full max-w-3xl px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.4em] text-white/40">Review</p>
+                      <h2 className="text-xl font-semibold text-white break-words">{reviewThread.title}</h2>
+                      <p className="text-sm text-white/60 break-words">{reviewThread.author}</p>
+                      <p className="text-xs text-white/50 mt-1">by @{reviewThread.reviewer_username || reviewThread.owner}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReviewThread(null)}
+                      className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mx-auto w-full max-w-3xl px-4 py-6">
+                {reviewThreadLoading ? (
+                  <p className="text-sm text-white/60">Loading…</p>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Review text</p>
+                        <button
+                          type="button"
+                          onClick={toggleReviewLike}
+                          className={`group flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                            reviewThreadLikes?.likedByMe
+                              ? 'text-pink-400'
+                              : 'text-white/50 hover:text-pink-400'
+                          }`}
+                          title={reviewThreadLikes?.users?.length ? `Liked by ${reviewThreadLikes.users.join(', ')}` : 'Like this review'}
+                        >
+                          <span>{reviewThreadLikes?.likedByMe ? '♥' : '♡'}</span>
+                          {(reviewThreadLikes?.count ?? 0) > 0 ? <span>{reviewThreadLikes.count}</span> : null}
+                        </button>
+                      </div>
+
+                      {reviewThread.spoiler_warning && !reviewThreadShowSpoiler ? (
+                        <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
+                          <p className="text-sm text-white/80">This review contains spoilers.</p>
+                          <button
+                            type="button"
+                            onClick={() => setReviewThreadShowSpoiler(true)}
+                            className="mt-3 rounded-full border border-rose-500/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-rose-200 transition hover:border-rose-500 hover:bg-rose-500/10"
+                          >
+                            Show spoiler
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-sm text-white/80 whitespace-pre-wrap">
+                          {reviewThread.review ? reviewThread.review : 'No review text yet.'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/50">Comments</p>
+                        <p className="text-xs text-white/40">{reviewThreadComments.length}</p>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {reviewThreadComments.length > 0 ? (
+                          reviewThreadComments.map((c) => (
+                            <div key={c.id} className="rounded-2xl border border-white/10 bg-[#050914]/40 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm text-white/80">
+                                  <span className="font-semibold text-white">@{c.commenter_username}</span>
+                                  <span className="text-white/60"> · {formatTimeAgo(c.created_at)}</span>
+                                </p>
+                              </div>
+                              <p className="mt-2 text-sm text-white/80 whitespace-pre-wrap">{c.body}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-white/60">No comments yet.</p>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex gap-2">
+                        <input
+                          value={reviewThreadCommentDraft}
+                          onChange={(e) => setReviewThreadCommentDraft(e.target.value)}
+                          placeholder="Write a comment…"
+                          className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={postReviewComment}
+                          disabled={!String(reviewThreadCommentDraft || '').trim()}
+                          className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-50"
+                        >
+                          Post
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {!currentUser && (
           <header className="flex items-center justify-center pt-6 pb-2">
             <img
@@ -6851,6 +7118,13 @@ function App() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => openReviewThreadForEvent(item)}
+                            className="text-xs text-white/50 hover:text-white transition"
+                          >
+                            Review
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => openMoshInvite(book)}
                             className="text-xs text-white/50 hover:text-white transition"
                           >
@@ -7794,7 +8068,12 @@ function App() {
                         <button
                           key={rec.id}
                           type="button"
-                          onClick={() => setSelectedRecommendation(rec)}
+                          onClick={() => {
+                            setSelectedRecommendation(rec)
+                            setRecommendationComments([])
+                            setRecommendationCommentDraft('')
+                            loadRecommendationComments(rec.id)
+                          }}
                           className="w-full rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
                         >
                           <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
@@ -8577,12 +8856,27 @@ function App() {
                   ) : bookActivityFeed.length > 0 ? (
                     <div className="space-y-2">
                       {bookActivityFeed.map((item) => (
-                        <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div
+                          key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openReviewThreadForEvent(item)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openReviewThreadForEvent(item)
+                            }
+                          }}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:border-white/30 cursor-pointer"
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-sm text-white/80">
                               <button
                                 type="button"
-                                onClick={() => viewFriendProfile(item.owner_username)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  viewFriendProfile(item.owner_username)
+                                }}
                                 className="font-semibold text-white hover:text-aurora hover:underline transition"
                               >
                                 {item.owner_username}
@@ -9176,6 +9470,54 @@ function App() {
                         className="w-full rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
                       >
                         View Full Details
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm uppercase tracking-[0.4em] text-white/50">Comments</h3>
+                      <button
+                        type="button"
+                        onClick={() => loadRecommendationComments(selectedRecommendation.id)}
+                        className="rounded-full border border-white/20 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {recommendationCommentsLoading ? (
+                        <p className="text-sm text-white/60">Loading comments…</p>
+                      ) : recommendationComments.length > 0 ? (
+                        recommendationComments.map((c) => (
+                          <div key={c.id} className="rounded-2xl border border-white/10 bg-[#050914]/40 p-3">
+                            <p className="text-sm text-white/80">
+                              <span className="font-semibold text-white">@{c.commenter_username}</span>
+                              <span className="text-white/60"> · {formatTimeAgo(c.created_at)}</span>
+                            </p>
+                            <p className="mt-2 text-sm text-white/80 whitespace-pre-wrap">{c.body}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-white/60">No comments yet.</p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <input
+                        value={recommendationCommentDraft}
+                        onChange={(e) => setRecommendationCommentDraft(e.target.value)}
+                        placeholder="Write a comment…"
+                        className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={postRecommendationComment}
+                        disabled={!String(recommendationCommentDraft || '').trim()}
+                        className="rounded-2xl bg-gradient-to-r from-aurora to-white/70 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-midnight transition hover:from-white/80 disabled:opacity-50"
+                      >
+                        Post
                       </button>
                     </div>
                   </div>

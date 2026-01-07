@@ -45,39 +45,6 @@ export const sendWithResend = async ({
       throw new Error('Supabase client not initialized')
     }
 
-    // Make sure we have a fresh session/token
-    // (Expired tokens are a common reason for 401s on Edge Functions)
-    try {
-      await supabase.auth.refreshSession()
-    } catch (err) {
-      // Not fatal; we'll still try with whatever session we have.
-      console.warn('[EMAIL] refreshSession failed (continuing):', err)
-    }
-
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) {
-      console.error('[EMAIL] Failed to read Supabase session:', sessionError)
-    }
-    const accessToken = sessionData?.session?.access_token
-    if (!accessToken) {
-      console.error('[EMAIL] No active session. Edge Function requires a signed-in user JWT.')
-      throw new Error('Not signed in (missing Supabase session)')
-    }
-
-    const jwtPayload = decodeJwtPayloadSafe(accessToken)
-    if (jwtPayload) {
-      const exp = Number(jwtPayload.exp)
-      const now = Math.floor(Date.now() / 1000)
-      console.log('[EMAIL] JWT diagnostics:', {
-        role: jwtPayload.role,
-        exp,
-        secondsUntilExpiry: Number.isFinite(exp) ? exp - now : null,
-        sub: jwtPayload.sub,
-      })
-    } else {
-      console.warn('[EMAIL] Could not decode JWT payload for diagnostics')
-    }
-
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
     if (!supabaseAnonKey) {
       console.error('[EMAIL] Missing VITE_SUPABASE_ANON_KEY. Needed to call Edge Functions.')
@@ -91,25 +58,20 @@ export const sendWithResend = async ({
       throw new Error('No valid recipient emails')
     }
 
-    const recipientEmail = toEmails[0] // Use first email
+    const recipientEmail = toEmails[0]
 
     console.log('[EMAIL] Sending via Edge Function:', { 
       type, 
       to: recipientEmail
     })
 
-    // Call Supabase Edge Function via supabase-js.
-    // This automatically attaches the signed-in user's JWT (fixes 401).
+    // Call Edge Function using anon key (no user session required)
+    // The Edge Function validates the request internally
     const { data: result, error } = await supabase.functions.invoke('send-notification-email', {
       body: {
         type,
         to: recipientEmail,
         data,
-      },
-      headers: {
-        // Use lowercase headers to avoid any gateway/header-normalization issues.
-        authorization: `Bearer ${accessToken}`,
-        apikey: supabaseAnonKey,
       },
     })
 
