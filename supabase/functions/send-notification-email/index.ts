@@ -32,39 +32,47 @@ serve(async (req: Request) => {
       )
     }
 
-    // Manual auth check (verify_jwt is disabled in config.toml)
+    // Auth check: allow service role key, anon key, or valid user JWT
+    // This supports both custom auth (anon key) and Supabase Auth (user JWT)
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
-    if (!authHeader?.toLowerCase().startsWith('bearer ')) {
+    const apikeyHeader = req.headers.get('apikey')
+    
+    // Allow if using service role key (for DB triggers)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (authHeader?.toLowerCase().startsWith('bearer ')) {
+      const bearerToken = authHeader.slice('bearer '.length)
+      if (serviceRoleKey && bearerToken === serviceRoleKey) {
+        // Valid service role key - allow
+      } else if (bearerToken === supabaseAnonKey || apikeyHeader === supabaseAnonKey) {
+        // Valid anon key - allow (for custom auth apps)
+      } else {
+        // Try to validate as Supabase Auth user JWT
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          global: {
+            headers: {
+              Authorization: authHeader,
+            },
+          },
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        })
+
+        const { data: userData, error: userError } = await supabase.auth.getUser()
+        if (userError || !userData?.user) {
+          return new Response(
+            JSON.stringify({ error: 'Unauthorized: invalid token' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          )
+        }
+      }
+    } else {
+      // No auth header - reject
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: missing bearer token' }),
+        JSON.stringify({ error: 'Unauthorized: missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
-    }
-
-    const bearerToken = authHeader.slice('bearer '.length)
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const allowSystem = Boolean(serviceRoleKey && bearerToken === serviceRoleKey)
-
-    if (!allowSystem) {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      })
-
-      const { data: userData, error: userError } = await supabase.auth.getUser()
-      if (userError || !userData?.user) {
-        return new Response(
-          JSON.stringify({ error: 'Unauthorized: invalid token' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        )
-      }
     }
 
     const { type, to, data } = await req.json()
