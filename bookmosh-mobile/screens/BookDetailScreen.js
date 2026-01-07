@@ -867,21 +867,22 @@ export default function BookDetailScreen({ user }) {
             >
               <Text style={styles.clearRatingText}>✕</Text>
             </TouchableOpacity>
-            <View
-              ref={starsContainerRef}
-              style={styles.starsContainer}
-              onLayout={() => {
-                starsContainerRef.current?.measureInWindow((x, y, width, height) => {
-                  layoutRef.current = { x, width }
-                })
-              }}
-              {...ratingPanResponder.panHandlers}
-            >
+            <View style={styles.starsContainer}>
               {[1, 2, 3, 4, 5].map((star) => {
                 const isFull = rating >= star
                 const isHalf = !isFull && rating >= star - 0.5
                 return (
                   <View key={star} style={styles.starWrapper}>
+                    <TouchableOpacity
+                      style={styles.halfStarTouchLeft}
+                      onPress={() => handleRatingChange(star - 0.5)}
+                      activeOpacity={0.7}
+                    />
+                    <TouchableOpacity
+                      style={styles.halfStarTouchRight}
+                      onPress={() => handleRatingChange(star)}
+                      activeOpacity={0.7}
+                    />
                     <Text style={styles.starEmpty}>☆</Text>
                     <View style={[styles.starFillContainer, { width: isFull ? '100%' : isHalf ? '50%' : '0%' }]}>
                       <Text style={styles.starFilled}>★</Text>
@@ -1361,10 +1362,26 @@ const styles = StyleSheet.create({
   },
   starWrapper: {
     position: 'relative',
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  halfStarTouchLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: '50%',
+    height: '100%',
+    zIndex: 10,
+  },
+  halfStarTouchRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: '50%',
+    height: '100%',
+    zIndex: 10,
   },
   starEmpty: {
     fontSize: 32,
@@ -1377,6 +1394,7 @@ const styles = StyleSheet.create({
     height: '100%',
     overflow: 'hidden',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   starFilled: {
     fontSize: 32,
