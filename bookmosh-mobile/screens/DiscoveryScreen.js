@@ -314,7 +314,11 @@ export default function DiscoveryScreen({ user }) {
   }
 
   const addBookToLibrary = async () => {
-    if (!currentUser || !bookToAdd) return
+    if (!currentUser || !bookToAdd) {
+      console.log('[ADD BOOK] Missing currentUser or bookToAdd:', { currentUser: !!currentUser, bookToAdd: !!bookToAdd })
+      Alert.alert('Error', 'Please wait for your profile to load')
+      return
+    }
 
     try {
       const tags = [selectedStatus]
@@ -324,6 +328,7 @@ export default function DiscoveryScreen({ user }) {
 
       const payload = {
         owner: currentUser.username,
+        owner_id: currentUser.id,
         title: bookToAdd.title,
         author: bookToAdd.author,
         cover: bookToAdd.cover,
@@ -335,6 +340,7 @@ export default function DiscoveryScreen({ user }) {
         status_updated_at: new Date().toISOString(),
       }
 
+      console.log('[ADD BOOK] Inserting book with payload:', payload)
       let { error } = await supabase.from('bookmosh_books').insert([payload])
 
       if (error && String(error.code) === '42703') {
@@ -342,10 +348,15 @@ export default function DiscoveryScreen({ user }) {
         const fallbackPayload = { ...payload }
         if (msg.includes('read_at')) delete fallbackPayload.read_at
         if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
+        console.log('[ADD BOOK] Retrying with fallback payload:', fallbackPayload)
         ;({ error } = await supabase.from('bookmosh_books').insert([fallbackPayload]))
       }
 
-      if (error) throw error
+      if (error) {
+        console.error('[ADD BOOK] Insert error:', error)
+        throw error
+      }
+      console.log('[ADD BOOK] Success!')
       setShowAddModal(false)
       Alert.alert('Success', `Added "${bookToAdd.title}" to your library!`)
     } catch (error) {
