@@ -11,12 +11,37 @@ import {
   ActivityIndicator,
   Modal,
   Animated,
-  PanResponder,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 
+import Svg, { ClipPath, Defs, Path, Rect } from 'react-native-svg'
+
 const statusOptions = ['Reading', 'To Read', 'Read']
+
+const StarSvg = ({ fraction = 0, size = 32 }) => {
+  const clipId = useRef(`clip_${Math.random().toString(36).slice(2)}`).current
+  const clamped = Math.max(0, Math.min(1, Number(fraction) || 0))
+  const clipWidth = 24 * clamped
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Defs>
+        <ClipPath id={clipId}>
+          <Rect x="0" y="0" width={clipWidth} height="24" />
+        </ClipPath>
+      </Defs>
+      <Path
+        d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+        fill="rgba(255, 255, 255, 0.2)"
+      />
+      <Path
+        d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+        fill="#fbbf24"
+        clipPath={`url(#${clipId})`}
+      />
+    </Svg>
+  )
+}
 
 export default function BookDetailScreen({ user }) {
   const navigation = useNavigation()
@@ -59,42 +84,6 @@ export default function BookDetailScreen({ user }) {
 
   const [buttonFeedback, setButtonFeedback] = useState({}) // { buttonKey: 'check' | 'x' }
   const feedbackOpacity = useRef(new Animated.Value(0)).current
-  const starsContainerRef = useRef(null)
-  const layoutRef = useRef({ x: 0, width: 0 })
-  const pendingRatingRef = useRef(0)
-  const saveRatingRef = useRef(null)
-
-  const calculateRatingFromX = (pageX) => {
-    const { x, width } = layoutRef.current
-    if (width === 0) return 0
-    const relativeX = pageX - x
-    const starWidth = width / 5
-    const rawRating = relativeX / starWidth
-    const rounded = Math.round(rawRating * 2) / 2
-    return Math.max(0, Math.min(5, rounded))
-  }
-
-  const ratingPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const newRating = calculateRatingFromX(evt.nativeEvent.pageX)
-        pendingRatingRef.current = newRating
-        setRating(newRating)
-      },
-      onPanResponderMove: (evt) => {
-        const newRating = calculateRatingFromX(evt.nativeEvent.pageX)
-        pendingRatingRef.current = newRating
-        setRating(newRating)
-      },
-      onPanResponderRelease: () => {
-        if (saveRatingRef.current) {
-          saveRatingRef.current(pendingRatingRef.current)
-        }
-      },
-    })
-  ).current
 
   const showButtonFeedback = (buttonKey, type) => {
     setButtonFeedback({ [buttonKey]: type })
@@ -500,9 +489,6 @@ export default function BookDetailScreen({ user }) {
     await updateBookRow({ rating: value })
   }
 
-  // Keep ref updated for PanResponder to use
-  saveRatingRef.current = handleRatingChange
-
   const scheduleDebouncedUpdate = (updates) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
@@ -883,10 +869,7 @@ export default function BookDetailScreen({ user }) {
                       onPress={() => handleRatingChange(star)}
                       activeOpacity={0.7}
                     />
-                    <Text style={styles.starEmpty}>☆</Text>
-                    <View style={[styles.starFillContainer, { width: isFull ? '100%' : isHalf ? '50%' : '0%' }]}>
-                      <Text style={styles.starFilled}>★</Text>
-                    </View>
+                    <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} size={32} />
                   </View>
                 )
               })}

@@ -5,6 +5,30 @@ import { sendPitMessageNotification, sendFeedLikeNotification, sendFriendInviteN
 const STORAGE_KEY = 'bookmosh-tracker-storage'
 const AUTH_STORAGE_KEY = 'bookmosh-auth-store'
 
+const StarSvg = ({ fraction = 0, className = '' }) => {
+  const clipId = useMemo(() => `clip_${Math.random().toString(36).slice(2)}`, [])
+  const clamped = Math.max(0, Math.min(1, Number(fraction) || 0))
+  const clipWidth = 24 * clamped
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x="0" y="0" width={clipWidth} height="24" />
+        </clipPath>
+      </defs>
+      <path
+        d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+        fill="rgba(255, 255, 255, 0.2)"
+      />
+      <path
+        d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+        fill="#fbbf24"
+        clipPath={`url(#${clipId})`}
+      />
+    </svg>
+  )
+}
+
 const PROFILE_ICONS = [
   {
     id: 'avatar_grin',
@@ -6879,13 +6903,10 @@ function App() {
                                     updateBook(book.title, { rating: star })
                                   }}
                                 />
-                                <span className="text-sm text-white/20 pointer-events-none absolute inset-0 flex items-center justify-center">☆</span>
-                                <span 
-                                  className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none"
-                                  style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
-                                >
-                                  <span className="text-sm text-yellow-400 absolute inset-0 flex items-center justify-center">★</span>
-                                </span>
+                                <StarSvg
+                                  fraction={isFull ? 1 : isHalf ? 0.5 : 0}
+                                  className="w-4 h-4 pointer-events-none"
+                                />
                               </div>
                             )
                           })}
@@ -9363,13 +9384,10 @@ function App() {
                             }}
                             onClick={() => handleModalRating(star)}
                           />
-                          <span className="text-2xl text-white/20 pointer-events-none absolute inset-0 flex items-center justify-center">☆</span>
-                          <span 
-                            className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none"
-                            style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
-                          >
-                            <span className="text-2xl text-yellow-400 absolute inset-0 flex items-center justify-center">★</span>
-                          </span>
+                          <StarSvg
+                            fraction={isFull ? 1 : isHalf ? 0.5 : 0}
+                            className="w-8 h-8 pointer-events-none"
+                          />
                         </div>
                       )
                     })}
