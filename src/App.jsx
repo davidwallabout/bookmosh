@@ -9233,6 +9233,30 @@ function App() {
                 </div>
 
                 <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Actions</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openMoshInvite(selectedBook)
+                      }}
+                      className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                    >
+                      Start Pit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openRecommendBook(selectedBook)
+                      }}
+                      className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:bg-white/5"
+                    >
+                      Recommend
+                    </button>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Progress: {modalProgress}%</label>
                   <input
                     type="range"
