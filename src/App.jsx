@@ -4724,13 +4724,26 @@ function App() {
         const requesterRow = rowById.get(requesterId)
         const recipientRow = rowById.get(recipientId)
 
+        // Safety check: abort if we couldn't fetch user rows (prevents overwriting with empty array)
+        if (!requesterRow || !recipientRow) {
+          console.error('[FRIEND] Could not fetch user rows for friend update', { requesterId, recipientId, usersRows })
+          throw new Error('Could not fetch user data for friend update')
+        }
+
         const normalizeList = (list) =>
           (Array.isArray(list) ? list : [])
             .map((v) => String(v ?? '').trim())
             .filter(Boolean)
 
-        const requesterFriendsList = normalizeList(requesterRow?.friends)
-        const recipientFriendsList = normalizeList(recipientRow?.friends)
+        const requesterFriendsList = normalizeList(requesterRow.friends)
+        const recipientFriendsList = normalizeList(recipientRow.friends)
+        
+        console.log('[FRIEND] Current friends before update:', { 
+          requester: requesterUsername, 
+          requesterFriends: requesterFriendsList,
+          recipient: recipientUsername,
+          recipientFriends: recipientFriendsList 
+        })
         
         // Deduplicate case-insensitively but preserve original casing
         const nextRequesterFriends = [...requesterFriendsList]
@@ -4742,6 +4755,13 @@ function App() {
         if (!recipientFriendsList.some(f => f.toLowerCase() === requesterUsername.toLowerCase())) {
           nextRecipientFriends.push(requesterUsername)
         }
+
+        console.log('[FRIEND] Friends after update:', { 
+          requester: requesterUsername, 
+          nextRequesterFriends,
+          recipient: recipientUsername,
+          nextRecipientFriends 
+        })
 
         const { error: u1Err } = await supabase
           .from('users')
