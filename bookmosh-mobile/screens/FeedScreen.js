@@ -294,7 +294,11 @@ export default function FeedScreen({ user }) {
         : item.event_type
 
     return (
-      <View style={styles.feedItem}>
+      <TouchableOpacity 
+        style={styles.feedItem}
+        activeOpacity={0.8}
+        onPress={() => openReviewThread(item)}
+      >
         <View style={styles.feedHeader}>
           <View style={styles.feedHeaderLeft}>
             <Text style={styles.username}>@{item.owner_username}</Text>
@@ -323,18 +327,22 @@ export default function FeedScreen({ user }) {
         </View>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.likeButton} onPress={() => toggleLike(item.id)}>
+          <TouchableOpacity 
+            style={styles.likeButton} 
+            onPress={(e) => {
+              e.stopPropagation()
+              toggleLike(item.id)
+            }}
+          >
             <Text style={[styles.likeIcon, likes.likedByMe && styles.liked]}>
               {likes.likedByMe ? '❤️' : '🤍'}
             </Text>
             {likes.count > 0 && <Text style={styles.likeCount}>{likes.count}</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.commentButton} onPress={() => openReviewThread(item)}>
-            <Text style={styles.commentButtonText}>💬 Review</Text>
-          </TouchableOpacity>
+          <Text style={styles.commentButtonText}>💬 Tap to comment</Text>
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 
