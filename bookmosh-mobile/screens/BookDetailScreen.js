@@ -57,6 +57,9 @@ export default function BookDetailScreen({ user }) {
   const [bookActivity, setBookActivity] = useState([])
   const [activityLoading, setActivityLoading] = useState(false)
 
+  const [myReviews, setMyReviews] = useState([])
+  const [myReviewsLoading, setMyReviewsLoading] = useState(false)
+
   const [reviewModalVisible, setReviewModalVisible] = useState(false)
   const [reviewThreadLoading, setReviewThreadLoading] = useState(false)
   const [reviewThread, setReviewThread] = useState(null)
@@ -109,6 +112,38 @@ export default function BookDetailScreen({ user }) {
     const rawRating = relativeX / starWidth
     const rounded = Math.round(rawRating * 2) / 2
     return Math.max(0, Math.min(5, rounded))
+  }
+
+  const loadMyReviews = async () => {
+    if (!currentUser?.id || !bookId) return
+    setMyReviewsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('book_reviews')
+        .select('*')
+        .eq('book_id', bookId)
+        .eq('owner_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+      setMyReviews(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('[MY_REVIEWS] Load failed:', error)
+      setMyReviews([])
+    } finally {
+      setMyReviewsLoading(false)
+    }
+  }
+
+  const openMyReview = async (reviewRow) => {
+    if (!reviewRow?.id) return
+    await openReviewThread({
+      review_id: reviewRow.id,
+      owner_username: currentUser?.username,
+      book_title: title.trim(),
+      event_type: 'review_created',
+    })
   }
 
   const saveReviewDraft = async ({ silent = false } = {}) => {
@@ -436,6 +471,7 @@ export default function BookDetailScreen({ user }) {
       setSpoilerWarning(false)
       lastDraftSavedRef.current = { review: '', spoiler: false }
       await loadBookActivity(title.trim())
+      await loadMyReviews()
     } catch (error) {
       console.error('Submit review error:', error)
       Alert.alert('Error', error.message)
@@ -500,6 +536,7 @@ export default function BookDetailScreen({ user }) {
       )
       setEditingReview(false)
       await loadBookActivity(title.trim())
+      await loadMyReviews()
     } catch (error) {
       console.error('Edit review error:', error)
       Alert.alert('Error', error.message)
@@ -512,6 +549,11 @@ export default function BookDetailScreen({ user }) {
     if (!currentUser || !book?.title) return
     loadBookActivity(book.title)
   }, [currentUser?.id, book?.title])
+
+  useEffect(() => {
+    if (!currentUser?.id || !bookId) return
+    loadMyReviews()
+  }, [currentUser?.id, bookId])
 
   useEffect(() => {
     if (!bookId) return
@@ -1304,6 +1346,35 @@ export default function BookDetailScreen({ user }) {
                 <Text style={styles.submitReviewButtonText}>Publish</Text>
               )}
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.myReviewsSection}>
+            <Text style={styles.myReviewsLabel}>Your Reviews</Text>
+            {myReviewsLoading ? (
+              <ActivityIndicator size="small" color="#3b82f6" />
+            ) : myReviews.length > 0 ? (
+              <View style={styles.myReviewsList}>
+                {myReviews.map((r) => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={styles.myReviewItem}
+                    activeOpacity={0.8}
+                    onPress={() => openMyReview(r)}
+                  >
+                    <Text style={styles.myReviewMeta}>
+                      {formatTimeAgo(r.created_at)}
+                      {r.spoiler_warning ? ' · ⚠️ Spoilers' : ''}
+                      {r.edited_at ? ' · Edited' : ''}
+                    </Text>
+                    <Text style={styles.myReviewSnippet} numberOfLines={2}>
+                      {String(r.body || '').trim() || 'No text'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyActivity}>No published reviews yet.</Text>
+            )}
           </View>
         </View>
 
@@ -2266,6 +2337,40 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.1,
     fontSize: 12,
+  },
+  myReviewsSection: {
+    marginTop: 14,
+  },
+  myReviewsLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.55)',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: 10,
+  },
+  myReviewsList: {
+    gap: 10,
+  },
+  myReviewItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 12,
+  },
+  myReviewMeta: {
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  myReviewSnippet: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: 13,
+    lineHeight: 18,
   },
   editReviewButton: {
     alignSelf: 'flex-end',
