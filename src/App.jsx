@@ -995,7 +995,8 @@ function App() {
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
   const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
-  const [libraryFilterTags, setLibraryFilterTags] = useState([])
+  const [libraryStatusFilter, setLibraryStatusFilter] = useState('all')
+  const [libraryOwnedOnly, setLibraryOwnedOnly] = useState(false)
   const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [isAuthorModalOpen, setIsAuthorModalOpen] = useState(false)
   const [authorModalName, setAuthorModalName] = useState('')
@@ -1230,14 +1231,18 @@ function App() {
 
   const filteredLibrary = useMemo(() => {
     const normalized = tracker.map(normalizeBookTags)
-    const filtered = !libraryFilterTags.length
-      ? normalized
-      : normalized.filter((book) =>
-          libraryFilterTags.every((tag) => (book.tags ?? []).includes(tag)),
-        )
+    const statusFiltered =
+      libraryStatusFilter === 'all'
+        ? normalized
+        : normalized.filter((book) => book.status === libraryStatusFilter)
+
+    const ownedFiltered = !libraryOwnedOnly
+      ? statusFiltered
+      : statusFiltered.filter((book) => (book.tags ?? []).includes('Owned'))
+
     const searchFiltered = !librarySearch.trim() 
-      ? filtered 
-      : filtered.filter(
+      ? ownedFiltered 
+      : ownedFiltered.filter(
           (book) =>
             book.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
             (book.author ?? '').toLowerCase().includes(librarySearch.toLowerCase()),
@@ -1269,7 +1274,7 @@ function App() {
     }
     
     return sorted
-  }, [tracker, libraryFilterTags, librarySearch, librarySort])
+  }, [tracker, libraryStatusFilter, libraryOwnedOnly, librarySearch, librarySort])
 
   const paginatedLibrary = useMemo(() => {
     // Show libraryDisplayCount books (starts at 6, increases by 20)
@@ -2800,10 +2805,13 @@ function App() {
     logBookEvent(entry, 'created')
   }
 
-  const toggleLibraryFilterTag = (tag) => {
-    setLibraryFilterTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    )
+  const setLibraryFilter = ({ status, owned }) => {
+    if (typeof status === 'string') {
+      setLibraryStatusFilter(status)
+    }
+    if (typeof owned === 'boolean') {
+      setLibraryOwnedOnly(owned)
+    }
   }
 
   const resolveUserId = async (username) => {
@@ -6057,7 +6065,7 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['to-read'])
+                          setLibraryFilter({ status: 'to-read', owned: false })
                           setShowFullLibrary(true)
                           setTimeout(() => scrollToSection('library-search'), 100)
                         }}
@@ -6099,7 +6107,7 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['Read'])
+                          setLibraryFilter({ status: 'Read', owned: false })
                           setShowFullLibrary(true)
                           setTimeout(() => scrollToSection('library-search'), 100)
                         }}
@@ -6141,7 +6149,7 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['Owned'])
+                          setLibraryFilter({ status: 'all', owned: true })
                           setShowFullLibrary(true)
                           setTimeout(() => scrollToSection('library-search'), 100)
                         }}
@@ -6213,7 +6221,7 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setLibraryFilterTags(['Reading'])
+                          setLibraryFilter({ status: 'Reading', owned: false })
                           setShowFullLibrary(true)
                           setTimeout(() => scrollToSection('library-search'), 100)
                         }}
@@ -6266,7 +6274,7 @@ function App() {
                         </svg>
                         Back to Overview
                       </button>
-                      {(libraryFilterTags.length > 0 || librarySearch) && (
+                      {((libraryStatusFilter !== 'all') || libraryOwnedOnly || librarySearch) && (
                         <p className="text-sm text-white/60">
                           Showing <span className="text-white font-semibold">{filteredLibrary.length}</span> of <span className="text-white font-semibold">{tracker.length}</span> books
                         </p>
@@ -6328,24 +6336,45 @@ function App() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                {allTags.map((tag) => (
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'Reading', label: 'Reading' },
+                  { key: 'to-read', label: 'To Read' },
+                  { key: 'Read', label: 'Read' },
+                ].map((opt) => (
                   <button
-                    key={tag}
+                    key={opt.key}
                     type="button"
-                    onClick={() => toggleLibraryFilterTag(tag)}
+                    onClick={() => setLibraryStatusFilter(opt.key)}
                     className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
-                      libraryFilterTags.includes(tag)
+                      libraryStatusFilter === opt.key
                         ? 'border-white/60 bg-white/10 text-white'
                         : 'border-white/10 text-white/60 hover:border-white/40'
                     }`}
                   >
-                    {tag}
+                    {opt.label}
                   </button>
                 ))}
-                {libraryFilterTags.length > 0 && (
+
+                <button
+                  type="button"
+                  onClick={() => setLibraryOwnedOnly((v) => !v)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                    libraryOwnedOnly
+                      ? 'border-white/60 bg-white/10 text-white'
+                      : 'border-white/10 text-white/60 hover:border-white/40'
+                  }`}
+                >
+                  Owned
+                </button>
+
+                {(libraryStatusFilter !== 'all' || libraryOwnedOnly) && (
                   <button
                     type="button"
-                    onClick={() => setLibraryFilterTags([])}
+                    onClick={() => {
+                      setLibraryStatusFilter('all')
+                      setLibraryOwnedOnly(false)
+                    }}
                     className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/60 transition hover:border-white/40 hover:text-white"
                   >
                     Clear
