@@ -352,8 +352,15 @@ export default function DiscoveryScreen({ user }) {
   }
 
   const openBookDetail = (book) => {
-    setDetailBook(book)
-    setShowBookDetail(true)
+    navigation.navigate('BookDetailScreen', { 
+      book: {
+        title: book.title,
+        author: book.author,
+        cover: book.cover,
+        isbn: book.isbn,
+        year: book.year,
+      }
+    })
   }
 
   const renderBookResult = ({ item }) => (
