@@ -354,6 +354,40 @@ export default function BookDetailScreen({ user }) {
     setStatus(nextStatus)
     setProgress(nextProgress)
 
+    // If this is a new book from search (no bookId), add it to library
+    if (!bookId && currentUser && book) {
+      try {
+        const payload = {
+          owner: currentUser.username,
+          owner_id: currentUser.id,
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          status: nextStatus,
+          tags: nextTags,
+          progress: nextProgress,
+          rating: 0,
+          read_at: nextReadAt,
+          status_updated_at: nowIso,
+        }
+
+        console.log('[ADD BOOK] Adding from book details:', payload)
+        const { error } = await supabase.from('bookmosh_books').insert([payload])
+        
+        if (error) {
+          console.error('[ADD BOOK] Insert error:', error)
+          Alert.alert('Error', error.message)
+        } else {
+          Alert.alert('Success', `Added "${book.title}" to your library!`)
+          navigation.goBack()
+        }
+      } catch (error) {
+        console.error('[ADD BOOK] Error:', error)
+        Alert.alert('Error', 'Failed to add book')
+      }
+      return
+    }
+
     await updateBookRow(
       {
         status: nextStatus,
