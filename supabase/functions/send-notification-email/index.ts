@@ -32,55 +32,34 @@ serve(async (req: Request) => {
       )
     }
 
-    // Auth check: allow service role key, anon key (via apikey header), or valid user JWT
-    // This supports both custom auth (anon key) and Supabase Auth (user JWT)
-    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
+    // Auth check: allow any request with a valid apikey header
+    // This supports custom auth apps that don't use Supabase Auth
     const apikeyHeader = req.headers.get('apikey')
     
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    
-    // Check if using anon key via apikey header (supabase-js sends this automatically)
-    const hasValidAnonKey = apikeyHeader === supabaseAnonKey
-    
-    // Check if using service role key via bearer token (for DB triggers)
-    let hasValidServiceKey = false
-    let bearerToken = ''
-    if (authHeader?.toLowerCase().startsWith('bearer ')) {
-      bearerToken = authHeader.slice('bearer '.length)
-      hasValidServiceKey = Boolean(serviceRoleKey && bearerToken === serviceRoleKey)
-    }
-    
-    // If we have a valid anon key or service role key, allow the request
-    if (hasValidAnonKey || hasValidServiceKey) {
-      // Authorized - continue to process request
-    } else if (authHeader?.toLowerCase().startsWith('bearer ')) {
-      // Try to validate as Supabase Auth user JWT
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      })
-
-      const { data: userData, error: userError } = await supabase.auth.getUser()
-      if (userError || !userData?.user) {
-        return new Response(
-          JSON.stringify({ error: 'Unauthorized: invalid token' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        )
-      }
-    } else {
-      // No valid auth - reject
+    // supabase-js automatically sends the anon key in the apikey header
+    // We just need to verify it matches our expected anon key
+    if (!apikeyHeader) {
+      console.log('[AUTH] No apikey header found')
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: missing valid authorization' }),
+        JSON.stringify({ error: 'Unauthorized: missing apikey header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+    
+    // Verify the apikey matches our anon key or service role key
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const isValidKey = apikeyHeader === supabaseAnonKey || apikeyHeader === serviceRoleKey
+    
+    if (!isValidKey) {
+      console.log('[AUTH] Invalid apikey - does not match anon or service role key')
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: invalid apikey' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    
+    // Valid apikey - continue to process request
+    console.log('[AUTH] Valid apikey, proceeding with request')
 
     const { type, to, data } = await req.json()
 
