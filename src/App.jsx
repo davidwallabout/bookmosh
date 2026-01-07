@@ -1223,6 +1223,18 @@ function App() {
   const [hoverRatingValue, setHoverRatingValue] = useState(0)
   const [draggingRating, setDraggingRating] = useState(null)
 
+  const modalStarsRef = useRef(null)
+  const pendingModalRatingRef = useRef(0)
+
+  const calculateRatingFromClientX = (clientX, rect) => {
+    if (!rect?.width) return 0
+    const relativeX = clientX - rect.left
+    const starWidth = rect.width / 5
+    const rawRating = relativeX / starWidth
+    const rounded = Math.round(rawRating * 2) / 2
+    return Math.max(0, Math.min(5, rounded))
+  }
+
   const totalUnreadMoshes = useMemo(() => {
     const values = Object.values(unreadByMoshId || {})
     return values.reduce((sum, n) => sum + (Number(n) || 0), 0)
@@ -5415,11 +5427,14 @@ function App() {
     }
   }
 
-  const handleModalRating = (value) => {
+  const setModalRatingValue = (value) => {
+    pendingModalRatingRef.current = value
     setModalRating(value)
-    if (selectedBook) {
-      updateBook(selectedBook.title, { rating: value })
-    }
+  }
+
+  const commitModalRating = (value) => {
+    setModalRatingValue(value)
+    if (selectedBook) updateBook(selectedBook.title, { rating: value })
   }
 
   const handleDeleteBook = async (title) => {
@@ -9343,54 +9358,65 @@ function App() {
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Rating</label>
                   <div 
                     className="flex gap-1 items-center select-none"
-                    onMouseLeave={() => setDraggingRating(null)}
-                    onMouseUp={() => setDraggingRating(null)}
+                    onPointerLeave={() => {
+                      if (draggingRating === 'modal') {
+                        setDraggingRating(null)
+                        commitModalRating(pendingModalRatingRef.current)
+                      }
+                    }}
+                    onPointerUp={() => {
+                      if (draggingRating === 'modal') {
+                        setDraggingRating(null)
+                        commitModalRating(pendingModalRatingRef.current)
+                      }
+                    }}
                   >
                     <button
                       type="button"
-                      onClick={() => handleModalRating(0)}
+                      onClick={() => commitModalRating(0)}
                       className="mr-2 text-sm text-white/30 hover:text-white/60 transition"
                     >
                       ✕
                     </button>
-                    {[1, 2, 3, 4, 5].map((star) => {
-                      const isFull = modalRating >= star
-                      const isHalf = !isFull && modalRating >= star - 0.5
-                      return (
-                        <div key={star} className="relative w-8 h-8 flex items-center justify-center">
-                          <div
-                            className="absolute left-0 top-0 w-1/2 h-full z-10 cursor-pointer"
-                            onMouseDown={() => {
-                              setDraggingRating('modal')
-                              handleModalRating(star - 0.5)
-                            }}
-                            onMouseEnter={() => {
-                              if (draggingRating === 'modal') {
-                                handleModalRating(star - 0.5)
-                              }
-                            }}
-                            onClick={() => handleModalRating(star - 0.5)}
-                          />
-                          <div
-                            className="absolute right-0 top-0 w-1/2 h-full z-10 cursor-pointer"
-                            onMouseDown={() => {
-                              setDraggingRating('modal')
-                              handleModalRating(star)
-                            }}
-                            onMouseEnter={() => {
-                              if (draggingRating === 'modal') {
-                                handleModalRating(star)
-                              }
-                            }}
-                            onClick={() => handleModalRating(star)}
-                          />
-                          <StarSvg
-                            fraction={isFull ? 1 : isHalf ? 0.5 : 0}
-                            className="w-8 h-8 pointer-events-none"
-                          />
-                        </div>
-                      )
-                    })}
+                    <div
+                      ref={modalStarsRef}
+                      className="flex gap-1 items-center touch-none"
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDraggingRating('modal')
+                        const rect = modalStarsRef.current?.getBoundingClientRect()
+                        const next = calculateRatingFromClientX(e.clientX, rect)
+                        setModalRatingValue(next)
+                        if (typeof e.currentTarget?.setPointerCapture === 'function') {
+                          e.currentTarget.setPointerCapture(e.pointerId)
+                        }
+                      }}
+                      onPointerMove={(e) => {
+                        if (draggingRating !== 'modal') return
+                        const rect = modalStarsRef.current?.getBoundingClientRect()
+                        const next = calculateRatingFromClientX(e.clientX, rect)
+                        setModalRatingValue(next)
+                      }}
+                      onPointerCancel={() => {
+                        if (draggingRating !== 'modal') return
+                        setDraggingRating(null)
+                        commitModalRating(pendingModalRatingRef.current)
+                      }}
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isFull = modalRating >= star
+                        const isHalf = !isFull && modalRating >= star - 0.5
+                        return (
+                          <div key={star} className="relative w-8 h-8 flex items-center justify-center">
+                            <StarSvg
+                              fraction={isFull ? 1 : isHalf ? 0.5 : 0}
+                              className="w-8 h-8 pointer-events-none"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
 
