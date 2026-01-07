@@ -6457,7 +6457,7 @@ function App() {
                         </svg>
                       </button>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                       {tracker.filter(b => b.status === 'to-read').slice(0, 6).map((book) => (
                         <button
                           key={book.title}
@@ -6499,7 +6499,7 @@ function App() {
                         </svg>
                       </button>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                       {[...tracker]
                         .filter((b) => b.status === 'Read')
                         .sort((a, b) => {
@@ -6549,7 +6549,7 @@ function App() {
                         </svg>
                       </button>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                       {tracker.filter(b => (b.tags ?? []).includes('Owned')).slice(0, 6).map((book) => (
                         <button
                           key={book.title}
