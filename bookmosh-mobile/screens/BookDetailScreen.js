@@ -87,15 +87,15 @@ export default function BookDetailScreen({ user }) {
   const feedbackOpacity = useRef(new Animated.Value(0)).current
 
   const starsContainerRef = useRef(null)
-  const starsLayoutRef = useRef({ x: 0, width: 0 })
+  const starsLayoutRef = useRef({ width: 0 })
   const pendingRatingRef = useRef(0)
   const saveRatingRef = useRef(null)
 
-  const calculateRatingFromPageX = (pageX) => {
-    const { x, width } = starsLayoutRef.current
+  const calculateRatingFromLocationX = (locationX) => {
+    const { width } = starsLayoutRef.current
     if (!width) return 0
 
-    const relativeX = pageX - x
+    const relativeX = locationX
     const starWidth = width / 5
     const rawRating = relativeX / starWidth
     const rounded = Math.round(rawRating * 2) / 2
@@ -106,14 +106,16 @@ export default function BookDetailScreen({ user }) {
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
-        const newRating = calculateRatingFromPageX(evt.nativeEvent.pageX)
+        const newRating = calculateRatingFromLocationX(evt.nativeEvent.locationX)
         pendingRatingRef.current = newRating
         setRating(newRating)
       },
       onPanResponderMove: (evt) => {
-        const newRating = calculateRatingFromPageX(evt.nativeEvent.pageX)
+        const newRating = calculateRatingFromLocationX(evt.nativeEvent.locationX)
         pendingRatingRef.current = newRating
         setRating(newRating)
       },
@@ -903,10 +905,8 @@ export default function BookDetailScreen({ user }) {
             <View
               ref={starsContainerRef}
               style={styles.starsContainer}
-              onLayout={() => {
-                starsContainerRef.current?.measureInWindow((x, y, width) => {
-                  starsLayoutRef.current = { x, width }
-                })
+              onLayout={(e) => {
+                starsLayoutRef.current = { width: e.nativeEvent.layout.width }
               }}
               {...ratingPanResponder.panHandlers}
             >
