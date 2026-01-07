@@ -22,6 +22,9 @@ export default function RecommendationsScreen({ user }) {
 
   const [activeRecommendation, setActiveRecommendation] = useState(null)
   const [showRecommendationModal, setShowRecommendationModal] = useState(false)
+  const [selectedStatus, setSelectedStatus] = useState('To Read')
+  const [isOwned, setIsOwned] = useState(false)
+  const [addingToLibrary, setAddingToLibrary] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -72,7 +75,57 @@ export default function RecommendationsScreen({ user }) {
 
   const openRecommendation = (rec) => {
     setActiveRecommendation(rec)
+    setSelectedStatus('To Read')
+    setIsOwned(false)
     setShowRecommendationModal(true)
+  }
+
+  const addBookToLibrary = async () => {
+    if (!currentUser || !activeRecommendation) return
+
+    setAddingToLibrary(true)
+    try {
+      const tags = [selectedStatus]
+      if (isOwned) tags.push('Owned')
+
+      const payload = {
+        owner: currentUser.username,
+        title: activeRecommendation.book_title,
+        author: activeRecommendation.book_author || 'Unknown author',
+        cover: activeRecommendation.book_cover,
+        status: selectedStatus,
+        tags: tags,
+        progress: selectedStatus === 'Read' ? 100 : 0,
+        rating: 0,
+      }
+
+      // Try with new columns first
+      let { error } = await supabase.from('bookmosh_books').insert([{
+        ...payload,
+        read_at: selectedStatus === 'Read' ? new Date().toISOString() : null,
+        status_updated_at: new Date().toISOString(),
+      }])
+
+      // Fallback if columns don't exist
+      if (error && String(error.code) === '42703') {
+        const msg = String(error.message || '')
+        const fallbackPayload = { ...payload }
+        if (msg.includes('read_at')) delete fallbackPayload.read_at
+        if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
+        ;({ error } = await supabase.from('bookmosh_books').insert([fallbackPayload]))
+      }
+
+      if (error) throw error
+
+      setShowRecommendationModal(false)
+      // Show success feedback
+      alert(`Added "${activeRecommendation.book_title}" to your library!`)
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Add book error:', error)
+      alert(error.message || 'Failed to add book')
+    } finally {
+      setAddingToLibrary(false)
+    }
   }
 
   const openDiscoveryForRecommendation = (rec) => {
@@ -197,6 +250,52 @@ export default function RecommendationsScreen({ user }) {
                 {activeRecommendation.note ? (
                   <Text style={styles.modalNote}>{activeRecommendation.note}</Text>
                 ) : null}
+
+                <View style={styles.addToLibrarySection}>
+                  <Text style={styles.sectionLabel}>Add to Library</Text>
+                  
+                  <View style={styles.statusButtons}>
+                    {['To Read', 'Reading', 'Read'].map((status) => (
+                      <TouchableOpacity
+                        key={status}
+                        style={[
+                          styles.statusButton,
+                          selectedStatus === status && styles.statusButtonActive,
+                        ]}
+                        onPress={() => setSelectedStatus(status)}
+                      >
+                        <Text
+                          style={[
+                            styles.statusButtonText,
+                            selectedStatus === status && styles.statusButtonTextActive,
+                          ]}
+                        >
+                          {status}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.ownedCheckbox}
+                    onPress={() => setIsOwned(!isOwned)}
+                  >
+                    <View style={[styles.checkbox, isOwned && styles.checkboxChecked]}>
+                      {isOwned && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>I own this book</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.addToLibraryButton}
+                    onPress={addBookToLibrary}
+                    disabled={addingToLibrary}
+                  >
+                    <Text style={styles.addToLibraryButtonText}>
+                      {addingToLibrary ? 'Adding...' : 'Add to Library'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   style={styles.modalAction}
@@ -415,8 +514,92 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalCloseText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: 'rgba(255, 255, 255, 0.7)',
+  },
+  addToLibrarySection: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 12,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  statusButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statusButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    alignItems: 'center',
+  },
+  statusButtonActive: {
+    borderColor: '#3b82f6',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  statusButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  statusButtonTextActive: {
+    color: '#3b82f6',
+  },
+  ownedCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  checkboxChecked: {
+    borderColor: '#3b82f6',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  checkmark: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  checkboxLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  addToLibraryButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  addToLibraryButtonText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
 })
