@@ -297,9 +297,16 @@ export default function BookDetailScreen({ user }) {
         .from('bookmosh_books')
         .select('*')
         .eq('id', bookId)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
+
+      if (!data) {
+        // Book was not found (deleted or wrong id). Don't treat as hard error.
+        setBook(null)
+        setLoading(false)
+        return
+      }
       
       setBook(data)
       setTitle(data.title || '')
