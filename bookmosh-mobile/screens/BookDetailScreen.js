@@ -1171,10 +1171,11 @@ export default function BookDetailScreen({ user }) {
               <TouchableOpacity
                 style={[
                   styles.recommendationSendButton,
-                  sendingRecommendation && styles.recommendationSendButtonDisabled,
+                  (sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()) &&
+                    styles.recommendationSendButtonDisabled,
                 ]}
                 onPress={sendRecommendations}
-                disabled={sendingRecommendation}
+                disabled={sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()}
               >
                 {sendingRecommendation ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -1649,6 +1650,21 @@ const styles = StyleSheet.create({
   recommendationSendButton: {
     flex: 1,
     backgroundColor: '#ee6bfe',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  recommendationSendButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  recommendationSendButtonDisabled: {
+    opacity: 0.5,
   },
   modalOverlay: {
     flex: 1,
