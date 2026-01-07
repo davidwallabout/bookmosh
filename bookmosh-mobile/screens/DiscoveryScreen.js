@@ -213,6 +213,7 @@ export default function DiscoveryScreen({ user }) {
       const trimmed = query.trim()
       const termWords = trimmed.split(/\s+/).filter(Boolean)
 
+      console.log('[SEARCH] Searching for:', trimmed)
       const isbndbData = await invokeIsbndbSearch({ q: trimmed, pageSize: 50 })
       
       if (!isbndbData) {
@@ -228,20 +229,26 @@ export default function DiscoveryScreen({ user }) {
         ? isbndbData.data
         : []
 
+      console.log('[SEARCH] Initial results:', isbndbBooks.length)
+
       // If query contains apostrophes (straight ' or curly '), always try without apostrophes as fallback
       // ISBNdb API often fails to find books with apostrophes in titles
       if (trimmed.includes("'") || trimmed.includes("'") || trimmed.includes("'")) {
         const queryWithoutApostrophes = trimmed.replace(/[''']/g, '')
+        console.log('[SEARCH] Trying fallback without apostrophes:', queryWithoutApostrophes)
         const fallbackData = await invokeIsbndbSearch({ q: queryWithoutApostrophes, pageSize: 50 })
         const fallbackBooks = Array.isArray(fallbackData?.books)
           ? fallbackData.books
           : Array.isArray(fallbackData?.data)
           ? fallbackData.data
           : []
+        console.log('[SEARCH] Fallback results:', fallbackBooks.length)
         if (Array.isArray(fallbackBooks) && fallbackBooks.length > 0) {
           isbndbBooks = [...isbndbBooks, ...fallbackBooks]
         }
       }
+
+      console.log('[SEARCH] Total books before mapping:', isbndbBooks.length)
 
       const mapped = isbndbBooks
         .map((b) => {
