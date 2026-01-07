@@ -14,7 +14,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 
-const statusOptions = ['Reading', 'To Read', 'Read', 'DNF']
+const statusOptions = ['Reading', 'To Read', 'Read']
 
 export default function BookDetailScreen({ user }) {
   const navigation = useNavigation()
@@ -39,7 +39,7 @@ export default function BookDetailScreen({ user }) {
 
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
-  const [status, setStatus] = useState('Reading')
+  const [status, setStatus] = useState('')
   const [rating, setRating] = useState(0)
   const [progress, setProgress] = useState(0)
   const [review, setReview] = useState('')
@@ -216,7 +216,7 @@ export default function BookDetailScreen({ user }) {
       setBook(data)
       setTitle(data.title || '')
       setAuthor(data.author || '')
-      setStatus(data.status || 'Reading')
+      setStatus(data.status || '')
       setRating(data.rating || 0)
       setProgress(data.progress || 0)
       setReview(data.review || '')
