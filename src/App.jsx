@@ -8560,52 +8560,54 @@ function App() {
                 {recommendationsLoading ? (
                   <p className="text-sm text-white/60">Loading recommendations…</p>
                 ) : recommendations.length > 0 ? (
-                  <div className="space-y-3">
-                    {recommendations.map((rec) => {
-                      const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
-                      const headline = isSent
-                        ? `You recommended to @${rec.recipient_username}`
-                        : `@${rec.sender_username} recommended to you`
+                  <div className="-mx-2 overflow-x-auto">
+                    <div className="flex gap-3 px-2 pb-2">
+                      {recommendations.map((rec) => {
+                        const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
+                        const headline = isSent
+                          ? `To @${rec.recipient_username}`
+                          : `From @${rec.sender_username}`
 
-                      return (
-                        <button
-                          key={rec.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedRecommendation(rec)
-                            setRecommendationComments([])
-                            setRecommendationCommentDraft('')
-                            loadRecommendationComments(rec.id)
-                          }}
-                          className="w-full rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
-                        >
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
-                          <div className="flex gap-4">
-                            {rec.book_cover ? (
-                              <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                                <img src={rec.book_cover} alt={rec.book_title} className="h-full w-full object-cover" />
-                              </div>
-                            ) : (
-                              <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-2xl">
-                                📚
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-white line-clamp-2">{rec.book_title}</p>
-                              {rec.book_author && (
-                                <p className="text-xs text-white/60 mt-1">{rec.book_author}</p>
+                        return (
+                          <button
+                            key={rec.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedRecommendation(rec)
+                              setRecommendationComments([])
+                              setRecommendationCommentDraft('')
+                              loadRecommendationComments(rec.id)
+                            }}
+                            className="flex-shrink-0 w-56 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
+                          >
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
+                            <div className="flex gap-4">
+                              {rec.book_cover ? (
+                                <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                                  <img src={rec.book_cover} alt={rec.book_title} className="h-full w-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="h-24 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-2xl">
+                                  📚
+                                </div>
                               )}
-                              {rec.note && (
-                                <p className="text-xs text-white/50 mt-2 line-clamp-2 italic">"{rec.note}"</p>
-                              )}
-                              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mt-2">
-                                {formatTimeAgo(rec.created_at)}
-                              </p>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-white line-clamp-2">{rec.book_title}</p>
+                                {rec.book_author && (
+                                  <p className="text-xs text-white/60 mt-1 line-clamp-1">{rec.book_author}</p>
+                                )}
+                                {rec.note && (
+                                  <p className="text-xs text-white/50 mt-2 line-clamp-2 italic">"{rec.note}"</p>
+                                )}
+                                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mt-2">
+                                  {formatTimeAgo(rec.created_at)}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      )
-                    })}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm text-white/60">No recommendations yet.</p>
