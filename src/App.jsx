@@ -712,7 +712,7 @@ const parseStoryGraphCSV = (text) => {
         author: item.Authors || item.Author || item.author || '',
         status: status,
         tags: tags,
-        rating: parseInt(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
+        rating: parseFloat(item['Star Rating'] || item['My Rating'] || item.rating) || 0,
         progress: parseInt(item['Read Progress'] || item.progress) || 0,
       }
     })
@@ -1197,6 +1197,7 @@ function App() {
 
   const [hoverRatingTitle, setHoverRatingTitle] = useState('')
   const [hoverRatingValue, setHoverRatingValue] = useState(0)
+  const [draggingRating, setDraggingRating] = useState(null)
 
   const totalUnreadMoshes = useMemo(() => {
     const values = Object.values(unreadByMoshId || {})
@@ -6812,33 +6813,82 @@ function App() {
                         </button>
                         
                         <div
-                          className="mt-1 flex items-center gap-1"
+                          className="mt-1 flex items-center gap-0.5 select-none"
                           onMouseLeave={() => {
                             setHoverRatingTitle('')
                             setHoverRatingValue(0)
+                            setDraggingRating(null)
+                          }}
+                          onMouseUp={() => {
+                            if (draggingRating === book.title && hoverRatingValue > 0) {
+                              updateBook(book.title, { rating: hoverRatingValue })
+                            }
+                            setDraggingRating(null)
                           }}
                         >
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                updateBook(book.title, { rating: star })
-                              }}
-                              onMouseEnter={() => {
-                                setHoverRatingTitle(book.title)
-                                setHoverRatingValue(star)
-                              }}
-                              className={`text-sm transition hover:scale-110 ${
-                                star <= (hoverRatingTitle === book.title ? hoverRatingValue : (book.rating || 0))
-                                  ? 'text-yellow-400'
-                                  : 'text-white/20 hover:text-yellow-400/50'
-                              }`}
-                            >
-                              ★
-                            </button>
-                          ))}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updateBook(book.title, { rating: 0 })
+                            }}
+                            className="mr-1 text-xs text-white/30 hover:text-white/60 transition"
+                          >
+                            ✕
+                          </button>
+                          {[1, 2, 3, 4, 5].map((star) => {
+                            const currentRating = hoverRatingTitle === book.title ? hoverRatingValue : (book.rating || 0)
+                            const isFull = currentRating >= star
+                            const isHalf = !isFull && currentRating >= star - 0.5
+                            return (
+                              <div key={star} className="relative w-5 h-5 flex items-center justify-center">
+                                <div
+                                  className="absolute left-0 top-0 w-1/2 h-full z-10 cursor-pointer"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation()
+                                    setDraggingRating(book.title)
+                                    setHoverRatingTitle(book.title)
+                                    setHoverRatingValue(star - 0.5)
+                                  }}
+                                  onMouseEnter={() => {
+                                    setHoverRatingTitle(book.title)
+                                    setHoverRatingValue(star - 0.5)
+                                    if (draggingRating === book.title) {
+                                      // Live update while dragging
+                                    }
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    updateBook(book.title, { rating: star - 0.5 })
+                                  }}
+                                />
+                                <div
+                                  className="absolute right-0 top-0 w-1/2 h-full z-10 cursor-pointer"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation()
+                                    setDraggingRating(book.title)
+                                    setHoverRatingTitle(book.title)
+                                    setHoverRatingValue(star)
+                                  }}
+                                  onMouseEnter={() => {
+                                    setHoverRatingTitle(book.title)
+                                    setHoverRatingValue(star)
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    updateBook(book.title, { rating: star })
+                                  }}
+                                />
+                                <span className="text-sm text-white/20 pointer-events-none">☆</span>
+                                <span 
+                                  className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none flex items-center justify-center"
+                                  style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
+                                >
+                                  <span className="text-sm text-yellow-400">★</span>
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -9270,17 +9320,59 @@ function App() {
 
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Rating</label>
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => handleModalRating(star)}
-                        className={`text-2xl transition ${star <= modalRating ? 'text-yellow-400' : 'text-white/20'}`}
-                      >
-                        ★
-                      </button>
-                    ))}
+                  <div 
+                    className="flex gap-1 items-center select-none"
+                    onMouseLeave={() => setDraggingRating(null)}
+                    onMouseUp={() => setDraggingRating(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleModalRating(0)}
+                      className="mr-2 text-sm text-white/30 hover:text-white/60 transition"
+                    >
+                      ✕
+                    </button>
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const isFull = modalRating >= star
+                      const isHalf = !isFull && modalRating >= star - 0.5
+                      return (
+                        <div key={star} className="relative w-8 h-8 flex items-center justify-center">
+                          <div
+                            className="absolute left-0 top-0 w-1/2 h-full z-10 cursor-pointer"
+                            onMouseDown={() => {
+                              setDraggingRating('modal')
+                              handleModalRating(star - 0.5)
+                            }}
+                            onMouseEnter={() => {
+                              if (draggingRating === 'modal') {
+                                handleModalRating(star - 0.5)
+                              }
+                            }}
+                            onClick={() => handleModalRating(star - 0.5)}
+                          />
+                          <div
+                            className="absolute right-0 top-0 w-1/2 h-full z-10 cursor-pointer"
+                            onMouseDown={() => {
+                              setDraggingRating('modal')
+                              handleModalRating(star)
+                            }}
+                            onMouseEnter={() => {
+                              if (draggingRating === 'modal') {
+                                handleModalRating(star)
+                              }
+                            }}
+                            onClick={() => handleModalRating(star)}
+                          />
+                          <span className="text-2xl text-white/20 pointer-events-none">☆</span>
+                          <span 
+                            className="absolute left-0 top-0 h-full overflow-hidden pointer-events-none flex items-center justify-center"
+                            style={{ width: isFull ? '100%' : isHalf ? '50%' : '0%' }}
+                          >
+                            <span className="text-2xl text-yellow-400">★</span>
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 

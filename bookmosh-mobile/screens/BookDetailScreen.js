@@ -10,6 +10,8 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Animated,
+  PanResponder,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -54,6 +56,56 @@ export default function BookDetailScreen({ user }) {
   const [showEditionsModal, setShowEditionsModal] = useState(false)
   const [editions, setEditions] = useState([])
   const [loadingEditions, setLoadingEditions] = useState(false)
+
+  const [buttonFeedback, setButtonFeedback] = useState({}) // { buttonKey: 'check' | 'x' }
+  const feedbackOpacity = useRef(new Animated.Value(0)).current
+  const starsContainerRef = useRef(null)
+  const layoutRef = useRef({ x: 0, width: 0 })
+  const pendingRatingRef = useRef(0)
+  const saveRatingRef = useRef(null)
+
+  const calculateRatingFromX = (pageX) => {
+    const { x, width } = layoutRef.current
+    if (width === 0) return 0
+    const relativeX = pageX - x
+    const starWidth = width / 5
+    const rawRating = relativeX / starWidth
+    const rounded = Math.round(rawRating * 2) / 2
+    return Math.max(0, Math.min(5, rounded))
+  }
+
+  const ratingPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const newRating = calculateRatingFromX(evt.nativeEvent.pageX)
+        pendingRatingRef.current = newRating
+        setRating(newRating)
+      },
+      onPanResponderMove: (evt) => {
+        const newRating = calculateRatingFromX(evt.nativeEvent.pageX)
+        pendingRatingRef.current = newRating
+        setRating(newRating)
+      },
+      onPanResponderRelease: () => {
+        if (saveRatingRef.current) {
+          saveRatingRef.current(pendingRatingRef.current)
+        }
+      },
+    })
+  ).current
+
+  const showButtonFeedback = (buttonKey, type) => {
+    setButtonFeedback({ [buttonKey]: type })
+    feedbackOpacity.setValue(1)
+    Animated.timing(feedbackOpacity, {
+      toValue: 0,
+      duration: 800,
+      delay: 400,
+      useNativeDriver: true,
+    }).start(() => setButtonFeedback({}))
+  }
 
   useEffect(() => {
     loadCurrentUser()
@@ -359,7 +411,6 @@ export default function BookDetailScreen({ user }) {
       try {
         const payload = {
           owner: currentUser.username,
-          owner_id: currentUser.id,
           title: book.title,
           author: book.author,
           cover: book.cover,
@@ -372,18 +423,15 @@ export default function BookDetailScreen({ user }) {
         }
 
         console.log('[ADD BOOK] Adding from book details:', payload)
-        const { error } = await supabase.from('bookmosh_books').insert([payload])
+        const { error } = await supabase.from('bookmosh_books').upsert([payload], { onConflict: 'owner,title' })
         
         if (error) {
           console.error('[ADD BOOK] Insert error:', error)
-          Alert.alert('Error', error.message)
         } else {
-          Alert.alert('Success', `Added "${book.title}" to your library!`)
-          navigation.goBack()
+          showButtonFeedback(nextStatus, 'check')
         }
       } catch (error) {
         console.error('[ADD BOOK] Error:', error)
-        Alert.alert('Error', 'Failed to add book')
       }
       return
     }
@@ -398,25 +446,62 @@ export default function BookDetailScreen({ user }) {
       },
       { eventType: 'status_changed', nextTags }
     )
+    showButtonFeedback(nextStatus, 'check')
   }
 
   const handleOwnedToggle = async () => {
     const nextOwned = !isOwned
-    const nextTags = Array.from(new Set([status, ...(nextOwned ? ['Owned'] : [])]))
+    const currentStatus = status || 'To Read'
+    const nextTags = Array.from(new Set([currentStatus, ...(nextOwned ? ['Owned'] : [])]))
 
     setIsOwned(nextOwned)
+
+    // If this is a new book from search (no bookId), add it to library
+    if (!bookId && currentUser && book) {
+      try {
+        const nowIso = new Date().toISOString()
+        const payload = {
+          owner: currentUser.username,
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          status: currentStatus,
+          tags: nextTags,
+          progress: 0,
+          rating: 0,
+          status_updated_at: nowIso,
+        }
+
+        console.log('[ADD BOOK] Adding from owned toggle:', payload)
+        const { error } = await supabase.from('bookmosh_books').upsert([payload], { onConflict: 'owner,title' })
+        
+        if (error) {
+          console.error('[ADD BOOK] Insert error:', error)
+        } else {
+          showButtonFeedback('Owned', nextOwned ? 'check' : 'x')
+        }
+      } catch (error) {
+        console.error('[ADD BOOK] Error:', error)
+      }
+      return
+    }
+
     await updateBookRow(
       {
         tags: nextTags,
       },
       { eventType: 'tags_updated', nextTags }
     )
+    showButtonFeedback('Owned', nextOwned ? 'check' : 'x')
   }
 
   const handleRatingChange = async (value) => {
     setRating(value)
     await updateBookRow({ rating: value })
   }
+
+  // Keep ref updated for PanResponder to use
+  saveRatingRef.current = handleRatingChange
 
   const scheduleDebouncedUpdate = (updates) => {
     if (debounceRef.current) {
@@ -723,14 +808,27 @@ export default function BookDetailScreen({ user }) {
                 ]}
                 onPress={() => handleStatusChange(s)}
               >
-                <Text
-                  style={[
-                    styles.statusButtonText,
-                    status === s && styles.statusButtonTextActive,
-                  ]}
-                >
-                  {s}
-                </Text>
+                <View style={styles.buttonContent}>
+                  <Text
+                    style={[
+                      styles.statusButtonText,
+                      status === s && styles.statusButtonTextActive,
+                    ]}
+                  >
+                    {s}
+                  </Text>
+                  {buttonFeedback[s] && (
+                    <Animated.Text
+                      style={[
+                        styles.feedbackIcon,
+                        buttonFeedback[s] === 'check' ? styles.feedbackCheck : styles.feedbackX,
+                        { opacity: feedbackOpacity },
+                      ]}
+                    >
+                      {buttonFeedback[s] === 'check' ? '✓' : '✗'}
+                    </Animated.Text>
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
 
@@ -738,11 +836,24 @@ export default function BookDetailScreen({ user }) {
               style={[styles.statusButton, isOwned && styles.statusButtonActive]}
               onPress={handleOwnedToggle}
             >
-              <Text
-                style={[styles.statusButtonText, isOwned && styles.statusButtonTextActive]}
-              >
-                Owned
-              </Text>
+              <View style={styles.buttonContent}>
+                <Text
+                  style={[styles.statusButtonText, isOwned && styles.statusButtonTextActive]}
+                >
+                  Owned
+                </Text>
+                {buttonFeedback['Owned'] && (
+                  <Animated.Text
+                    style={[
+                      styles.feedbackIcon,
+                      buttonFeedback['Owned'] === 'check' ? styles.feedbackCheck : styles.feedbackX,
+                      { opacity: feedbackOpacity },
+                    ]}
+                  >
+                    {buttonFeedback['Owned'] === 'check' ? '✓' : '✗'}
+                  </Animated.Text>
+                )}
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -750,17 +861,35 @@ export default function BookDetailScreen({ user }) {
         <View style={styles.section}>
           <Text style={styles.label}>Rating ({rating}/5)</Text>
           <View style={styles.ratingContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
-                key={star}
-                onPress={() => handleRatingChange(star)}
-                style={styles.starButton}
-              >
-                <Text style={styles.star}>
-                  {star <= rating ? '★' : '☆'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <TouchableOpacity
+              onPress={() => handleRatingChange(0)}
+              style={styles.clearRatingButton}
+            >
+              <Text style={styles.clearRatingText}>✕</Text>
+            </TouchableOpacity>
+            <View
+              ref={starsContainerRef}
+              style={styles.starsContainer}
+              onLayout={() => {
+                starsContainerRef.current?.measureInWindow((x, y, width, height) => {
+                  layoutRef.current = { x, width }
+                })
+              }}
+              {...ratingPanResponder.panHandlers}
+            >
+              {[1, 2, 3, 4, 5].map((star) => {
+                const isFull = rating >= star
+                const isHalf = !isFull && rating >= star - 0.5
+                return (
+                  <View key={star} style={styles.starWrapper}>
+                    <Text style={styles.starEmpty}>☆</Text>
+                    <View style={[styles.starFillContainer, { width: isFull ? '100%' : isHalf ? '50%' : '0%' }]}>
+                      <Text style={styles.starFilled}>★</Text>
+                    </View>
+                  </View>
+                )
+              })}
+            </View>
           </View>
         </View>
 
@@ -1199,14 +1328,57 @@ const styles = StyleSheet.create({
   statusButtonTextActive: {
     color: '#3b82f6',
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedbackIcon: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedbackCheck: {
+    color: '#22c55e',
+  },
+  feedbackX: {
+    color: '#ef4444',
+  },
   ratingContainer: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
   },
-  starButton: {
-    padding: 4,
+  clearRatingButton: {
+    padding: 8,
+    marginRight: 8,
   },
-  star: {
+  clearRatingText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  starWrapper: {
+    position: 'relative',
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  starEmpty: {
+    fontSize: 32,
+    color: 'rgba(255, 255, 255, 0.2)',
+  },
+  starFillContainer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: '100%',
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  starFilled: {
     fontSize: 32,
     color: '#fbbf24',
   },

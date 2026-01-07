@@ -328,7 +328,6 @@ export default function DiscoveryScreen({ user }) {
 
       const payload = {
         owner: currentUser.username,
-        owner_id: currentUser.id,
         title: bookToAdd.title,
         author: bookToAdd.author,
         cover: bookToAdd.cover,
@@ -341,7 +340,7 @@ export default function DiscoveryScreen({ user }) {
       }
 
       console.log('[ADD BOOK] Inserting book with payload:', payload)
-      let { error } = await supabase.from('bookmosh_books').insert([payload])
+      let { error } = await supabase.from('bookmosh_books').upsert([payload], { onConflict: 'owner,title' })
 
       if (error && String(error.code) === '42703') {
         const msg = String(error.message || '')
@@ -349,7 +348,7 @@ export default function DiscoveryScreen({ user }) {
         if (msg.includes('read_at')) delete fallbackPayload.read_at
         if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
         console.log('[ADD BOOK] Retrying with fallback payload:', fallbackPayload)
-        ;({ error } = await supabase.from('bookmosh_books').insert([fallbackPayload]))
+        ;({ error } = await supabase.from('bookmosh_books').upsert([fallbackPayload], { onConflict: 'owner,title' }))
       }
 
       if (error) {

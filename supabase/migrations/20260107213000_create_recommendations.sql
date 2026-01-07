@@ -31,4 +31,4 @@ drop policy if exists "recommendations_insert_sender" on public.recommendations;
 create policy "recommendations_insert_sender"
 on public.recommendations
 for insert
-with check (auth.uid() = sender_id);
+with check (auth.uid() = sender_id)se

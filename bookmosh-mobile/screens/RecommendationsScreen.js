@@ -166,11 +166,11 @@ export default function RecommendationsScreen({ user, route }) {
       }
 
       // Try with new columns first
-      let { error } = await supabase.from('bookmosh_books').insert([{
+      let { error } = await supabase.from('bookmosh_books').upsert([{
         ...payload,
         read_at: selectedStatus === 'Read' ? new Date().toISOString() : null,
         status_updated_at: new Date().toISOString(),
-      }])
+      }], { onConflict: 'owner,title' })
 
       // Fallback if columns don't exist
       if (error && String(error.code) === '42703') {
@@ -178,7 +178,7 @@ export default function RecommendationsScreen({ user, route }) {
         const fallbackPayload = { ...payload }
         if (msg.includes('read_at')) delete fallbackPayload.read_at
         if (msg.includes('status_updated_at')) delete fallbackPayload.status_updated_at
-        ;({ error } = await supabase.from('bookmosh_books').insert([fallbackPayload]))
+        ;({ error } = await supabase.from('bookmosh_books').upsert([fallbackPayload], { onConflict: 'owner,title' }))
       }
 
       if (error) throw error
