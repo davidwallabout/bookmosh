@@ -1004,12 +1004,8 @@ const deriveUsernameFromSupabase = (email = '', metadata = {}) => {
 
 const getOwnerId = (user) => user?.id ?? user?.username
 
-function App() {
-  const location = useLocation()
-  const navigate = useNavigate()
-
-  const isBookPage = location.pathname === '/book'
-
+// Wrapper component to handle missing supabase config before hooks are called
+function AppWrapper() {
   if (!supabase) {
     return (
       <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-6">
@@ -1025,6 +1021,14 @@ function App() {
       </div>
     )
   }
+  return <App />
+}
+
+function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  const isBookPage = location.pathname === '/book'
 
   const [tracker, setTracker] = useState(initialTracker)
   const [searchQuery, setSearchQuery] = useState('')
@@ -10795,4 +10799,4 @@ function App() {
   )
 }
 
-export default App
+export default AppWrapper
