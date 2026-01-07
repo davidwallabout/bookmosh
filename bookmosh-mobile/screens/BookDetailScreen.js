@@ -51,6 +51,10 @@ export default function BookDetailScreen({ user }) {
   const [selectedRecommendationRecipients, setSelectedRecommendationRecipients] = useState([])
   const [sendingRecommendation, setSendingRecommendation] = useState(false)
 
+  const [showEditionsModal, setShowEditionsModal] = useState(false)
+  const [editions, setEditions] = useState([])
+  const [loadingEditions, setLoadingEditions] = useState(false)
+
   useEffect(() => {
     loadCurrentUser()
     if (bookId) {
@@ -425,18 +429,90 @@ export default function BookDetailScreen({ user }) {
   }
 
   const navigateToAuthorSearch = () => {
+    if (!author) return
     navigation.navigate('Tabs', {
       screen: 'Discovery',
-      params: { authorSearch: author },
+      params: { initialQuery: author },
     })
   }
 
+  const searchEditions = async () => {
+    if (!title) {
+      Alert.alert('Error', 'Please enter a book title first')
+      return
+    }
+
+    setShowEditionsModal(true)
+    setLoadingEditions(true)
+    setEditions([])
+
+    try {
+      const supabaseUrl = supabase.supabaseUrl
+      const supabaseKey = supabase.supabaseKey
+      
+      if (supabaseUrl && supabaseKey) {
+        const response = await fetch(`${supabaseUrl}/functions/v1/isbndb-search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({ q: title.trim(), pageSize: 20 }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          const books = Array.isArray(data?.books) ? data.books : []
+          
+          const mapped = books.map((b) => ({
+            title: b.title || b.title_long || '',
+            author: Array.isArray(b.authors) ? b.authors[0] : (b.author || ''),
+            cover: (b.image || b.image_url || '').replace(/^http:\/\//, 'https://'),
+            isbn: b.isbn13 || b.isbn || b.isbn10 || null,
+            year: b.date_published ? Number(String(b.date_published).slice(0, 4)) : null,
+          })).filter(b => b.title)
+
+          setEditions(mapped)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to search editions:', error)
+      Alert.alert('Error', 'Failed to load editions')
+    } finally {
+      setLoadingEditions(false)
+    }
+  }
+
+  const selectEdition = async (edition) => {
+    setTitle(edition.title)
+    setAuthor(edition.author || author)
+    setBook({
+      ...book,
+      title: edition.title,
+      author: edition.author || author,
+      cover: edition.cover,
+      isbn: edition.isbn,
+      year: edition.year,
+    })
+
+    if (bookId) {
+      await updateBookRow({
+        title: edition.title,
+        author: edition.author || author,
+        cover: edition.cover,
+      })
+    }
+
+    setShowEditionsModal(false)
+  }
+
   const openRecommendationComposer = () => {
-    const friends = Array.isArray(currentUser?.friends) ? currentUser.friends : []
-    if (!currentUser?.username) {
+    if (!currentUser?.friends) {
       Alert.alert('Error', 'Your profile is still loading. Try again in a moment.')
       return
     }
+    const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
     if (friends.length === 0) {
       Alert.alert('No friends yet', 'Add friends first, then you can send recommendations.')
       return
@@ -543,10 +619,26 @@ export default function BookDetailScreen({ user }) {
       </View>
 
       <ScrollView style={styles.content}>
-        {book?.cover && (
-          <View style={styles.coverContainer}>
+        {book?.cover ? (
+          <TouchableOpacity 
+            style={styles.coverContainer}
+            onPress={searchEditions}
+            activeOpacity={0.8}
+          >
             <Image source={{ uri: book.cover }} style={styles.cover} />
-          </View>
+            <View style={styles.coverOverlay}>
+              <Text style={styles.coverOverlayText}>Tap to change edition</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={styles.coverPlaceholder}
+            onPress={searchEditions}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.coverPlaceholderText}>📚</Text>
+            <Text style={styles.coverPlaceholderSubtext}>Tap to select edition</Text>
+          </TouchableOpacity>
         )}
 
         <View style={styles.section}>
@@ -888,6 +980,61 @@ export default function BookDetailScreen({ user }) {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditionsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditionsModal(false)}
+      >
+        <View style={styles.editionsModalOverlay}>
+          <View style={styles.editionsModalCard}>
+            <View style={styles.editionsModalHeader}>
+              <Text style={styles.editionsModalTitle}>Select Edition</Text>
+              <TouchableOpacity onPress={() => setShowEditionsModal(false)}>
+                <Text style={styles.editionsModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loadingEditions ? (
+              <ActivityIndicator size="large" color="#3b82f6" style={styles.editionsLoader} />
+            ) : (
+              <ScrollView style={styles.editionsList}>
+                {editions.length > 0 ? (
+                  editions.map((edition, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.editionItem}
+                      onPress={() => selectEdition(edition)}
+                    >
+                      {edition.cover ? (
+                        <Image source={{ uri: edition.cover }} style={styles.editionCover} />
+                      ) : (
+                        <View style={styles.editionCoverPlaceholder}>
+                          <Text>📚</Text>
+                        </View>
+                      )}
+                      <View style={styles.editionInfo}>
+                        <Text style={styles.editionTitle} numberOfLines={2}>
+                          {edition.title}
+                        </Text>
+                        <Text style={styles.editionAuthor} numberOfLines={1}>
+                          {edition.author}
+                        </Text>
+                        {edition.year && (
+                          <Text style={styles.editionYear}>{edition.year}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={styles.editionsEmptyText}>No editions found</Text>
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
