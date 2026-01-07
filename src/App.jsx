@@ -3277,21 +3277,53 @@ function App() {
         query = query.in('owner_username', friends)
       }
 
-      const { data, error } = await query
-      if (error) throw error
-      const items = data ?? []
+      let recQuery = supabase
+        .from('recommendations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (feedScope === 'me') {
+        recQuery = recQuery.or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+      } else if (feedScope === 'friends') {
+        const friends = Array.isArray(currentUser.friends) ? currentUser.friends : []
+        if (!friends.length) {
+          setFeedItems([])
+          setFeedDisplayCount(10)
+          setFeedLikes({})
+          setLikeNotifications([])
+          return
+        }
+        recQuery = recQuery.or(`sender_username.in.(${friends.join(',')}),recipient_username.in.(${friends.join(',')})`)
+      }
+
+      const [eventsRes, recsRes] = await Promise.all([query, recQuery])
+      if (eventsRes.error) throw eventsRes.error
+      if (recsRes.error) throw recsRes.error
+
+      const mappedEvents = (eventsRes.data ?? []).map((e) => ({ ...e, item_type: 'book_event' }))
+      const mappedRecs = (recsRes.data ?? []).map((r) => ({
+        ...r,
+        item_type: 'recommendation',
+      }))
+
+      const items = [...mappedEvents, ...mappedRecs]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 50)
+
       setFeedItems(items)
       setFeedDisplayCount(10)
 
       // Fetch likes for these feed items
-      if (items.length > 0) {
-        const bookIds = items.map((i) => i.id).filter(Boolean)
+      const bookEventIds = items.filter((i) => i.item_type !== 'recommendation').map((i) => i.id).filter(Boolean)
+      if (bookEventIds.length > 0) {
         const { data: likesData } = await supabase
           .from('feed_likes')
           .select('book_id, user_id, username')
-          .in('book_id', bookIds)
+          .in('book_id', bookEventIds)
         const likesMap = {}
         for (const item of items) {
+          if (item.item_type === 'recommendation') continue
           const itemLikes = (likesData ?? []).filter((l) => l.book_id === item.id)
           likesMap[item.id] = {
             count: itemLikes.length,
@@ -7419,6 +7451,52 @@ function App() {
               <div className="mt-6 space-y-2">
                 {feedItems.length > 0 ? (
                   feedItems.slice(0, feedDisplayCount).map((item) => {
+                    if (item.item_type === 'recommendation') {
+                      const isSent = Boolean(currentUser?.id && item.sender_id === currentUser.id)
+                      const headline = isSent
+                        ? `You recommended to @${item.recipient_username}`
+                        : `@${item.sender_username} recommended to you`
+
+                      return (
+                        <button
+                          key={`recommendation:${item.id}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRecommendation(item)
+                            setRecommendationComments([])
+                            setRecommendationCommentDraft('')
+                            loadRecommendationComments(item.id)
+                          }}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-white/30"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-white/80">
+                              <span className="font-semibold text-white">{headline}</span>
+                            </p>
+                            <span className="text-[10px] text-white/40 whitespace-nowrap">{formatTimeAgo(item.created_at)}</span>
+                          </div>
+
+                          <div className="mt-3 flex gap-4">
+                            {item.book_cover ? (
+                              <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                                <img src={item.book_cover} alt={item.book_title} className="h-full w-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-2xl">
+                                📚
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-white line-clamp-2">{item.book_title}</p>
+                              {item.book_author && <p className="text-xs text-white/60 mt-1 line-clamp-1">{item.book_author}</p>}
+                              {item.note && <p className="text-xs text-white/50 mt-2 line-clamp-2 italic">&quot;{item.note}&quot;</p>}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    }
+
                     // Check if this is a list creation event
                     if (item.event_type === 'list_created') {
                       return (
