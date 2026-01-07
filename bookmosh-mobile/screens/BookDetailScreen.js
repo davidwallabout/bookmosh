@@ -77,6 +77,7 @@ export default function BookDetailScreen({ user }) {
   const [progress, setProgress] = useState(0)
   const [review, setReview] = useState('')
   const [spoilerWarning, setSpoilerWarning] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [isOwned, setIsOwned] = useState(false)
 
   const [showRecommendationModal, setShowRecommendationModal] = useState(false)
@@ -96,6 +97,9 @@ export default function BookDetailScreen({ user }) {
   const pendingRatingRef = useRef(0)
   const saveRatingRef = useRef(null)
 
+  const lastDraftSavedRef = useRef({ review: '', spoiler: false })
+  const latestDraftRef = useRef({ review: '', spoiler: false })
+
   const calculateRatingFromLocationX = (locationX) => {
     const { width } = starsLayoutRef.current
     if (!width) return 0
@@ -105,6 +109,45 @@ export default function BookDetailScreen({ user }) {
     const rawRating = relativeX / starWidth
     const rounded = Math.round(rawRating * 2) / 2
     return Math.max(0, Math.min(5, rounded))
+  }
+
+  const saveReviewDraft = async ({ silent = false } = {}) => {
+    if (!bookId) return
+    if (!currentUser?.id || !currentUser?.username) return
+
+    const nextReview = String(latestDraftRef.current.review || '').trim()
+    const nextSpoiler = Boolean(latestDraftRef.current.spoiler)
+
+    if (lastDraftSavedRef.current.review === nextReview && lastDraftSavedRef.current.spoiler === nextSpoiler) {
+      return
+    }
+
+    if (!silent) setSavingDraft(true)
+    try {
+      const nowIso = new Date().toISOString()
+      let { error } = await supabase
+        .from('bookmosh_books')
+        .update({ review: nextReview, spoiler_warning: nextSpoiler, updated_at: nowIso })
+        .eq('id', bookId)
+
+      if (error && String(error.code) === '42703') {
+        const msg = String(error.message || '')
+        const fallbackPayload = { review: nextReview, updated_at: nowIso }
+        if (!msg.includes('review')) delete fallbackPayload.review
+        ;({ error } = await supabase.from('bookmosh_books').update(fallbackPayload).eq('id', bookId))
+      }
+      if (error) throw error
+
+      lastDraftSavedRef.current = { review: nextReview, spoiler: nextSpoiler }
+      setBook((prev) => (prev ? { ...prev, review: nextReview, spoiler_warning: nextSpoiler } : prev))
+    } catch (error) {
+      if (!silent) {
+        console.error('Save draft error:', error)
+        Alert.alert('Error', error.message)
+      }
+    } finally {
+      if (!silent) setSavingDraft(false)
+    }
   }
 
   const ratingPanResponder = useRef(
@@ -372,7 +415,26 @@ export default function BookDetailScreen({ user }) {
         console.error('book_events insert failed:', eventErr)
       }
 
+      // Clear saved draft (so the box is empty next time)
+      try {
+        const nowIso = new Date().toISOString()
+        let { error: clearErr } = await supabase
+          .from('bookmosh_books')
+          .update({ review: '', spoiler_warning: false, updated_at: nowIso })
+          .eq('id', bookId)
+
+        if (clearErr && String(clearErr.code) === '42703') {
+          const fallbackPayload = { review: '', updated_at: nowIso }
+          ;({ error: clearErr } = await supabase.from('bookmosh_books').update(fallbackPayload).eq('id', bookId))
+        }
+        if (clearErr) throw clearErr
+      } catch (clearErr) {
+        console.error('Clear draft error:', clearErr)
+      }
+
       setReview('')
+      setSpoilerWarning(false)
+      lastDraftSavedRef.current = { review: '', spoiler: false }
       await loadBookActivity(title.trim())
     } catch (error) {
       console.error('Submit review error:', error)
@@ -451,6 +513,23 @@ export default function BookDetailScreen({ user }) {
     loadBookActivity(book.title)
   }, [currentUser?.id, book?.title])
 
+  useEffect(() => {
+    if (!bookId) return
+    lastDraftSavedRef.current = { review: String(book?.review || ''), spoiler: Boolean(book?.spoiler_warning) }
+  }, [bookId, book?.id])
+
+  useEffect(() => {
+    latestDraftRef.current = { review: String(review || ''), spoiler: Boolean(spoilerWarning) }
+  }, [review, spoilerWarning])
+
+  useEffect(() => {
+    if (!navigation?.addListener) return
+    const unsub = navigation.addListener('beforeRemove', () => {
+      saveReviewDraft({ silent: true })
+    })
+    return unsub
+  }, [navigation, bookId, currentUser?.id])
+
   const loadCurrentUser = async () => {
     try {
       const { data, error } = await supabase
@@ -491,6 +570,8 @@ export default function BookDetailScreen({ user }) {
       setProgress(data.progress || 0)
       setReview(data.review || '')
       setSpoilerWarning(data.spoiler_warning || false)
+      lastDraftSavedRef.current = { review: String(data.review || ''), spoiler: Boolean(data.spoiler_warning) }
+      latestDraftRef.current = { review: String(data.review || ''), spoiler: Boolean(data.spoiler_warning) }
       setIsOwned(Array.isArray(data.tags) && data.tags.includes('Owned'))
     } catch (error) {
       console.error('Load book error:', error)
@@ -735,6 +816,7 @@ export default function BookDetailScreen({ user }) {
   const handleSpoilerToggle = async () => {
     const newValue = !spoilerWarning
     setSpoilerWarning(newValue)
+    latestDraftRef.current = { review, spoiler: newValue }
   }
 
   const deleteBook = async () => {
@@ -1189,6 +1271,7 @@ export default function BookDetailScreen({ user }) {
             value={review}
             onChangeText={(v) => {
               setReview(v)
+              latestDraftRef.current = { review: v, spoiler: Boolean(spoilerWarning) }
             }}
             placeholder="Your thoughts about this book..."
             placeholderTextColor="#666"
@@ -1197,17 +1280,31 @@ export default function BookDetailScreen({ user }) {
             textAlignVertical="top"
           />
 
-          <TouchableOpacity
-            style={[styles.submitReviewButton, (!String(review || '').trim() || saving) && styles.submitReviewButtonDisabled]}
-            onPress={submitReview}
-            disabled={!String(review || '').trim() || saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.submitReviewButtonText}>Submit Review</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.reviewDraftButtonsRow}>
+            <TouchableOpacity
+              style={[styles.saveDraftButton, savingDraft && styles.saveDraftButtonDisabled]}
+              onPress={() => saveReviewDraft({ silent: false })}
+              disabled={savingDraft}
+            >
+              {savingDraft ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveDraftButtonText}>Save Draft</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.submitReviewButton, (!String(review || '').trim() || saving) && styles.submitReviewButtonDisabled]}
+              onPress={submitReview}
+              disabled={!String(review || '').trim() || saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.submitReviewButtonText}>Publish</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -2133,13 +2230,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(59, 130, 246, 0.35)',
-    marginTop: 10,
   },
   submitReviewButtonDisabled: {
     opacity: 0.55,
   },
   submitReviewButtonText: {
     color: '#fff',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    fontSize: 12,
+  },
+  reviewDraftButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  saveDraftButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  saveDraftButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveDraftButtonText: {
+    color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.1,
