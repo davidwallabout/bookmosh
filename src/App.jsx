@@ -1315,13 +1315,30 @@ function App() {
   }, [currentUser, users])
 
   useEffect(() => {
-    // SIMPLE AUTH: Just restore user from localStorage
+    // SIMPLE AUTH: Restore user from localStorage, then refresh from DB
     const storedUser = localStorage.getItem('bookmosh-user')
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser)
         console.log('[AUTH] Restored user from localStorage:', user.username)
         setCurrentUser(user)
+        
+        // Immediately refresh from database to get latest friends list
+        if (supabase && user?.id) {
+          supabase
+            .from('users')
+            .select('id, username, email, friends, is_private, avatar_icon, avatar_url, top_books')
+            .eq('id', user.id)
+            .limit(1)
+            .then(({ data, error }) => {
+              if (!error && data?.[0]) {
+                console.log('[AUTH] Refreshed user from DB:', data[0].username)
+                setCurrentUser(data[0])
+                localStorage.setItem('bookmosh-user', JSON.stringify(data[0]))
+              }
+            })
+            .catch((err) => console.error('[AUTH] Failed to refresh user from DB:', err))
+        }
       } catch (err) {
         console.error('[AUTH] Failed to restore user:', err)
         localStorage.removeItem('bookmosh-user')
@@ -7177,7 +7194,7 @@ function App() {
                     )}
 
                     {!friendRequestsLoading && incomingFriendRequests.length === 0 && outgoingFriendRequests.length === 0 && (
-                      <p className="text-sm text-white/60">No pending invites.</p>
+                      <p className="text-sm text-white/60">No pending friend requests.</p>
                     )}
                   </div>
                 </div>
