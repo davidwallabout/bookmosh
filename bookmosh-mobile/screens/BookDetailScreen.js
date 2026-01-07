@@ -1383,19 +1383,6 @@ const styles = StyleSheet.create({
   recommendationSendButton: {
     flex: 1,
     backgroundColor: '#ee6bfe',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  recommendationSendButtonDisabled: {
-    opacity: 0.6,
-  },
-  recommendationSendButtonText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#020617',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
   },
   modalOverlay: {
     flex: 1,

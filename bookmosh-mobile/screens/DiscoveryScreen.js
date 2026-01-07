@@ -56,6 +56,7 @@ export default function DiscoveryScreen({ user }) {
   const [isOwned, setIsOwned] = useState(false)
   const [showBookDetail, setShowBookDetail] = useState(false)
   const [detailBook, setDetailBook] = useState(null)
+  const [searchHistory, setSearchHistory] = useState([])
 
   const placeholderScale = useRef(new Animated.Value(1)).current
 
@@ -354,9 +355,24 @@ export default function DiscoveryScreen({ user }) {
   }
 
   const navigateToAuthorBooks = (authorName) => {
+    // Save current search to history
+    if (searchQuery && searchQuery !== authorName) {
+      setSearchHistory(prev => [...prev, { query: searchQuery, results: searchResults }])
+    }
     setSearchQuery(authorName)
     setAuthorSearchMode(true)
     searchBooksWithQuery(authorName)
+  }
+
+  const goBackToPreviousSearch = () => {
+    if (searchHistory.length === 0) return
+    
+    const previous = searchHistory[searchHistory.length - 1]
+    setSearchQuery(previous.query)
+    setSearchResults(previous.results)
+    setHasSearched(true)
+    setAuthorSearchMode(false)
+    setSearchHistory(prev => prev.slice(0, -1))
   }
 
   const openBookDetail = (book) => {
@@ -444,14 +460,19 @@ export default function DiscoveryScreen({ user }) {
 
       <View style={styles.searchSection}>
         <Text style={styles.sectionTitle}>DISCOVERY</Text>
-        <Text style={styles.sectionSubtitle}>
-          {authorSearchMode ? `Books by ${searchQuery}` : 'Search the open shelves'}
-        </Text>
         
         <View style={styles.searchContainer}>
+          {searchHistory.length > 0 && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={goBackToPreviousSearch}
+            >
+              <Text style={styles.backButtonText}>←</Text>
+            </TouchableOpacity>
+          )}
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search for books..."
+            style={[styles.searchInput, searchHistory.length > 0 && styles.searchInputWithBack]}
+            placeholder="Search books, authors..."
             placeholderTextColor="#666"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -690,6 +711,24 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#fff',
     fontSize: 15,
+  },
+  searchInputWithBack: {
+    marginLeft: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#3b82f6',
+    fontWeight: '600',
   },
   searchButton: {
     backgroundColor: 'rgba(59, 130, 246, 0.2)',
