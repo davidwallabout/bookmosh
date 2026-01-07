@@ -7,6 +7,9 @@ import {
   StyleSheet,
   Image,
   RefreshControl,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
@@ -42,6 +45,14 @@ export default function FeedScreen({ user }) {
   const [refreshing, setRefreshing] = useState(false)
   const [currentUser, setCurrentUser] = useState(null)
   const [userAvatar, setUserAvatar] = useState(null)
+
+  const [reviewModalVisible, setReviewModalVisible] = useState(false)
+  const [reviewThreadLoading, setReviewThreadLoading] = useState(false)
+  const [reviewThread, setReviewThread] = useState(null)
+  const [reviewLikes, setReviewLikes] = useState({ count: 0, likedByMe: false, users: [] })
+  const [reviewComments, setReviewComments] = useState([])
+  const [reviewCommentDraft, setReviewCommentDraft] = useState('')
+  const [showSpoiler, setShowSpoiler] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -165,6 +176,114 @@ export default function FeedScreen({ user }) {
     setRefreshing(false)
   }
 
+  const openReviewThread = async (eventItem) => {
+    if (!currentUser?.id || !eventItem?.owner_username || !eventItem?.book_title) return
+
+    setReviewModalVisible(true)
+    setReviewThreadLoading(true)
+    setReviewThread(null)
+    setReviewLikes({ count: 0, likedByMe: false, users: [] })
+    setReviewComments([])
+    setReviewCommentDraft('')
+    setShowSpoiler(false)
+
+    try {
+      const { data: books, error: bookError } = await supabase
+        .from('bookmosh_books')
+        .select('id, owner, title, author, cover, review, spoiler_warning, created_at, updated_at')
+        .eq('owner', eventItem.owner_username)
+        .eq('title', eventItem.book_title)
+        .limit(1)
+
+      if (bookError) throw bookError
+      const bookRow = Array.isArray(books) ? books[0] : null
+      if (!bookRow?.id) {
+        setReviewThread(null)
+        return
+      }
+
+      setReviewThread({
+        ...bookRow,
+        reviewer_username: eventItem.owner_username,
+      })
+
+      const reviewId = bookRow.id
+      const [{ data: likesData }, { data: commentsData }] = await Promise.all([
+        supabase.from('review_likes').select('review_id, user_id, username').eq('review_id', reviewId),
+        supabase.from('review_comments').select('*').eq('review_id', reviewId).order('created_at', { ascending: true }),
+      ])
+
+      const likes = likesData || []
+      setReviewLikes({
+        count: likes.length,
+        likedByMe: likes.some((l) => l.user_id === currentUser.id),
+        users: likes.map((l) => l.username),
+      })
+
+      setReviewComments(commentsData || [])
+    } catch (error) {
+      console.error('[FEED] Open review thread failed:', error)
+    } finally {
+      setReviewThreadLoading(false)
+    }
+  }
+
+  const toggleReviewLike = async () => {
+    if (!currentUser?.id || !reviewThread?.id) return
+    const reviewId = reviewThread.id
+    const current = reviewLikes || { count: 0, likedByMe: false, users: [] }
+
+    try {
+      if (current.likedByMe) {
+        await supabase.from('review_likes').delete().eq('review_id', reviewId).eq('user_id', currentUser.id)
+        setReviewLikes((prev) => ({
+          count: Math.max(0, (prev?.count ?? 1) - 1),
+          likedByMe: false,
+          users: (prev?.users ?? []).filter((u) => u !== currentUser.username),
+        }))
+      } else {
+        const { error } = await supabase.from('review_likes').insert({
+          review_id: reviewId,
+          user_id: currentUser.id,
+          username: currentUser.username,
+        })
+        if (error) throw error
+        setReviewLikes((prev) => ({
+          count: (prev?.count ?? 0) + 1,
+          likedByMe: true,
+          users: [...(prev?.users ?? []), currentUser.username],
+        }))
+      }
+    } catch (error) {
+      console.error('[FEED] Toggle review like failed:', error)
+    }
+  }
+
+  const postReviewComment = async () => {
+    if (!currentUser?.id || !reviewThread?.id) return
+    const body = String(reviewCommentDraft || '').trim()
+    if (!body) return
+
+    try {
+      const { error } = await supabase.from('review_comments').insert({
+        review_id: reviewThread.id,
+        commenter_id: currentUser.id,
+        commenter_username: currentUser.username,
+        body,
+      })
+      if (error) throw error
+      setReviewCommentDraft('')
+      const { data } = await supabase
+        .from('review_comments')
+        .select('*')
+        .eq('review_id', reviewThread.id)
+        .order('created_at', { ascending: true })
+      setReviewComments(data || [])
+    } catch (error) {
+      console.error('[FEED] Post review comment failed:', error)
+    }
+  }
+
   const renderFeedItem = ({ item }) => {
     const likes = feedLikes[item.id] || { count: 0, likedByMe: false }
     const eventText =
@@ -203,17 +322,18 @@ export default function FeedScreen({ user }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.likeButton}
-          onPress={() => toggleLike(item.id)}
-        >
-          <Text style={[styles.likeIcon, likes.likedByMe && styles.liked]}>
-            {likes.likedByMe ? '❤️' : '🤍'}
-          </Text>
-          {likes.count > 0 && (
-            <Text style={styles.likeCount}>{likes.count}</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.likeButton} onPress={() => toggleLike(item.id)}>
+            <Text style={[styles.likeIcon, likes.likedByMe && styles.liked]}>
+              {likes.likedByMe ? '❤️' : '🤍'}
+            </Text>
+            {likes.count > 0 && <Text style={styles.likeCount}>{likes.count}</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.commentButton} onPress={() => openReviewThread(item)}>
+            <Text style={styles.commentButtonText}>💬 Review</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     )
   }
@@ -284,6 +404,88 @@ export default function FeedScreen({ user }) {
           </Text>
         }
       />
+
+      <Modal
+        visible={reviewModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReviewModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Review</Text>
+
+            {reviewThreadLoading ? (
+              <ActivityIndicator size="small" color="#3b82f6" />
+            ) : reviewThread ? (
+              <>
+                <Text style={styles.modalHeadline}>
+                  @{reviewThread.reviewer_username} · {reviewThread.title}
+                </Text>
+
+                {reviewThread.spoiler_warning && !showSpoiler ? (
+                  <View style={styles.spoilerBox}>
+                    <Text style={styles.spoilerText}>⚠️ Contains spoilers</Text>
+                    <TouchableOpacity style={styles.spoilerButton} onPress={() => setShowSpoiler(true)}>
+                      <Text style={styles.spoilerButtonText}>Show Spoiler</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text style={styles.reviewBody}>{reviewThread.review || 'No review text yet.'}</Text>
+                )}
+
+                <View style={styles.reviewMetaRow}>
+                  <TouchableOpacity style={styles.likeButton} onPress={toggleReviewLike}>
+                    <Text style={[styles.likeIcon, reviewLikes.likedByMe && styles.liked]}>
+                      {reviewLikes.likedByMe ? '❤️' : '🤍'}
+                    </Text>
+                    {reviewLikes.count > 0 && <Text style={styles.likeCount}>{reviewLikes.count}</Text>}
+                  </TouchableOpacity>
+                  <Text style={styles.metaText}>{reviewComments.length} comments</Text>
+                </View>
+
+                <View style={styles.commentsBox}>
+                  {reviewComments.length > 0 ? (
+                    reviewComments.map((c) => (
+                      <View key={c.id} style={styles.commentItem}>
+                        <Text style={styles.commentHeader}>
+                          @{c.commenter_username} · {formatTimeAgo(c.created_at)}
+                        </Text>
+                        <Text style={styles.commentBody}>{c.body}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.emptyComments}>No comments yet.</Text>
+                  )}
+                </View>
+
+                <View style={styles.commentComposer}>
+                  <TextInput
+                    value={reviewCommentDraft}
+                    onChangeText={setReviewCommentDraft}
+                    placeholder="Write a comment…"
+                    placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                    style={styles.commentInput}
+                  />
+                  <TouchableOpacity
+                    style={[styles.postButton, !String(reviewCommentDraft || '').trim() && styles.postButtonDisabled]}
+                    onPress={postReviewComment}
+                    disabled={!String(reviewCommentDraft || '').trim()}
+                  >
+                    <Text style={styles.postButtonText}>Post</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.emptyComments}>No review found yet.</Text>
+            )}
+
+            <TouchableOpacity style={styles.modalClose} onPress={() => setReviewModalVisible(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -448,6 +650,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  commentButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  commentButtonText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '700',
+  },
   likeIcon: {
     fontSize: 20,
   },
@@ -464,5 +684,154 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.4)',
     fontSize: 14,
     marginTop: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#0b1225',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    maxHeight: '85%',
+  },
+  modalTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalHeadline: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 10,
+  },
+  spoilerBox: {
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: 'rgba(248, 113, 113, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.25)',
+    marginBottom: 10,
+  },
+  spoilerText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  spoilerButton: {
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.35)',
+  },
+  spoilerButtonText: {
+    color: '#fca5a5',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontSize: 11,
+  },
+  reviewBody: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  reviewMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  metaText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  commentsBox: {
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 10,
+    maxHeight: 220,
+  },
+  commentItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  commentHeader: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  commentBody: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  emptyComments: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    paddingVertical: 10,
+  },
+  commentComposer: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  commentInput: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    color: '#fff',
+  },
+  postButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#3b82f6',
+  },
+  postButtonDisabled: {
+    opacity: 0.5,
+  },
+  postButtonText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  modalClose: {
+    marginTop: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    fontSize: 12,
   },
 })

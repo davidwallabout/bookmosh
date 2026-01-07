@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -25,6 +26,10 @@ export default function RecommendationsScreen({ user }) {
   const [selectedStatus, setSelectedStatus] = useState('To Read')
   const [isOwned, setIsOwned] = useState(false)
   const [addingToLibrary, setAddingToLibrary] = useState(false)
+
+  const [commentDraft, setCommentDraft] = useState('')
+  const [comments, setComments] = useState([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -77,7 +82,50 @@ export default function RecommendationsScreen({ user }) {
     setActiveRecommendation(rec)
     setSelectedStatus('To Read')
     setIsOwned(false)
+    setCommentDraft('')
+    setComments([])
     setShowRecommendationModal(true)
+    if (rec?.id) {
+      loadComments(rec.id)
+    }
+  }
+
+  const loadComments = async (recommendationId) => {
+    if (!recommendationId) return
+    setCommentsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('recommendation_comments')
+        .select('*')
+        .eq('recommendation_id', recommendationId)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      setComments(data || [])
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Load comments error:', error)
+      setComments([])
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  const postComment = async () => {
+    if (!currentUser?.id || !activeRecommendation?.id) return
+    const body = String(commentDraft || '').trim()
+    if (!body) return
+    try {
+      const { error } = await supabase.from('recommendation_comments').insert({
+        recommendation_id: activeRecommendation.id,
+        commenter_id: currentUser.id,
+        commenter_username: currentUser.username,
+        body,
+      })
+      if (error) throw error
+      setCommentDraft('')
+      await loadComments(activeRecommendation.id)
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Post comment error:', error)
+    }
   }
 
   const addBookToLibrary = async () => {
@@ -295,6 +343,51 @@ export default function RecommendationsScreen({ user }) {
                       {addingToLibrary ? 'Adding...' : 'Add to Library'}
                     </Text>
                   </TouchableOpacity>
+                </View>
+
+                <View style={styles.addToLibrarySection}>
+                  <View style={styles.commentsHeaderRow}>
+                    <Text style={styles.sectionLabel}>Comments</Text>
+                    <TouchableOpacity
+                      onPress={() => activeRecommendation?.id && loadComments(activeRecommendation.id)}
+                      style={styles.refreshCommentsButton}
+                    >
+                      <Text style={styles.refreshCommentsText}>Refresh</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {commentsLoading ? (
+                    <ActivityIndicator size="small" color="#3b82f6" />
+                  ) : comments.length > 0 ? (
+                    <View style={styles.commentsList}>
+                      {comments.map((c) => (
+                        <View key={c.id} style={styles.commentItem}>
+                          <Text style={styles.commentHeader}>@{c.commenter_username}</Text>
+                          <Text style={styles.commentBody}>{c.body}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.modalNote}>No comments yet.</Text>
+                  )}
+
+                  <View style={styles.commentComposer}>
+                    <TextInput
+                      value={commentDraft}
+                      onChangeText={setCommentDraft}
+                      placeholder="Write a comment…"
+                      placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                      style={styles.commentInput}
+                      multiline
+                    />
+                    <TouchableOpacity
+                      style={[styles.addToLibraryButton, !String(commentDraft || '').trim() && styles.postButtonDisabled]}
+                      onPress={postComment}
+                      disabled={!String(commentDraft || '').trim()}
+                    >
+                      <Text style={styles.addToLibraryButtonText}>Post</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -601,5 +694,60 @@ const styles = StyleSheet.create({
     color: '#fff',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
+  },
+  commentsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  refreshCommentsButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  refreshCommentsText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+  },
+  commentsList: {
+    gap: 10,
+  },
+  commentItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  commentHeader: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 4,
+  },
+  commentBody: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    lineHeight: 16,
+  },
+  commentComposer: {
+    gap: 10,
+  },
+  commentInput: {
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    color: '#fff',
+    minHeight: 70,
+  },
+  postButtonDisabled: {
+    opacity: 0.5,
   },
 })
