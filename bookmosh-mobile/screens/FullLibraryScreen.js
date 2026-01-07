@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   TextInput,
+  RefreshControl,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -30,6 +31,7 @@ export default function FullLibraryScreen({ user }) {
   const prevFilterRef = useRef(filter)
   const prevOwnedFilterRef = useRef(ownedFilter)
   const LIMIT = 10
+  const [refreshing, setRefreshing] = useState(false)
 
   const formatTimeAgo = (dateString) => {
     if (!dateString) return ''
@@ -80,14 +82,17 @@ export default function FullLibraryScreen({ user }) {
     }
   }, [filter, ownedFilter, searchQuery])
 
-  const loadBooks = async (reset = false) => {
-    if (loading || loadingMore) return
+  const loadBooks = async (reset = false, isRefresh = false) => {
+    if ((loading || loadingMore) && !isRefresh) return
 
     const currentOffset = reset ? 0 : offset
     
     if (reset) {
-      setLoading(true)
-      setBooks([])
+      // Don't set loading=true during refresh - let RefreshControl handle the spinner
+      if (!isRefresh) {
+        setLoading(true)
+        setBooks([])
+      }
       setOffset(0)
       setHasMore(true)
     } else {
@@ -366,6 +371,18 @@ export default function FullLibraryScreen({ user }) {
           ListFooterComponent={renderFooter}
           ListEmptyComponent={
             <Text style={styles.emptyText}>No books in this category</Text>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true)
+                await loadBooks(true, true)
+                setRefreshing(false)
+              }}
+              tintColor="#3b82f6"
+              colors={['#3b82f6']}
+            />
           }
         />
       )}

@@ -11,6 +11,7 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  RefreshControl,
 } from 'react-native'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
@@ -32,6 +33,7 @@ export default function HomeScreen({ user }) {
   const [recommendationsLoading, setRecommendationsLoading] = useState(false)
   const [activeRecommendation, setActiveRecommendation] = useState(null)
   const [showRecommendationModal, setShowRecommendationModal] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -289,7 +291,21 @@ export default function HomeScreen({ user }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true)
+              await Promise.all([loadBooks(), loadLists(), loadRecommendations()])
+              setRefreshing(false)
+            }}
+            tintColor="#3b82f6"
+            colors={['#3b82f6']}
+          />
+        }
+      >
         {readingBooks.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
