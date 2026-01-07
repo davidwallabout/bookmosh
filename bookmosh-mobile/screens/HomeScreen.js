@@ -2,15 +2,12 @@ import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
   Alert,
   ScrollView,
   Image,
   ActivityIndicator,
-  Modal,
   RefreshControl,
 } from 'react-native'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
@@ -27,30 +24,12 @@ export default function HomeScreen({ user }) {
   const [readBooks, setReadBooks] = useState([])
   const [ownedBooks, setOwnedBooks] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
-  const [lists, setLists] = useState([])
-  const [listItemCounts, setListItemCounts] = useState({})
-  const [recommendations, setRecommendations] = useState([])
-  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
-  const [activeRecommendation, setActiveRecommendation] = useState(null)
-  const [showRecommendationModal, setShowRecommendationModal] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
     loadBooks()
   }, [])
-
-  useEffect(() => {
-    if (currentUser) {
-      loadLists()
-    }
-  }, [currentUser])
-
-  useEffect(() => {
-    if (!currentUser) return
-    if (!isFocused) return
-    loadRecommendations()
-  }, [currentUser?.id, isFocused])
 
   useEffect(() => {
     if (isFocused) {
@@ -119,129 +98,6 @@ export default function HomeScreen({ user }) {
     }
   }
 
-  const loadLists = async () => {
-    if (!currentUser) return
-
-    try {
-      console.log('[LISTS] Loading lists...')
-      console.log('[LISTS] user.id (auth):', user.id)
-      console.log('[LISTS] currentUser.id:', currentUser.id)
-      console.log('[LISTS] currentUser.username:', currentUser.username)
-      
-      // Debug: Query by owner_username first to see if lists exist
-      const { data: byUsername, error: usernameError } = await supabase
-        .from('lists')
-        .select('id, owner_id, owner_username, title')
-        .eq('owner_username', currentUser.username)
-        .limit(5)
-      
-      console.log('[LISTS] Lists by username:', { 
-        count: byUsername?.length, 
-        lists: byUsername?.map(l => ({ id: l.id, owner_id: l.owner_id, title: l.title })),
-        error: usernameError 
-      })
-      
-      // Query by owner_id using currentUser.id (same as web app)
-      const { data, error } = await supabase
-        .from('lists')
-        .select('*')
-        .eq('owner_id', currentUser.id)
-        .order('updated_at', { ascending: false })
-
-      console.log('[LISTS] My lists by owner_id query result:', { count: data?.length, error })
-      if (data?.length > 0) {
-        console.log('[LISTS] First list:', data[0])
-      }
-
-      if (error) {
-        console.error('[LISTS] Load lists error:', error)
-        throw error
-      }
-      
-      // If no lists found by owner_id but found by username, there's an ID mismatch
-      if (data?.length === 0 && byUsername?.length > 0) {
-        console.warn('[LISTS] ID MISMATCH DETECTED!')
-        console.warn('[LISTS] currentUser.id:', currentUser.id)
-        console.warn('[LISTS] List owner_id from DB:', byUsername[0]?.owner_id)
-        // Use lists found by username as fallback
-        const { data: fallbackData } = await supabase
-          .from('lists')
-          .select('*')
-          .eq('owner_username', currentUser.username)
-          .order('updated_at', { ascending: false })
-        setLists(fallbackData || [])
-        return
-      }
-      
-      const nextLists = data || []
-      setLists(nextLists)
-
-      const listIds = nextLists.map((l) => l.id).filter(Boolean)
-      if (listIds.length > 0) {
-        const { data: items, error: itemsErr } = await supabase
-          .from('list_items')
-          .select('list_id')
-          .in('list_id', listIds)
-          .limit(2000)
-
-        if (itemsErr) {
-          console.error('[LISTS] Load list_items error:', itemsErr)
-          setListItemCounts({})
-        } else {
-          const counts = {}
-          for (const it of items || []) {
-            const k = it.list_id
-            if (!k) continue
-            counts[k] = (counts[k] || 0) + 1
-          }
-          setListItemCounts(counts)
-        }
-      } else {
-        setListItemCounts({})
-      }
-    } catch (error) {
-      console.error('[LISTS] Load lists error:', error)
-    }
-  }
-
-  const loadRecommendations = async () => {
-    if (!currentUser) return
-
-    setRecommendationsLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('recommendations')
-        .select('*')
-        .or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-        .order('created_at', { ascending: false })
-        .limit(30)
-
-      if (error) throw error
-      setRecommendations(data || [])
-    } catch (error) {
-      console.error('[RECOMMENDATIONS] Load error:', error)
-      setRecommendations([])
-    } finally {
-      setRecommendationsLoading(false)
-    }
-  }
-
-  const openRecommendation = (rec) => {
-    navigation.navigate('RecommendationsScreen', { 
-      selectedRecommendation: rec 
-    })
-  }
-
-  const openDiscoveryForRecommendation = (rec) => {
-    const q = rec?.book_title
-    if (!q) return
-    setShowRecommendationModal(false)
-    navigation.navigate('Tabs', {
-      screen: 'Discovery',
-      params: { initialQuery: q },
-    })
-  }
-
   const deleteBook = async (bookId) => {
     Alert.alert(
       'Delete Book',
@@ -305,7 +161,7 @@ export default function HomeScreen({ user }) {
             refreshing={refreshing}
             onRefresh={async () => {
               setRefreshing(true)
-              await Promise.all([loadBooks(), loadLists(), loadRecommendations()])
+              await Promise.all([loadBooks()])
               setRefreshing(false)
             }}
             tintColor="#3b82f6"
@@ -491,178 +347,10 @@ export default function HomeScreen({ user }) {
           </View>
         )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>MY LISTS</Text>
-            <View style={styles.listsHeaderActions}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('ListsScreen')}
-                style={styles.viewAllButton}
-              >
-                <Text style={styles.viewAllText}>View All →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('ListsScreen', { openCreate: true })}
-                style={styles.addListButton}
-              >
-                <Text style={styles.addListButtonText}>＋</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {lists.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {lists.map((list) => (
-                <TouchableOpacity
-                  key={list.id}
-                  style={styles.listCard}
-                  activeOpacity={0.7}
-                  onPress={() => navigation.navigate('ListDetailScreen', { listId: list.id })}
-                >
-                  <View style={styles.listCardContent}>
-                    <Text style={styles.listCardTitle} numberOfLines={2}>
-                      {list.title}
-                    </Text>
-                    <Text style={styles.listCardCount}>
-                      {(listItemCounts[list.id] || 0)} books
-                    </Text>
-                    {list.description && (
-                      <Text style={styles.listCardDescription} numberOfLines={2}>
-                        {list.description}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={styles.emptyText}>No lists yet. Tap ＋ to create one.</Text>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>RECOMMENDATIONS</Text>
-            <View style={styles.listsHeaderActions}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('RecommendationsScreen')}
-                style={styles.viewAllButton}
-              >
-                <Text style={styles.viewAllText}>View All →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('FullLibraryScreen', { filter: 'all' })}
-                style={styles.addListButton}
-              >
-                <Text style={styles.addListButtonText}>＋</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {recommendationsLoading ? (
-            <ActivityIndicator size="small" color="#3b82f6" style={{ marginVertical: 12 }} />
-          ) : recommendations.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {recommendations.slice(0, 10).map((rec) => {
-                const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
-                const headline = isSent
-                  ? `To @${rec.recipient_username}`
-                  : `From @${rec.sender_username}`
-
-                return (
-                  <TouchableOpacity
-                    key={rec.id}
-                    style={styles.recCarouselCard}
-                    activeOpacity={0.7}
-                    onPress={() => openRecommendation(rec)}
-                  >
-                    {rec.book_cover ? (
-                      <Image source={{ uri: rec.book_cover }} style={styles.bookCover} />
-                    ) : (
-                      <View style={styles.bookCoverPlaceholder}>
-                        <Text style={styles.placeholderText}>📚</Text>
-                      </View>
-                    )}
-                    <Text style={styles.bookCardTitle} numberOfLines={2}>{rec.book_title}</Text>
-                    <Text style={styles.recCarouselHeadline} numberOfLines={1}>{headline}</Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </ScrollView>
-          ) : (
-            <Text style={styles.emptyText}>No recommendations yet.</Text>
-          )}
-        </View>
-
         {books.length === 0 && (
           <Text style={styles.emptyText}>No books yet. Add one above!</Text>
         )}
       </ScrollView>
-
-      <Modal
-        visible={showRecommendationModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowRecommendationModal(false)}
-      >
-        <View style={styles.recommendationModalOverlay}>
-          <View style={styles.recommendationModalCard}>
-            <Text style={styles.recommendationModalTitle}>Recommendation</Text>
-
-            {activeRecommendation ? (
-              <>
-                <Text style={styles.recommendationModalHeadline}>
-                  {currentUser?.id && activeRecommendation.sender_id === currentUser.id
-                    ? `You recommended this to @${activeRecommendation.recipient_username}`
-                    : `@${activeRecommendation.sender_username} recommended this to you`}
-                </Text>
-
-                <View style={styles.recommendationModalBookRow}>
-                  {activeRecommendation.book_cover ? (
-                    <Image
-                      source={{ uri: activeRecommendation.book_cover }}
-                      style={styles.recommendationModalCover}
-                    />
-                  ) : (
-                    <View style={styles.recommendationCoverPlaceholder}>
-                      <Text style={styles.recommendationCoverPlaceholderText}>📚</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.recommendationBookInfo}>
-                    <Text style={styles.recommendationBookTitle} numberOfLines={3}>
-                      {activeRecommendation.book_title}
-                    </Text>
-                    {activeRecommendation.book_author ? (
-                      <Text style={styles.recommendationBookAuthor} numberOfLines={2}>
-                        {activeRecommendation.book_author}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-
-                {activeRecommendation.note ? (
-                  <Text style={styles.recommendationModalNote}>{activeRecommendation.note}</Text>
-                ) : null}
-
-                <TouchableOpacity
-                  style={styles.recommendationModalAction}
-                  onPress={() => openDiscoveryForRecommendation(activeRecommendation)}
-                >
-                  <Text style={styles.recommendationModalActionText}>Search this book</Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
-
-            <TouchableOpacity
-              style={styles.recommendationModalClose}
-              onPress={() => setShowRecommendationModal(false)}
-            >
-              <Text style={styles.recommendationModalCloseText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }

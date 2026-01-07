@@ -13,13 +13,15 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
 
 export default function CommunityScreen({ user }) {
   const navigation = useNavigation()
+  const route = useRoute()
+  const isFocused = useIsFocused()
   const [currentUser, setCurrentUser] = useState(null)
   const [friends, setFriends] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -34,6 +36,8 @@ export default function CommunityScreen({ user }) {
   const flatListRef = useRef(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteSending, setInviteSending] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -46,8 +50,31 @@ export default function CommunityScreen({ user }) {
       if (activeTab === 'pits') {
         loadMoshes()
       }
+      if (activeTab === 'recommendations') {
+        loadRecommendations()
+      }
     }
   }, [currentUser, activeTab])
+
+  useEffect(() => {
+    const next = route?.params?.initialTab
+    if (!next) return
+    if (next === 'friends' || next === 'pits' || next === 'recommendations') {
+      setActiveTab(next)
+    }
+    navigation.setParams({ initialTab: null })
+  }, [route?.params?.initialTab, navigation])
+
+  useEffect(() => {
+    if (!isFocused) return
+    if (!currentUser) return
+    if (activeTab === 'recommendations') {
+      loadRecommendations()
+    }
+    if (activeTab === 'pits') {
+      loadMoshes()
+    }
+  }, [isFocused, currentUser?.id, activeTab])
 
   useEffect(() => {
     if (activeMosh) {
@@ -198,6 +225,32 @@ export default function CommunityScreen({ user }) {
     } catch (error) {
       console.error('Load moshes error:', error)
     }
+  }
+
+  const loadRecommendations = async () => {
+    if (!currentUser) return
+
+    setRecommendationsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('recommendations')
+        .select('*')
+        .or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+      setRecommendations(data || [])
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Load error:', error)
+      setRecommendations([])
+    } finally {
+      setRecommendationsLoading(false)
+    }
+  }
+
+  const openRecommendation = (rec) => {
+    navigation.navigate('RecommendationsScreen', { selectedRecommendation: rec })
   }
 
   const loadMessages = async () => {
@@ -501,6 +554,14 @@ export default function CommunityScreen({ user }) {
             Pits
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'recommendations' && styles.tabActive]}
+          onPress={() => setActiveTab('recommendations')}
+        >
+          <Text style={[styles.tabText, activeTab === 'recommendations' && styles.tabTextActive]}>
+            Recs
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {activeTab === 'friends' ? (
@@ -590,7 +651,7 @@ export default function CommunityScreen({ user }) {
             </View>
           </View>
         </ScrollView>
-      ) : (
+      ) : activeTab === 'pits' ? (
         <FlatList
           data={moshes}
           keyExtractor={(item) => item.id.toString()}
@@ -600,6 +661,52 @@ export default function CommunityScreen({ user }) {
             <Text style={styles.emptyText}>No pit chats yet</Text>
           }
         />
+      ) : (
+        <ScrollView contentContainerStyle={styles.recsContainer}>
+          <View style={styles.recsHeaderRow}>
+            <Text style={styles.sectionTitle}>Recommendations</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('RecommendationsScreen')}
+              style={styles.recsViewAll}
+            >
+              <Text style={styles.recsViewAllText}>View All →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recommendationsLoading ? (
+            <ActivityIndicator size="small" color="#3b82f6" style={{ marginTop: 12 }} />
+          ) : recommendations.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {recommendations.slice(0, 12).map((rec) => {
+                const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
+                const headline = isSent
+                  ? `To @${rec.recipient_username}`
+                  : `From @${rec.sender_username}`
+
+                return (
+                  <TouchableOpacity
+                    key={rec.id}
+                    style={styles.recCard}
+                    activeOpacity={0.7}
+                    onPress={() => openRecommendation(rec)}
+                  >
+                    {rec.book_cover ? (
+                      <Image source={{ uri: rec.book_cover }} style={styles.recCover} />
+                    ) : (
+                      <View style={styles.recCoverPlaceholder}>
+                        <Text style={styles.recCoverPlaceholderText}>📚</Text>
+                      </View>
+                    )}
+                    <Text style={styles.recTitle} numberOfLines={2}>{rec.book_title}</Text>
+                    <Text style={styles.recMeta} numberOfLines={1}>{headline}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyText}>No recommendations yet</Text>
+          )}
+        </ScrollView>
       )}
     </View>
   )
@@ -976,5 +1083,58 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  recsContainer: {
+    padding: 20,
+  },
+  recsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recsViewAll: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  recsViewAllText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  recCard: {
+    width: 120,
+    marginRight: 12,
+  },
+  recCover: {
+    width: 120,
+    height: 170,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: 8,
+  },
+  recCoverPlaceholder: {
+    width: 120,
+    height: 170,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recCoverPlaceholderText: {
+    fontSize: 32,
+  },
+  recTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  recMeta: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 })

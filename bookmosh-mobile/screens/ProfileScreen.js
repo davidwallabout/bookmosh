@@ -39,6 +39,8 @@ export default function ProfileScreen({ user, onSignOut }) {
   const [discoverResults, setDiscoverResults] = useState([])
   const [discoverSearching, setDiscoverSearching] = useState(false)
   const discoverTimeoutRef = useRef(null)
+  const [lists, setLists] = useState([])
+  const [listItemCounts, setListItemCounts] = useState({})
 
   const isCoverUrl = (value) => {
     const v = (value ?? '').toString().trim()
@@ -55,6 +57,12 @@ export default function ProfileScreen({ user, onSignOut }) {
   useEffect(() => {
     loadUserData()
   }, [])
+
+  useEffect(() => {
+    if (currentUser) {
+      loadLists()
+    }
+  }, [currentUser?.id])
 
   const loadUserData = async () => {
     try {
@@ -155,6 +163,47 @@ export default function ProfileScreen({ user, onSignOut }) {
       }
     } catch (error) {
       console.error('Load user data error:', error)
+    }
+  }
+
+  const loadLists = async () => {
+    if (!currentUser) return
+
+    try {
+      const { data, error } = await supabase
+        .from('lists')
+        .select('*')
+        .eq('owner_id', currentUser.id)
+        .order('updated_at', { ascending: false })
+
+      if (error) throw error
+      const nextLists = data || []
+      setLists(nextLists)
+
+      const listIds = nextLists.map((l) => l.id).filter(Boolean)
+      if (listIds.length > 0) {
+        const { data: items, error: itemsErr } = await supabase
+          .from('list_items')
+          .select('list_id')
+          .in('list_id', listIds)
+          .limit(2000)
+
+        if (itemsErr) {
+          setListItemCounts({})
+        } else {
+          const counts = {}
+          for (const it of items || []) {
+            const k = it.list_id
+            if (!k) continue
+            counts[k] = (counts[k] || 0) + 1
+          }
+          setListItemCounts(counts)
+        }
+      } else {
+        setListItemCounts({})
+      }
+    } catch (error) {
+      console.error('Load lists error:', error)
     }
   }
 
@@ -608,7 +657,7 @@ export default function ProfileScreen({ user, onSignOut }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => navigateToTab('Pits')}
+            onPress={() => navigation.navigate('Community', { initialTab: 'pits' })}
           >
             <Text style={styles.statValue}>{stats.pits}</Text>
             <Text style={styles.statLabel}>Pits</Text>
@@ -646,6 +695,55 @@ export default function ProfileScreen({ user, onSignOut }) {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.listsHeaderRow}>
+            <Text style={styles.sectionTitle}>MY LISTS</Text>
+            <View style={styles.listsHeaderActions}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ListsScreen')}
+                style={styles.viewAllButton}
+              >
+                <Text style={styles.viewAllText}>View All →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ListsScreen', { openCreate: true })}
+                style={styles.addListButton}
+              >
+                <Text style={styles.addListButtonText}>＋</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {lists.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {lists.map((list) => (
+                <TouchableOpacity
+                  key={list.id}
+                  style={styles.listCard}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('ListDetailScreen', { listId: list.id })}
+                >
+                  <View style={styles.listCardContent}>
+                    <Text style={styles.listCardTitle} numberOfLines={2}>
+                      {list.title}
+                    </Text>
+                    <Text style={styles.listCardCount}>
+                      {(listItemCounts[list.id] || 0)} books
+                    </Text>
+                    {list.description && (
+                      <Text style={styles.listCardDescription} numberOfLines={2}>
+                        {list.description}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyText}>No lists yet. Tap ＋ to create one.</Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1375,5 +1473,74 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  listsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  listsHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewAllButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  viewAllText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addListButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addListButtonText: {
+    color: '#3b82f6',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  listCard: {
+    width: 180,
+    marginRight: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+  },
+  listCardContent: {
+    gap: 6,
+  },
+  listCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  listCardCount: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  listCardDescription: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    lineHeight: 16,
+  },
+  emptyText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 12,
   },
 })
