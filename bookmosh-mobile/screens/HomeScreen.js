@@ -560,54 +560,35 @@ export default function HomeScreen({ user }) {
           </View>
 
           {recommendationsLoading ? (
-            <View style={styles.recommendationsLoadingRow}>
-              <ActivityIndicator size="small" color="#3b82f6" />
-              <Text style={styles.recommendationsLoadingText}>Loading...</Text>
-            </View>
+            <ActivityIndicator size="small" color="#3b82f6" style={{ marginVertical: 12 }} />
           ) : recommendations.length > 0 ? (
-            <View style={styles.recommendationsFeed}>
-              {recommendations.slice(0, 20).map((rec) => {
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {recommendations.slice(0, 10).map((rec) => {
                 const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
                 const headline = isSent
-                  ? `You recommended to @${rec.recipient_username}`
-                  : `@${rec.sender_username} recommended to you`
+                  ? `To @${rec.recipient_username}`
+                  : `From @${rec.sender_username}`
 
                 return (
                   <TouchableOpacity
                     key={rec.id}
-                    style={styles.recommendationCard}
-                    activeOpacity={0.8}
+                    style={styles.recCarouselCard}
+                    activeOpacity={0.7}
                     onPress={() => openRecommendation(rec)}
                   >
-                    <Text style={styles.recommendationHeadline}>{headline}</Text>
-                    <View style={styles.recommendationBookRow}>
-                      {rec.book_cover ? (
-                        <Image source={{ uri: rec.book_cover }} style={styles.recommendationCover} />
-                      ) : (
-                        <View style={styles.recommendationCoverPlaceholder}>
-                          <Text style={styles.recommendationCoverPlaceholderText}>📚</Text>
-                        </View>
-                      )}
-                      <View style={styles.recommendationBookInfo}>
-                        <Text style={styles.recommendationBookTitle} numberOfLines={2}>
-                          {rec.book_title}
-                        </Text>
-                        {rec.book_author ? (
-                          <Text style={styles.recommendationBookAuthor} numberOfLines={1}>
-                            {rec.book_author}
-                          </Text>
-                        ) : null}
-                        {rec.note ? (
-                          <Text style={styles.recommendationNote} numberOfLines={2}>
-                            {rec.note}
-                          </Text>
-                        ) : null}
+                    {rec.book_cover ? (
+                      <Image source={{ uri: rec.book_cover }} style={styles.bookCover} />
+                    ) : (
+                      <View style={styles.bookCoverPlaceholder}>
+                        <Text style={styles.placeholderText}>📚</Text>
                       </View>
-                    </View>
+                    )}
+                    <Text style={styles.bookCardTitle} numberOfLines={2}>{rec.book_title}</Text>
+                    <Text style={styles.recCarouselHeadline} numberOfLines={1}>{headline}</Text>
                   </TouchableOpacity>
                 )
               })}
-            </View>
+            </ScrollView>
           ) : (
             <Text style={styles.emptyText}>No recommendations yet.</Text>
           )}
@@ -1012,5 +993,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.7)',
+  },
+  recCarouselCard: {
+    width: 120,
+    marginRight: 15,
+    marginLeft: 20,
+  },
+  recCarouselHeadline: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginTop: 2,
   },
 })
