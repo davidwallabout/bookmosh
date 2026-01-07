@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   Animated,
+  PanResponder,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -84,6 +85,50 @@ export default function BookDetailScreen({ user }) {
 
   const [buttonFeedback, setButtonFeedback] = useState({}) // { buttonKey: 'check' | 'x' }
   const feedbackOpacity = useRef(new Animated.Value(0)).current
+
+  const starsContainerRef = useRef(null)
+  const starsLayoutRef = useRef({ x: 0, width: 0 })
+  const pendingRatingRef = useRef(0)
+  const saveRatingRef = useRef(null)
+
+  const calculateRatingFromPageX = (pageX) => {
+    const { x, width } = starsLayoutRef.current
+    if (!width) return 0
+
+    const relativeX = pageX - x
+    const starWidth = width / 5
+    const rawRating = relativeX / starWidth
+    const rounded = Math.round(rawRating * 2) / 2
+    return Math.max(0, Math.min(5, rounded))
+  }
+
+  const ratingPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (evt) => {
+        const newRating = calculateRatingFromPageX(evt.nativeEvent.pageX)
+        pendingRatingRef.current = newRating
+        setRating(newRating)
+      },
+      onPanResponderMove: (evt) => {
+        const newRating = calculateRatingFromPageX(evt.nativeEvent.pageX)
+        pendingRatingRef.current = newRating
+        setRating(newRating)
+      },
+      onPanResponderRelease: () => {
+        if (saveRatingRef.current) {
+          saveRatingRef.current(pendingRatingRef.current)
+        }
+      },
+      onPanResponderTerminate: () => {
+        if (saveRatingRef.current) {
+          saveRatingRef.current(pendingRatingRef.current)
+        }
+      },
+    })
+  ).current
 
   const showButtonFeedback = (buttonKey, type) => {
     setButtonFeedback({ [buttonKey]: type })
@@ -489,6 +534,8 @@ export default function BookDetailScreen({ user }) {
     await updateBookRow({ rating: value })
   }
 
+  saveRatingRef.current = handleRatingChange
+
   const scheduleDebouncedUpdate = (updates) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
@@ -853,22 +900,21 @@ export default function BookDetailScreen({ user }) {
             >
               <Text style={styles.clearRatingText}>✕</Text>
             </TouchableOpacity>
-            <View style={styles.starsContainer}>
+            <View
+              ref={starsContainerRef}
+              style={styles.starsContainer}
+              onLayout={() => {
+                starsContainerRef.current?.measureInWindow((x, y, width) => {
+                  starsLayoutRef.current = { x, width }
+                })
+              }}
+              {...ratingPanResponder.panHandlers}
+            >
               {[1, 2, 3, 4, 5].map((star) => {
                 const isFull = rating >= star
                 const isHalf = !isFull && rating >= star - 0.5
                 return (
                   <View key={star} style={styles.starWrapper}>
-                    <TouchableOpacity
-                      style={styles.halfStarTouchLeft}
-                      onPress={() => handleRatingChange(star - 0.5)}
-                      activeOpacity={0.7}
-                    />
-                    <TouchableOpacity
-                      style={styles.halfStarTouchRight}
-                      onPress={() => handleRatingChange(star)}
-                      activeOpacity={0.7}
-                    />
                     <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} size={32} />
                   </View>
                 )
