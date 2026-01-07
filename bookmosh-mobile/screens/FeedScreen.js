@@ -37,7 +37,7 @@ const formatTimeAgo = (dateString) => {
   return date.toLocaleDateString()
 }
 
-export default function FeedScreen({ user }) {
+export default function FeedScreen({ user, setFeedBadgeCount }) {
   const navigation = useNavigation()
   const [feedItems, setFeedItems] = useState([])
   const [feedLikes, setFeedLikes] = useState({})
@@ -61,6 +61,12 @@ export default function FeedScreen({ user }) {
   useEffect(() => {
     if (currentUser) {
       fetchFeed()
+      // Clear badge when viewing feed
+      if (setFeedBadgeCount) {
+        setFeedBadgeCount(0)
+        const lastViewedKey = `feed_last_viewed_${user.id}`
+        localStorage.setItem(lastViewedKey, new Date().toISOString())
+      }
     }
   }, [currentUser, feedScope])
 

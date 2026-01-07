@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { ActivityIndicator, View, StyleSheet, Image, Animated } from 'react-native'
+import { ActivityIndicator, View, StyleSheet, Image, Animated, Text } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createStackNavigator } from '@react-navigation/stack'
@@ -128,7 +128,7 @@ const TabIcon = ({ name, color, size }) => (
   <SvgXml xml={PIXEL_ICONS[name](color)} width={size} height={size} />
 )
 
-function MainTabs({ user, onSignOut }) {
+function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -169,10 +169,19 @@ function MainTabs({ user, onSignOut }) {
       />
       <Tab.Screen
         name="Feed"
-        children={() => <FeedScreen user={user} />}
+        children={() => <FeedScreen user={user} setFeedBadgeCount={setFeedBadgeCount} />}
         options={{
           tabBarLabel: 'Feed',
           tabBarIcon: ({ color, size }) => <TabIcon name="feed" color={color} size={size} />,
+          tabBarBadge: feedBadgeCount > 0 ? feedBadgeCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#ef4444',
+            color: '#fff',
+            fontSize: 10,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+          },
         }}
       />
       <Tab.Screen
@@ -187,11 +196,11 @@ function MainTabs({ user, onSignOut }) {
   )
 }
 
-function MainStack({ user, onSignOut }) {
+function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs">
-        {() => <MainTabs user={user} onSignOut={onSignOut} />}
+        {() => <MainTabs user={user} onSignOut={onSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} />}
       </Stack.Screen>
       <Stack.Screen name="ProfileScreen">
         {() => <ProfileScreen user={user} onSignOut={onSignOut} />}
@@ -378,6 +387,7 @@ function LoadingScreen() {
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [feedBadgeCount, setFeedBadgeCount] = useState(0)
 
   useEffect(() => {
     const loadApp = async () => {
@@ -406,6 +416,56 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Check for new feed activity
+  useEffect(() => {
+    if (!session?.user) return
+
+    const checkFeedActivity = async () => {
+      try {
+        const lastViewedKey = `feed_last_viewed_${session.user.id}`
+        const lastViewed = localStorage.getItem(lastViewedKey) || new Date(0).toISOString()
+
+        // Count new likes on user's books
+        const { data: likesData } = await supabase
+          .from('feed_likes')
+          .select('id, book_id')
+          .gte('created_at', lastViewed)
+
+        // Get user's book IDs
+        const { data: userBooks } = await supabase
+          .from('bookmosh_books')
+          .select('id')
+          .eq('owner_id', session.user.id)
+
+        const userBookIds = new Set(userBooks?.map(b => b.id) || [])
+        const newLikes = likesData?.filter(like => userBookIds.has(like.book_id)) || []
+
+        // Count new comments on user's reviews
+        const { data: commentsData } = await supabase
+          .from('review_comments')
+          .select('id, review_id')
+          .gte('created_at', lastViewed)
+
+        const { data: userReviews } = await supabase
+          .from('reviews')
+          .select('id')
+          .eq('reviewer_id', session.user.id)
+
+        const userReviewIds = new Set(userReviews?.map(r => r.id) || [])
+        const newComments = commentsData?.filter(comment => userReviewIds.has(comment.review_id)) || []
+
+        setFeedBadgeCount(newLikes.length + newComments.length)
+      } catch (error) {
+        console.error('[BADGE] Failed to check feed activity:', error)
+      }
+    }
+
+    checkFeedActivity()
+    const interval = setInterval(checkFeedActivity, 60000) // Check every minute
+
+    return () => clearInterval(interval)
+  }, [session?.user])
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
   }
@@ -418,7 +478,7 @@ export default function App() {
     <NavigationContainer>
       <StatusBar style="light" />
       {session && session.user ? (
-        <MainStack user={session.user} onSignOut={handleSignOut} />
+        <MainStack user={session.user} onSignOut={handleSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} />
       ) : (
         <AuthScreen onAuthSuccess={() => {}} />
       )}
