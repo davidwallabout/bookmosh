@@ -32,45 +32,52 @@ serve(async (req: Request) => {
       )
     }
 
-    // Auth check: allow service role key, anon key, or valid user JWT
+    // Auth check: allow service role key, anon key (via apikey header), or valid user JWT
     // This supports both custom auth (anon key) and Supabase Auth (user JWT)
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization')
     const apikeyHeader = req.headers.get('apikey')
     
-    // Allow if using service role key (for DB triggers)
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    // Check if using anon key via apikey header (supabase-js sends this automatically)
+    const hasValidAnonKey = apikeyHeader === supabaseAnonKey
+    
+    // Check if using service role key via bearer token (for DB triggers)
+    let hasValidServiceKey = false
+    let bearerToken = ''
     if (authHeader?.toLowerCase().startsWith('bearer ')) {
-      const bearerToken = authHeader.slice('bearer '.length)
-      if (serviceRoleKey && bearerToken === serviceRoleKey) {
-        // Valid service role key - allow
-      } else if (bearerToken === supabaseAnonKey || apikeyHeader === supabaseAnonKey) {
-        // Valid anon key - allow (for custom auth apps)
-      } else {
-        // Try to validate as Supabase Auth user JWT
-        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-          global: {
-            headers: {
-              Authorization: authHeader,
-            },
+      bearerToken = authHeader.slice('bearer '.length)
+      hasValidServiceKey = Boolean(serviceRoleKey && bearerToken === serviceRoleKey)
+    }
+    
+    // If we have a valid anon key or service role key, allow the request
+    if (hasValidAnonKey || hasValidServiceKey) {
+      // Authorized - continue to process request
+    } else if (authHeader?.toLowerCase().startsWith('bearer ')) {
+      // Try to validate as Supabase Auth user JWT
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: {
+            Authorization: authHeader,
           },
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        })
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
 
-        const { data: userData, error: userError } = await supabase.auth.getUser()
-        if (userError || !userData?.user) {
-          return new Response(
-            JSON.stringify({ error: 'Unauthorized: invalid token' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          )
-        }
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData?.user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized: invalid token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
       }
     } else {
-      // No auth header - reject
+      // No valid auth - reject
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: missing authorization header' }),
+        JSON.stringify({ error: 'Unauthorized: missing valid authorization' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
