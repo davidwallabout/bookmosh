@@ -1225,6 +1225,7 @@ function App() {
 
   const modalStarsRef = useRef(null)
   const pendingModalRatingRef = useRef(0)
+  const modalRatingRafRef = useRef(null)
 
   const calculateRatingFromClientX = (clientX, rect) => {
     if (!rect?.width) return 0
@@ -5432,9 +5433,17 @@ function App() {
     setModalRating(value)
   }
 
-  const commitModalRating = (value) => {
-    setModalRatingValue(value)
-    if (selectedBook) updateBook(selectedBook.title, { rating: value })
+  const setModalRatingValueThrottled = (value) => {
+    pendingModalRatingRef.current = value
+    if (modalRatingRafRef.current) return
+    modalRatingRafRef.current = requestAnimationFrame(() => {
+      modalRatingRafRef.current = null
+      setModalRating(pendingModalRatingRef.current)
+    })
+  }
+
+  const commitModalRating = () => {
+    if (selectedBook) updateBook(selectedBook.title, { rating: pendingModalRatingRef.current })
   }
 
   const handleDeleteBook = async (title) => {
@@ -9361,19 +9370,17 @@ function App() {
                     onPointerLeave={() => {
                       if (draggingRating === 'modal') {
                         setDraggingRating(null)
-                        commitModalRating(pendingModalRatingRef.current)
-                      }
-                    }}
-                    onPointerUp={() => {
-                      if (draggingRating === 'modal') {
-                        setDraggingRating(null)
-                        commitModalRating(pendingModalRatingRef.current)
+                        commitModalRating()
                       }
                     }}
                   >
                     <button
                       type="button"
-                      onClick={() => commitModalRating(0)}
+                      onClick={() => {
+                        pendingModalRatingRef.current = 0
+                        setModalRating(0)
+                        commitModalRating()
+                      }}
                       className="mr-2 text-sm text-white/30 hover:text-white/60 transition"
                     >
                       ✕
@@ -9396,12 +9403,24 @@ function App() {
                         if (draggingRating !== 'modal') return
                         const rect = modalStarsRef.current?.getBoundingClientRect()
                         const next = calculateRatingFromClientX(e.clientX, rect)
-                        setModalRatingValue(next)
+                        setModalRatingValueThrottled(next)
+                      }}
+                      onPointerUp={(e) => {
+                        if (draggingRating !== 'modal') return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDraggingRating(null)
+                        if (typeof e.currentTarget?.releasePointerCapture === 'function') {
+                          try {
+                            e.currentTarget.releasePointerCapture(e.pointerId)
+                          } catch {}
+                        }
+                        commitModalRating()
                       }}
                       onPointerCancel={() => {
                         if (draggingRating !== 'modal') return
                         setDraggingRating(null)
-                        commitModalRating(pendingModalRatingRef.current)
+                        commitModalRating()
                       }}
                     >
                       {[1, 2, 3, 4, 5].map((star) => {
