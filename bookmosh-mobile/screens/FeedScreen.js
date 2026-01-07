@@ -108,21 +108,46 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
         query = query.in('owner_username', friends)
       }
 
-      const { data, error } = await query
-      if (error) throw error
+      const [{ data: eventsData, error: eventsError }, { data: recData, error: recError }] = await Promise.all([
+        query,
+        supabase
+          .from('recommendations')
+          .select('*')
+          .or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ])
 
-      const items = data || []
+      if (eventsError) throw eventsError
+      if (recError) throw recError
+
+      const mappedEvents = (eventsData || []).map((e) => ({ ...e, item_type: 'book_event' }))
+      const mappedRecs = (recData || []).map((r) => ({
+        ...r,
+        item_type: 'recommendation',
+        owner_username: r.sender_username,
+        event_type: r.sender_id === currentUser.id ? 'recommendation_sent' : 'recommendation_received',
+        book_title: r.book_title,
+        book_author: r.book_author,
+        book_cover: r.book_cover,
+      }))
+
+      const items = [...mappedEvents, ...mappedRecs]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 50)
+
       setFeedItems(items)
 
-      if (items.length > 0) {
-        const bookIds = items.map((i) => i.id).filter(Boolean)
+      const bookEventIds = items.filter((i) => i.item_type === 'book_event').map((i) => i.id).filter(Boolean)
+      if (bookEventIds.length > 0) {
         const { data: likesData } = await supabase
           .from('feed_likes')
           .select('book_id, user_id, username')
-          .in('book_id', bookIds)
+          .in('book_id', bookEventIds)
 
         const likesMap = {}
         for (const item of items) {
+          if (item.item_type !== 'book_event') continue
           const itemLikes = (likesData || []).filter((l) => l.book_id === item.id)
           likesMap[item.id] = {
             count: itemLikes.length,
@@ -342,12 +367,16 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
   }
 
   const renderFeedItem = ({ item }) => {
-    const likes = feedLikes[item.id] || { count: 0, likedByMe: false }
+    const likes = item.item_type === 'book_event' ? (feedLikes[item.id] || { count: 0, likedByMe: false }) : { count: 0, likedByMe: false }
     const eventText =
       item.event_type === 'created'
         ? 'added'
         : item.event_type === 'tags_updated'
         ? 'updated'
+        : item.event_type === 'recommendation_sent'
+        ? `recommended to @${item.recipient_username}`
+        : item.event_type === 'recommendation_received'
+        ? 'recommended to you'
         : item.event_type === 'review_created'
         ? 'reviewed'
         : item.event_type === 'review_updated'
@@ -358,7 +387,13 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       <TouchableOpacity 
         style={styles.feedItem}
         activeOpacity={0.8}
-        onPress={() => openReviewThread(item)}
+        onPress={() => {
+          if (item.item_type === 'recommendation') {
+            navigation.navigate('RecommendationsScreen', { selectedRecommendation: item })
+            return
+          }
+          openReviewThread(item)
+        }}
       >
         <View style={styles.feedHeader}>
           <View style={styles.feedHeaderLeft}>
@@ -387,22 +422,24 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
           </View>
         </View>
 
-        <View style={styles.actionsRow}>
-          <TouchableOpacity 
-            style={styles.likeButton} 
-            onPress={(e) => {
-              e.stopPropagation()
-              toggleLike(item.id)
-            }}
-          >
-            <Text style={[styles.likeIcon, likes.likedByMe && styles.liked]}>
-              {likes.likedByMe ? '❤️' : '🤍'}
-            </Text>
-            {likes.count > 0 && <Text style={styles.likeCount}>{likes.count}</Text>}
-          </TouchableOpacity>
+        {item.item_type !== 'recommendation' && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity 
+              style={styles.likeButton} 
+              onPress={(e) => {
+                e.stopPropagation()
+                toggleLike(item.id)
+              }}
+            >
+              <Text style={[styles.likeIcon, likes.likedByMe && styles.liked]}>
+                {likes.likedByMe ? '❤️' : '🤍'}
+              </Text>
+              {likes.count > 0 && <Text style={styles.likeCount}>{likes.count}</Text>}
+            </TouchableOpacity>
 
-          <Text style={styles.commentButtonText}>💬 Tap to comment</Text>
-        </View>
+            <Text style={styles.commentButtonText}>💬 Tap to comment</Text>
+          </View>
+        )}
       </TouchableOpacity>
     )
   }
