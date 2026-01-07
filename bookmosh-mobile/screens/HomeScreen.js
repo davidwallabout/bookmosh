@@ -52,6 +52,12 @@ export default function HomeScreen({ user }) {
     loadRecommendations()
   }, [currentUser?.id, isFocused])
 
+  useEffect(() => {
+    if (isFocused) {
+      loadBooks()
+    }
+  }, [isFocused])
+
   const loadCurrentUser = async () => {
     try {
       console.log('[USER] Loading current user for auth id:', user.id)
