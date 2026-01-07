@@ -21,6 +21,7 @@ import ReadByYearScreen from './screens/ReadByYearScreen'
 import ListsScreen from './screens/ListsScreen'
 import ListDetailScreen from './screens/ListDetailScreen'
 import RecommendationsScreen from './screens/RecommendationsScreen'
+import MyReviewsScreen from './screens/MyReviewsScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
@@ -226,6 +227,9 @@ function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
       </Stack.Screen>
       <Stack.Screen name="RecommendationsScreen">
         {() => <RecommendationsScreen user={user} />}
+      </Stack.Screen>
+      <Stack.Screen name="MyReviewsScreen">
+        {() => <MyReviewsScreen user={user} />}
       </Stack.Screen>
     </Stack.Navigator>
   )

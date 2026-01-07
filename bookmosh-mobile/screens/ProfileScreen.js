@@ -20,7 +20,7 @@ import { PROFILE_ICONS, getProfileAvatarUrl } from '../constants/avatars'
 export default function ProfileScreen({ user, onSignOut }) {
   const navigation = useNavigation()
   const [currentUser, setCurrentUser] = useState(null)
-  const [stats, setStats] = useState({ books: 0, friends: 0, pits: 0 })
+  const [stats, setStats] = useState({ books: 0, friends: 0, pits: 0, reviews: 0 })
   const [readThisYearCount, setReadThisYearCount] = useState(0)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [showUsernameEditor, setShowUsernameEditor] = useState(false)
@@ -139,12 +139,18 @@ export default function ProfileScreen({ user, onSignOut }) {
           .contains('participants_ids', [user.id])
           .eq('archived', false)
 
+        const { data: reviews } = await supabase
+          .from('book_reviews')
+          .select('id')
+          .eq('owner_id', user.id)
+
         setReadThisYearCount(readThisYear?.length || 0)
 
         setStats({
           books: books?.length || 0,
           friends: userData?.friends?.length || 0,
           pits: moshes?.length || 0,
+          reviews: reviews?.length || 0,
         })
       }
     } catch (error) {
@@ -602,6 +608,13 @@ export default function ProfileScreen({ user, onSignOut }) {
           >
             <Text style={styles.statValue}>{stats.pits}</Text>
             <Text style={styles.statLabel}>Pits</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.statCard}
+            onPress={() => navigation.navigate('MyReviewsScreen')}
+          >
+            <Text style={styles.statValue}>{stats.reviews}</Text>
+            <Text style={styles.statLabel}>Reviews</Text>
           </TouchableOpacity>
         </View>
 
