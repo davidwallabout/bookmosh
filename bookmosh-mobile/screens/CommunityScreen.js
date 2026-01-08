@@ -38,6 +38,12 @@ export default function CommunityScreen({ user }) {
   const [inviteSending, setInviteSending] = useState(false)
   const [recommendations, setRecommendations] = useState([])
   const [recommendationsLoading, setRecommendationsLoading] = useState(false)
+  const [showPitSettings, setShowPitSettings] = useState(false)
+  const [editingPitName, setEditingPitName] = useState(false)
+  const [pitNameDraft, setPitNameDraft] = useState('')
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [addMemberQuery, setAddMemberQuery] = useState('')
+  const [addMemberResults, setAddMemberResults] = useState([])
 
   useEffect(() => {
     loadCurrentUser()
@@ -339,6 +345,145 @@ export default function CommunityScreen({ user }) {
   const closeMosh = () => {
     setActiveMosh(null)
     setMessages([])
+    setShowPitSettings(false)
+    setEditingPitName(false)
+    setShowAddMember(false)
+    setAddMemberQuery('')
+    setAddMemberResults([])
+  }
+
+  const openPitSettings = () => {
+    setPitNameDraft(activeMosh?.title || activeMosh?.mosh_title || '')
+    setShowPitSettings(true)
+  }
+
+  const savePitName = async () => {
+    if (!activeMosh?.id || !pitNameDraft.trim()) return
+
+    try {
+      const { error } = await supabase
+        .from('moshes')
+        .update({ title: pitNameDraft.trim(), updated_at: new Date().toISOString() })
+        .eq('id', activeMosh.id)
+
+      if (error) throw error
+      setActiveMosh({ ...activeMosh, title: pitNameDraft.trim() })
+      setEditingPitName(false)
+      loadMoshes()
+    } catch (error) {
+      console.error('Update pit name error:', error)
+      Alert.alert('Error', 'Failed to update pit name')
+    }
+  }
+
+  const searchFriendsToAdd = async () => {
+    if (!addMemberQuery.trim() || !currentUser) return
+
+    try {
+      const currentParticipants = activeMosh?.participants || []
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, avatar_icon, avatar_url')
+        .ilike('username', `%${addMemberQuery.trim()}%`)
+        .limit(10)
+
+      if (error) throw error
+      // Filter out users already in the pit
+      const filtered = (data || []).filter(
+        (u) => !currentParticipants.includes(u.id) && u.id !== currentUser.id
+      )
+      setAddMemberResults(filtered)
+    } catch (error) {
+      console.error('Search friends error:', error)
+    }
+  }
+
+  const addMemberToPit = async (userToAdd) => {
+    if (!activeMosh?.id || !userToAdd?.id) return
+
+    try {
+      const currentParticipants = activeMosh?.participants || []
+      const currentUsernames = activeMosh?.participants_usernames || []
+
+      if (currentParticipants.includes(userToAdd.id)) {
+        Alert.alert('Already Added', 'This user is already in the pit')
+        return
+      }
+
+      const newParticipants = [...currentParticipants, userToAdd.id]
+      const newUsernames = [...currentUsernames, userToAdd.username]
+
+      const { error } = await supabase
+        .from('moshes')
+        .update({
+          participants: newParticipants,
+          participants_usernames: newUsernames,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', activeMosh.id)
+
+      if (error) throw error
+
+      setActiveMosh({
+        ...activeMosh,
+        participants: newParticipants,
+        participants_usernames: newUsernames,
+      })
+      setAddMemberQuery('')
+      setAddMemberResults([])
+      setShowAddMember(false)
+      Alert.alert('Success', `Added @${userToAdd.username} to the pit`)
+      loadMoshes()
+    } catch (error) {
+      console.error('Add member error:', error)
+      Alert.alert('Error', 'Failed to add member')
+    }
+  }
+
+  const removeMemberFromPit = async (userId, username) => {
+    if (!activeMosh?.id || !userId) return
+
+    Alert.alert(
+      'Remove Member',
+      `Remove @${username} from this pit?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const currentParticipants = activeMosh?.participants || []
+              const currentUsernames = activeMosh?.participants_usernames || []
+
+              const newParticipants = currentParticipants.filter((id) => id !== userId)
+              const newUsernames = currentUsernames.filter((u) => u !== username)
+
+              const { error } = await supabase
+                .from('moshes')
+                .update({
+                  participants: newParticipants,
+                  participants_usernames: newUsernames,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', activeMosh.id)
+
+              if (error) throw error
+
+              setActiveMosh({
+                ...activeMosh,
+                participants: newParticipants,
+                participants_usernames: newUsernames,
+              })
+              loadMoshes()
+            } catch (error) {
+              console.error('Remove member error:', error)
+              Alert.alert('Error', 'Failed to remove member')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const viewFriendProfile = (friend) => {
@@ -470,13 +615,114 @@ export default function CommunityScreen({ user }) {
           <TouchableOpacity onPress={closeMosh}>
             <Text style={styles.backButton}>← Back</Text>
           </TouchableOpacity>
-          <View style={styles.chatHeaderInfo}>
+          <TouchableOpacity style={styles.chatHeaderInfo} onPress={openPitSettings}>
             <Text style={styles.chatTitle}>{activeMosh.title}</Text>
             <Text style={styles.chatBook}>
               {activeMosh.book_title} by {activeMosh.book_author}
             </Text>
-          </View>
+            <Text style={styles.chatSettingsHint}>Tap to manage pit</Text>
+          </TouchableOpacity>
         </View>
+
+        {showPitSettings && (
+          <View style={styles.pitSettingsPanel}>
+            <View style={styles.pitSettingsHeader}>
+              <Text style={styles.pitSettingsTitle}>Pit Settings</Text>
+              <TouchableOpacity onPress={() => setShowPitSettings(false)}>
+                <Text style={styles.pitSettingsClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Rename Pit */}
+            <View style={styles.pitSettingsSection}>
+              <Text style={styles.pitSettingsLabel}>Pit Name</Text>
+              {editingPitName ? (
+                <View style={styles.pitNameEditRow}>
+                  <TextInput
+                    style={styles.pitNameInput}
+                    value={pitNameDraft}
+                    onChangeText={setPitNameDraft}
+                    placeholder="Enter pit name"
+                    placeholderTextColor="#666"
+                    autoFocus
+                  />
+                  <TouchableOpacity style={styles.pitNameSaveBtn} onPress={savePitName}>
+                    <Text style={styles.pitNameSaveBtnText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditingPitName(false)}>
+                    <Text style={styles.pitNameCancelBtn}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => setEditingPitName(true)}>
+                  <Text style={styles.pitNameValue}>{activeMosh.title} ✎</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Members */}
+            <View style={styles.pitSettingsSection}>
+              <View style={styles.pitMembersHeader}>
+                <Text style={styles.pitSettingsLabel}>
+                  Members ({activeMosh.participants_usernames?.length || 0})
+                </Text>
+                <TouchableOpacity
+                  style={styles.addMemberBtn}
+                  onPress={() => setShowAddMember(!showAddMember)}
+                >
+                  <Text style={styles.addMemberBtnText}>+ Add</Text>
+                </TouchableOpacity>
+              </View>
+
+              {showAddMember && (
+                <View style={styles.addMemberSection}>
+                  <View style={styles.addMemberInputRow}>
+                    <TextInput
+                      style={styles.addMemberInput}
+                      value={addMemberQuery}
+                      onChangeText={setAddMemberQuery}
+                      placeholder="Search username..."
+                      placeholderTextColor="#666"
+                      onSubmitEditing={searchFriendsToAdd}
+                    />
+                    <TouchableOpacity style={styles.addMemberSearchBtn} onPress={searchFriendsToAdd}>
+                      <Text style={styles.addMemberSearchBtnText}>Search</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {addMemberResults.map((u) => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={styles.addMemberResult}
+                      onPress={() => addMemberToPit(u)}
+                    >
+                      <Text style={styles.addMemberResultText}>@{u.username}</Text>
+                      <Text style={styles.addMemberResultAdd}>+ Add</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.membersList}>
+                {(activeMosh.participants_usernames || []).map((username, idx) => {
+                  const participantId = activeMosh.participants?.[idx]
+                  const isCurrentUser = participantId === currentUser?.id
+                  return (
+                    <View key={username} style={styles.memberItem}>
+                      <Text style={styles.memberName}>@{username}</Text>
+                      {!isCurrentUser && (
+                        <TouchableOpacity
+                          onPress={() => removeMemberFromPit(participantId, username)}
+                        >
+                          <Text style={styles.memberRemove}>Remove</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )
+                })}
+              </View>
+            </View>
+          </View>
+        )}
 
         <FlatList
           ref={flatListRef}
@@ -1136,5 +1382,162 @@ const styles = StyleSheet.create({
   recMeta: {
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.5)',
+  },
+  chatSettingsHint: {
+    fontSize: 10,
+    color: 'rgba(59, 130, 246, 0.7)',
+    marginTop: 4,
+  },
+  pitSettingsPanel: {
+    backgroundColor: 'rgba(11, 18, 37, 0.98)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+  },
+  pitSettingsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  pitSettingsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  pitSettingsClose: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  pitSettingsSection: {
+    marginBottom: 16,
+  },
+  pitSettingsLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  pitNameValue: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  pitNameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pitNameInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 10,
+    color: '#fff',
+    fontSize: 15,
+  },
+  pitNameSaveBtn: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  pitNameSaveBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  pitNameCancelBtn: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    padding: 8,
+  },
+  pitMembersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addMemberBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  addMemberBtnText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addMemberSection: {
+    marginTop: 12,
+  },
+  addMemberInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  addMemberInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 10,
+    color: '#fff',
+    fontSize: 14,
+  },
+  addMemberSearchBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  addMemberSearchBtnText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addMemberResult: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 6,
+  },
+  addMemberResultText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  addMemberResultAdd: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  membersList: {
+    marginTop: 12,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  memberName: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  memberRemove: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
 })
