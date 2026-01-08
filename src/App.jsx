@@ -10048,7 +10048,7 @@ function App() {
           </div>
         )}
 
-        {selectedBook && !isBookPage && (
+        {false && selectedBook && !isBookPage && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
             <div className="absolute inset-0 bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
               <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
