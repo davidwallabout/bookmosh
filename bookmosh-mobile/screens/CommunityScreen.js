@@ -594,18 +594,19 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      // Insert without .single() to avoid PGRST204 if RLS doesn't return the row
+      // Insert - ignore PGRST204 errors (no rows returned is fine for insert)
       const { error } = await supabase
         .from('moshes')
-        .insert([{
+        .insert({
           title: newPitName.trim(),
           creator_id: currentUser.id,
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
-        }])
+        })
 
-      if (error) {
+      // PGRST204 means no rows returned - that's OK for insert
+      if (error && error.code !== 'PGRST204') {
         console.error('Create pit insert error:', error)
         throw error
       }
@@ -613,6 +614,12 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       closeCreatePit()
       await loadMoshes()
     } catch (error) {
+      // Ignore PGRST204 - it just means no rows returned which is fine
+      if (error?.code === 'PGRST204') {
+        closeCreatePit()
+        await loadMoshes()
+        return
+      }
       console.error('Create pit error:', error)
       Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
     } finally {

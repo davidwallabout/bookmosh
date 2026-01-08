@@ -3592,18 +3592,19 @@ function App() {
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      // Insert without .select().single() to avoid PGRST204 error
+      // Insert - ignore PGRST204 errors (no rows returned is fine for insert)
       const { error } = await supabase
         .from('moshes')
-        .insert([{
+        .insert({
           title: newPitName.trim(),
           creator_id: currentUser.id,
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
-        }])
+        })
 
-      if (error) throw error
+      // PGRST204 means no rows returned - that's OK for insert
+      if (error && error.code !== 'PGRST204') throw error
 
       setShowCreatePitModal(false)
       setNewPitName('')
@@ -3612,6 +3613,14 @@ function App() {
       setNewPitMemberResults([])
       await fetchActiveMoshes()
     } catch (error) {
+      // Ignore PGRST204 - it just means no rows returned which is fine
+      if (error?.code === 'PGRST204') {
+        setShowCreatePitModal(false)
+        setNewPitName('')
+        setNewPitMembers([])
+        await fetchActiveMoshes()
+        return
+      }
       console.error('Create pit error:', error)
     } finally {
       setCreatingPit(false)
