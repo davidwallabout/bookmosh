@@ -163,14 +163,23 @@ export default function BookDetailScreen({ user }) {
     if (!currentUser?.id || !book) return
 
     try {
-      // Get friends list
-      const { data: friendships, error: friendsError } = await supabase
+      // Get friends list - query both directions separately to avoid filter issues
+      const { data: friendships1, error: err1 } = await supabase
         .from('friendships')
         .select('user_id, friend_id')
-        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+        .eq('user_id', currentUser.id)
         .eq('status', 'accepted')
 
-      if (friendsError) throw friendsError
+      const { data: friendships2, error: err2 } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .eq('friend_id', currentUser.id)
+        .eq('status', 'accepted')
+
+      if (err1) throw err1
+      if (err2) throw err2
+
+      const friendships = [...(friendships1 || []), ...(friendships2 || [])]
 
       const friendIds = (friendships || []).map((f) =>
         f.user_id === currentUser.id ? f.friend_id : f.user_id

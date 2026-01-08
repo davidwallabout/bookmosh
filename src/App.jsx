@@ -5716,11 +5716,20 @@ function App() {
   const loadFriendsRatingsForBook = async (bookTitle) => {
     if (!currentUser?.id || !bookTitle) return
     try {
-      const { data: friendships } = await supabase
+      // Query both directions separately to avoid .or() filter issues
+      const { data: friendships1 } = await supabase
         .from('friendships')
         .select('user_id, friend_id')
-        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+        .eq('user_id', currentUser.id)
         .eq('status', 'accepted')
+
+      const { data: friendships2 } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .eq('friend_id', currentUser.id)
+        .eq('status', 'accepted')
+
+      const friendships = [...(friendships1 || []), ...(friendships2 || [])]
 
       const friendIds = (friendships || []).map((f) =>
         f.user_id === currentUser.id ? f.friend_id : f.user_id
