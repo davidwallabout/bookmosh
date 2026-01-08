@@ -850,12 +850,14 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
             </Text>
             <Text style={styles.chatSettingsHint}>Tap to manage pit</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.viewSharedBooksBtn} onPress={loadSharedBooks}>
-            <Text style={styles.viewSharedBooksBtnText}>📖</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBookBtn} onPress={openShareBook}>
-            <Text style={styles.shareBookBtnText}>📚+</Text>
-          </TouchableOpacity>
+          <View style={styles.chatHeaderActions}>
+            <TouchableOpacity style={styles.chatHeaderActionBtn} onPress={loadSharedBooks}>
+              <Text style={styles.chatHeaderActionIcon}>📖</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chatHeaderActionBtn} onPress={openShareBook}>
+              <Text style={styles.chatHeaderActionIcon}>+</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Shared Books Modal */}
@@ -2004,6 +2006,25 @@ const styles = StyleSheet.create({
   },
   shareBookBtnText: {
     fontSize: 20,
+  },
+  chatHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatHeaderActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  chatHeaderActionIcon: {
+    fontSize: 16,
+    color: '#fff',
   },
   shareBookModal: {
     position: 'absolute',
