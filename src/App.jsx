@@ -1091,6 +1091,7 @@ function App() {
   const [recommendNote, setRecommendNote] = useState('')
   const [recommendRecipients, setRecommendRecipients] = useState([])
   const [recommendLoading, setRecommendLoading] = useState(false)
+  const [recommendFriendSearch, setRecommendFriendSearch] = useState('')
   const [reviewThread, setReviewThread] = useState(null)
   const [reviewThreadLoading, setReviewThreadLoading] = useState(false)
   const [reviewThreadLikes, setReviewThreadLikes] = useState({ count: 0, likedByMe: false, users: [] })
@@ -8899,6 +8900,7 @@ function App() {
                       setRecommendBookData(null)
                       setRecommendRecipients([])
                       setRecommendNote('')
+                      setRecommendFriendSearch('')
                     }}
                     className="rounded-full border border-white/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
                     title="Create recommendation"
@@ -10343,6 +10345,7 @@ function App() {
                           setRecommendBookData(selectedBook)
                           setRecommendNote('')
                           setRecommendRecipients([])
+                          setRecommendFriendSearch('')
                           setIsRecommendBookOpen(true)
                         }}
                         className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
@@ -10699,8 +10702,17 @@ function App() {
                 <div className="space-y-6">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                     <h3 className="text-sm uppercase tracking-[0.4em] text-white/50 mb-4">Select Friends</h3>
+                    <input
+                      type="text"
+                      value={recommendFriendSearch}
+                      onChange={(e) => setRecommendFriendSearch(e.target.value)}
+                      placeholder="Search friends..."
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none mb-3"
+                    />
                     <div className="space-y-2 max-h-60 overflow-auto">
-                      {(currentUser?.friends || []).map((friendUsername) => {
+                      {(currentUser?.friends || [])
+                        .filter((u) => !recommendFriendSearch.trim() || u.toLowerCase().includes(recommendFriendSearch.toLowerCase()))
+                        .map((friendUsername) => {
                         const isSelected = recommendRecipients.some(r => (r.username || r) === friendUsername)
                         return (
                           <button

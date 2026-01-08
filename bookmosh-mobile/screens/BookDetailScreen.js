@@ -87,6 +87,7 @@ export default function BookDetailScreen({ user }) {
   const [recommendationNote, setRecommendationNote] = useState('')
   const [selectedRecommendationRecipients, setSelectedRecommendationRecipients] = useState([])
   const [sendingRecommendation, setSendingRecommendation] = useState(false)
+  const [friendSearchQuery, setFriendSearchQuery] = useState('')
 
   const [showEditionsModal, setShowEditionsModal] = useState(false)
   const [editions, setEditions] = useState([])
@@ -1138,6 +1139,7 @@ export default function BookDetailScreen({ user }) {
 
     setRecommendationNote('')
     setSelectedRecommendationRecipients([])
+    setFriendSearchQuery('')
     setShowRecommendationModal(true)
   }
 
@@ -1853,8 +1855,18 @@ export default function BookDetailScreen({ user }) {
               {title ? title : 'This book'}
             </Text>
 
+            <TextInput
+              style={styles.friendSearchInput}
+              value={friendSearchQuery}
+              onChangeText={setFriendSearchQuery}
+              placeholder="Search friends..."
+              placeholderTextColor="#666"
+            />
+
             <ScrollView style={styles.recommendationRecipients}>
-              {(Array.isArray(currentUser?.friends) ? currentUser.friends : []).map((u) => {
+              {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                .filter((u) => !friendSearchQuery.trim() || u.toLowerCase().includes(friendSearchQuery.toLowerCase()))
+                .map((u) => {
                 const selected = selectedRecommendationRecipients.includes(u)
                 return (
                   <TouchableOpacity
@@ -2339,6 +2351,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  friendSearchInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 12,
   },
   recommendationNoteInput: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
