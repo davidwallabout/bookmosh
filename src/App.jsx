@@ -1123,6 +1123,15 @@ function App() {
   const [unreadByMoshId, setUnreadByMoshId] = useState({})
   const [isMoshPanelOpen, setIsMoshPanelOpen] = useState(false)
   const [activeMosh, setActiveMosh] = useState(null)
+  const [showCreatePitModal, setShowCreatePitModal] = useState(false)
+  const [newPitName, setNewPitName] = useState('')
+  const [newPitMembers, setNewPitMembers] = useState([])
+  const [newPitMemberQuery, setNewPitMemberQuery] = useState('')
+  const [newPitMemberResults, setNewPitMemberResults] = useState([])
+  const [creatingPit, setCreatingPit] = useState(false)
+  const [showShareBookInPit, setShowShareBookInPit] = useState(false)
+  const [shareBookInPitQuery, setShareBookInPitQuery] = useState('')
+  const [shareBookInPitResults, setShareBookInPitResults] = useState([])
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
   const [moshMessageReactions, setMoshMessageReactions] = useState({})
   const [isMoshCoverPickerOpen, setIsMoshCoverPickerOpen] = useState(false)
@@ -3516,6 +3525,124 @@ function App() {
     setMoshDraft('')
     setShowMentionDropdown(false)
     setMoshUrlState({ isOpen: false, moshId: null })
+  }
+
+  // Create new pit functions
+  const searchNewPitMembers = async () => {
+    if (!newPitMemberQuery.trim() || !currentUser) return
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, avatar_icon, avatar_url')
+        .ilike('username', `%${newPitMemberQuery.trim()}%`)
+        .neq('id', currentUser.id)
+        .limit(10)
+      if (error) throw error
+      const filtered = (data || []).filter((u) => !newPitMembers.some((m) => m.id === u.id))
+      setNewPitMemberResults(filtered)
+    } catch (error) {
+      console.error('Search members error:', error)
+    }
+  }
+
+  const addNewPitMember = (user) => {
+    if (newPitMembers.some((m) => m.id === user.id)) return
+    setNewPitMembers([...newPitMembers, user])
+    setNewPitMemberQuery('')
+    setNewPitMemberResults([])
+  }
+
+  const removeNewPitMember = (userId) => {
+    setNewPitMembers(newPitMembers.filter((m) => m.id !== userId))
+  }
+
+  const createNewPit = async () => {
+    if (!newPitName.trim() || newPitMembers.length === 0 || !currentUser) return
+    setCreatingPit(true)
+    try {
+      const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
+      const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
+
+      const { data, error } = await supabase
+        .from('moshes')
+        .insert([{
+          title: newPitName.trim(),
+          creator_id: currentUser.id,
+          creator_username: currentUser.username,
+          participants: participantIds,
+          participants_ids: participantIds,
+          participants_usernames: participantUsernames,
+          archived: false,
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setShowCreatePitModal(false)
+      setNewPitName('')
+      setNewPitMembers([])
+      setNewPitMemberQuery('')
+      setNewPitMemberResults([])
+      await fetchActiveMoshes()
+      if (data) {
+        await openMosh(data)
+      }
+    } catch (error) {
+      console.error('Create pit error:', error)
+    } finally {
+      setCreatingPit(false)
+    }
+  }
+
+  const closeCreatePitModal = () => {
+    setShowCreatePitModal(false)
+    setNewPitName('')
+    setNewPitMembers([])
+    setNewPitMemberQuery('')
+    setNewPitMemberResults([])
+  }
+
+  // Share book in pit functions
+  const searchBooksToShareInPit = async () => {
+    if (!shareBookInPitQuery.trim() || !currentUser) return
+    try {
+      const { data, error } = await supabase
+        .from('bookmosh_books')
+        .select('id, title, author, cover')
+        .eq('owner', currentUser.username)
+        .ilike('title', `%${shareBookInPitQuery.trim()}%`)
+        .limit(10)
+      if (error) throw error
+      setShareBookInPitResults(data || [])
+    } catch (error) {
+      console.error('Search books error:', error)
+    }
+  }
+
+  const shareBookInPit = async (book) => {
+    if (!activeMosh?.id || !currentUser || !book) return
+    try {
+      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}`
+      const { error } = await supabase.from('mosh_messages').insert([{
+        mosh_id: activeMosh.id,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        body: bookMessage,
+        book_share: {
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          book_id: book.id,
+        },
+      }])
+      if (error) throw error
+      setShowShareBookInPit(false)
+      setShareBookInPitQuery('')
+      setShareBookInPitResults([])
+    } catch (error) {
+      console.error('Share book error:', error)
+    }
   }
 
   const backToMoshes = () => {
@@ -7346,16 +7473,25 @@ function App() {
             <section id="moshes" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Active Pits</p>
+                  <p className="text-sm uppercase tracking-[0.4em] text-white/50">Pits</p>
                   <h3 className="text-2xl font-semibold text-white">{activeMoshes.length}</h3>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsMoshPanelOpen(true)}
-                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
-                >
-                  Open
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePitModal(true)}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    + New
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsMoshPanelOpen(true)}
+                    className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60 hover:text-white"
+                  >
+                    Open
+                  </button>
+                </div>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -7367,16 +7503,12 @@ function App() {
                       onClick={() => openMosh(mosh)}
                       className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#050914]/60 p-3 text-left transition hover:border-white/40"
                     >
-                      <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
-                        {mosh.book_cover ? (
-                          <img src={mosh.book_cover} alt={mosh.book_title} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-white/60">Cover</div>
-                        )}
+                      <div className="h-14 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0 flex items-center justify-center">
+                        <span className="text-xl">💬</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white line-clamp-1">{mosh.book_title}</p>
-                        <p className="text-xs text-white/60 line-clamp-1">{mosh.book_author ?? 'Book chat'}</p>
+                        <p className="text-sm font-semibold text-white line-clamp-1">{mosh.title || mosh.mosh_title || 'Pit'}</p>
+                        <p className="text-xs text-white/60 line-clamp-1">{mosh.participants_usernames?.length || 0} members</p>
                       </div>
                       {(unreadByMoshId[mosh.id] ?? 0) > 0 && (
                         <span className="rounded-full bg-rose-500/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
@@ -7386,7 +7518,7 @@ function App() {
                     </button>
                   ))
                 ) : (
-                  <p className="text-sm text-white/60">No moshes yet. Start one from a book.</p>
+                  <p className="text-sm text-white/60">No pits yet. Create one to start chatting!</p>
                 )}
               </div>
             </section>
@@ -9010,6 +9142,91 @@ function App() {
           </div>
         )}
 
+        {/* Create Pit Modal */}
+        {showCreatePitModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#0b1225] border border-white/10 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Create New Pit</h2>
+                <button type="button" onClick={closeCreatePitModal} className="text-white/50 hover:text-white text-xl">✕</button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Pit Name</label>
+                  <input
+                    type="text"
+                    value={newPitName}
+                    onChange={(e) => setNewPitName(e.target.value)}
+                    placeholder="Enter pit name..."
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Add Members</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newPitMemberQuery}
+                      onChange={(e) => setNewPitMemberQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchNewPitMembers()}
+                      placeholder="Search username..."
+                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchNewPitMembers}
+                      className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70 hover:border-white/40"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {newPitMemberResults.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {newPitMemberResults.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => addNewPitMember(u)}
+                          className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-left hover:border-white/30"
+                        >
+                          <span className="text-white">@{u.username}</span>
+                          <span className="text-xs text-blue-400">+ Add</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {newPitMembers.length > 0 && (
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Members to add ({newPitMembers.length})</label>
+                    <div className="flex flex-wrap gap-2">
+                      {newPitMembers.map((m) => (
+                        <span key={m.id} className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-sm text-white">
+                          @{m.username}
+                          <button type="button" onClick={() => removeNewPitMember(m.id)} className="text-red-400 hover:text-red-300">✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={createNewPit}
+                  disabled={creatingPit || !newPitName.trim() || newPitMembers.length === 0}
+                  className="w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingPit ? 'Creating...' : 'Create Pit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {currentUser && isMoshPanelOpen && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
             <div className="absolute inset-0 bg-[#0b1225]/95 overflow-hidden pt-[env(safe-area-inset-top)]">
@@ -9018,9 +9235,9 @@ function App() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <p className="text-xs uppercase tracking-[0.4em] text-white/40">Pit</p>
-                      <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.book_title ?? 'Active Pits'}</h2>
+                      <h2 className="text-xl font-semibold text-white break-words">{activeMosh?.title || activeMosh?.mosh_title || 'Your Pits'}</h2>
                       {activeMosh?.id && (
-                        <p className="text-xs text-white/50 break-words">{activeMosh.mosh_title || activeMosh.book_title}</p>
+                        <p className="text-xs text-white/50 break-words">{activeMosh.participants_usernames?.length || 0} members</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
