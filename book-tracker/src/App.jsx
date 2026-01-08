@@ -3002,6 +3002,7 @@ function App() {
         if (finalUpdates.isbn !== undefined) dbUpdates.isbn = finalUpdates.isbn
         if (finalUpdates.read_at !== undefined) dbUpdates.read_at = finalUpdates.read_at
         if (finalUpdates.status_updated_at !== undefined) dbUpdates.status_updated_at = finalUpdates.status_updated_at
+        if (finalUpdates.owned_at !== undefined) dbUpdates.owned_at = finalUpdates.owned_at
         
         if (Object.keys(dbUpdates).length > 0) {
           // Only update updated_at for meaningful changes (not cosmetic like cover/edition changes)
@@ -4255,9 +4256,12 @@ function App() {
     const nextTags = Array.from(
       new Set([status, ...(hasOwned ? [] : ['Owned'])].filter(Boolean)),
     )
-    updateBook(title, { tags: nextTags })
+    // Set owned_at when marking as owned, clear it when unmarking
+    const nowIso = new Date().toISOString()
+    const nextOwnedAt = hasOwned ? null : (current?.owned_at ?? nowIso)
+    updateBook(title, { tags: nextTags, owned_at: nextOwnedAt })
     logBookEvent({ ...(current ?? { title }), tags: nextTags, status }, 'tags_updated')
-    setSelectedBook((prev) => (prev && prev.title === title ? { ...prev, tags: nextTags } : prev))
+    setSelectedBook((prev) => (prev && prev.title === title ? { ...prev, tags: nextTags, owned_at: nextOwnedAt } : prev))
   }
 
   const handleAuthModeSwitch = (mode) => {
@@ -6935,7 +6939,15 @@ function App() {
                       </button>
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                      {tracker.filter(b => (b.tags ?? []).includes('Owned')).slice(0, 6).map((book) => (
+                      {[...tracker]
+                        .filter(b => (b.tags ?? []).includes('Owned'))
+                        .sort((a, b) => {
+                          const aKey = new Date(a.owned_at ?? a.updated_at ?? 0).getTime()
+                          const bKey = new Date(b.owned_at ?? b.updated_at ?? 0).getTime()
+                          return bKey - aKey
+                        })
+                        .slice(0, 6)
+                        .map((book) => (
                         <button
                           key={book.title}
                           type="button"
