@@ -50,6 +50,11 @@ export default function MyReviewsScreen({ user }) {
         .eq('owner_id', user.id)
         .order('created_at', { ascending: false })
 
+      // PGRST205 = table/column doesn't exist - treat as empty
+      if (error && error.code === 'PGRST205') {
+        setReviews([])
+        return
+      }
       if (error) throw error
       setReviews(data || [])
     } catch (error) {

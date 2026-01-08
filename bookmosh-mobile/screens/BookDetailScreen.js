@@ -126,6 +126,11 @@ export default function BookDetailScreen({ user }) {
         .order('created_at', { ascending: false })
         .limit(50)
 
+      // PGRST205 = table/column doesn't exist - treat as empty
+      if (error && error.code === 'PGRST205') {
+        setMyReviews([])
+        return
+      }
       if (error) throw error
       setMyReviews(Array.isArray(data) ? data : [])
     } catch (error) {
