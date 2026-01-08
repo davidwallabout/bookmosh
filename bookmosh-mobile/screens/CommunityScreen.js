@@ -235,6 +235,8 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
   const loadMoshes = async () => {
     if (!currentUser?.id) return
 
+    console.log('[LOAD MOSHES] Loading for user:', currentUser.id)
+
     try {
       const { data, error } = await supabase
         .from('moshes')
@@ -243,10 +245,12 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .eq('archived', false)
         .order('created_at', { ascending: false })
 
+      console.log('[LOAD MOSHES] Result:', { count: data?.length, error })
+
       if (error) throw error
       setMoshes(data || [])
     } catch (error) {
-      console.error('Load moshes error:', error)
+      console.error('[LOAD MOSHES] Error:', error)
     }
   }
 
