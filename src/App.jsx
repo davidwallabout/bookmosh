@@ -3560,6 +3560,27 @@ function App() {
     setNewPitMemberResults([])
   }
 
+  const addNewPitMemberByUsername = async (username) => {
+    if (newPitMembers.some((m) => m.username === username)) return
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username')
+        .eq('username', username)
+        .single()
+      
+      if (error || !data) {
+        console.error('Failed to find user:', username, error)
+        return
+      }
+      
+      setNewPitMembers((prev) => [...prev, { id: data.id, username: data.username }])
+      setNewPitMemberQuery('')
+    } catch (err) {
+      console.error('Add member error:', err)
+    }
+  }
+
   const removeNewPitMember = (userId) => {
     setNewPitMembers(newPitMembers.filter((m) => m.id !== userId))
   }
@@ -9401,39 +9422,33 @@ function App() {
 
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Add Members</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newPitMemberQuery}
-                      onChange={(e) => setNewPitMemberQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && searchNewPitMembers()}
-                      placeholder="Search username..."
-                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={searchNewPitMembers}
-                      className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70 hover:border-white/40"
-                    >
-                      Search
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    value={newPitMemberQuery}
+                    onChange={(e) => setNewPitMemberQuery(e.target.value)}
+                    placeholder="Search friends..."
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none mb-2"
+                  />
 
-                  {newPitMemberResults.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {newPitMemberResults.map((u) => (
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {(currentUser?.friends || [])
+                      .filter((u) => !newPitMemberQuery.trim() || u.toLowerCase().includes(newPitMemberQuery.toLowerCase()))
+                      .filter((u) => !newPitMembers.some((m) => m.username === u))
+                      .map((friendUsername) => (
                         <button
-                          key={u.id}
+                          key={friendUsername}
                           type="button"
-                          onClick={() => addNewPitMember(u)}
+                          onClick={() => addNewPitMemberByUsername(friendUsername)}
                           className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-left hover:border-white/30"
                         >
-                          <span className="text-white">@{u.username}</span>
+                          <span className="text-white">@{friendUsername}</span>
                           <span className="text-xs text-blue-400">+ Add</span>
                         </button>
                       ))}
-                    </div>
-                  )}
+                    {(currentUser?.friends || []).length === 0 && (
+                      <p className="text-sm text-white/50 text-center py-4">No friends yet. Add friends first!</p>
+                    )}
+                  </div>
                 </div>
 
                 {newPitMembers.length > 0 && (
