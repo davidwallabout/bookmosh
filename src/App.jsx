@@ -9879,20 +9879,25 @@ function App() {
                             cover: bookShareMatch[4] || null,
                           } : null
 
+                          const isMe = msg.sender_id === currentUser?.id
+                          
                           return (
-                          <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <button
-                                type="button"
-                                onClick={() => viewFriendProfile(msg.sender_username)}
-                                className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white hover:underline transition text-left"
-                              >
-                                {msg.sender_username}
-                              </button>
-                              <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">
-                                {formatMoshTimestamp(msg.created_at)}
-                              </span>
-                            </div>
+                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] rounded-2xl border p-3 ${isMe ? 'bg-blue-500/20 border-blue-500/30' : 'bg-white/5 border-white/10'}`}>
+                              <div className={`flex items-start gap-3 ${isMe ? 'justify-end' : 'justify-between'}`}>
+                                {!isMe && (
+                                  <button
+                                    type="button"
+                                    onClick={() => viewFriendProfile(msg.sender_username)}
+                                    className="text-xs uppercase tracking-[0.3em] text-white/60 hover:text-white hover:underline transition text-left"
+                                  >
+                                    {msg.sender_username}
+                                  </button>
+                                )}
+                                <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">
+                                  {formatMoshTimestamp(msg.created_at)}
+                                </span>
+                              </div>
                             
                             {isBookShare && bookShareData ? (
                               <div className="mt-2">
@@ -9991,6 +9996,7 @@ function App() {
                               })()}
                             </div>
                           </div>
+                        </div>
                         )})}
                         {activeMoshMessages.length === 0 && (
                           <p className="text-sm text-white/60">No messages yet.</p>
