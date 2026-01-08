@@ -594,8 +594,15 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      // Insert - ignore PGRST204 errors (no rows returned is fine for insert)
-      const { error } = await supabase
+      console.log('[CREATE PIT] Inserting with:', {
+        title: newPitName.trim(),
+        creator_id: currentUser.id,
+        participants_ids: participantIds,
+        participants_usernames: participantUsernames,
+      })
+
+      // Insert pit
+      const { data, error, status, statusText } = await supabase
         .from('moshes')
         .insert({
           title: newPitName.trim(),
@@ -604,23 +611,23 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
           participants_usernames: participantUsernames,
           archived: false,
         })
+        .select()
 
-      // PGRST204 means no rows returned - that's OK for insert
-      if (error && error.code !== 'PGRST204') {
-        console.error('Create pit insert error:', error)
-        throw error
+      console.log('[CREATE PIT] Response:', { data, error, status, statusText })
+
+      if (error) {
+        console.error('[CREATE PIT] Error:', error)
+        // Don't throw for PGRST204 - just means RLS didn't return the row
+        if (error.code !== 'PGRST204') {
+          Alert.alert('Error', 'Failed to create pit: ' + (error.message || error.code))
+          return
+        }
       }
 
       closeCreatePit()
       await loadMoshes()
     } catch (error) {
-      // Ignore PGRST204 - it just means no rows returned which is fine
-      if (error?.code === 'PGRST204') {
-        closeCreatePit()
-        await loadMoshes()
-        return
-      }
-      console.error('Create pit error:', error)
+      console.error('[CREATE PIT] Catch error:', error)
       Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
     } finally {
       setCreatingPit(false)
