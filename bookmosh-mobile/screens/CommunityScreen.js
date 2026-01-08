@@ -228,13 +228,13 @@ export default function CommunityScreen({ user }) {
   }
 
   const loadMoshes = async () => {
-    if (!currentUser) return
+    if (!currentUser?.id) return
 
     try {
       const { data, error } = await supabase
         .from('moshes')
         .select('*')
-        .contains('participants_ids', [user.id])
+        .contains('participants_ids', [currentUser.id])
         .eq('archived', false)
         .order('created_at', { ascending: false })
 
@@ -1241,34 +1241,32 @@ export default function CommunityScreen({ user }) {
               />
 
               <Text style={styles.createPitLabel}>Add Members</Text>
-              <View style={styles.createPitSearchRow}>
-                <TextInput
-                  style={styles.createPitSearchInput}
-                  value={newPitMemberQuery}
-                  onChangeText={setNewPitMemberQuery}
-                  placeholder="Search username..."
-                  placeholderTextColor="#666"
-                  onSubmitEditing={searchNewPitMembers}
-                />
-                <TouchableOpacity style={styles.createPitSearchBtn} onPress={searchNewPitMembers}>
-                  <Text style={styles.createPitSearchBtnText}>Search</Text>
-                </TouchableOpacity>
-              </View>
+              <TextInput
+                style={styles.createPitSearchInput}
+                value={newPitMemberQuery}
+                onChangeText={setNewPitMemberQuery}
+                placeholder="Search friends..."
+                placeholderTextColor="#666"
+              />
 
-              {newPitMemberResults.length > 0 && (
-                <View style={styles.createPitResults}>
-                  {newPitMemberResults.map((u) => (
+              <ScrollView style={styles.createPitFriendsList} nestedScrollEnabled>
+                {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                  .filter((u) => !newPitMemberQuery.trim() || u.toLowerCase().includes(newPitMemberQuery.toLowerCase()))
+                  .filter((u) => !newPitMembers.some((m) => m.username === u))
+                  .map((friendUsername) => (
                     <TouchableOpacity
-                      key={u.id}
+                      key={friendUsername}
                       style={styles.createPitResultItem}
-                      onPress={() => addNewPitMember(u)}
+                      onPress={() => addNewPitMember({ username: friendUsername, id: friendUsername })}
                     >
-                      <Text style={styles.createPitResultText}>@{u.username}</Text>
+                      <Text style={styles.createPitResultText}>@{friendUsername}</Text>
                       <Text style={styles.createPitResultAdd}>+ Add</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              )}
+                {(Array.isArray(currentUser?.friends) ? currentUser.friends : []).length === 0 && (
+                  <Text style={styles.createPitNoFriends}>No friends yet. Add friends first!</Text>
+                )}
+              </ScrollView>
 
               {newPitMembers.length > 0 && (
                 <View style={styles.createPitMembers}>
@@ -2132,6 +2130,16 @@ const styles = StyleSheet.create({
   },
   createPitResults: {
     marginTop: 8,
+  },
+  createPitFriendsList: {
+    maxHeight: 150,
+    marginTop: 8,
+  },
+  createPitNoFriends: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   createPitResultItem: {
     flexDirection: 'row',
