@@ -3004,7 +3004,12 @@ function App() {
         if (finalUpdates.status_updated_at !== undefined) dbUpdates.status_updated_at = finalUpdates.status_updated_at
         
         if (Object.keys(dbUpdates).length > 0) {
-          dbUpdates.updated_at = new Date().toISOString()
+          // Only update updated_at for meaningful changes (not cosmetic like cover/edition changes)
+          const cosmeticOnlyFields = ['cover', 'isbn', 'title', 'olKey']
+          const hasMeaningfulChange = Object.keys(dbUpdates).some(key => !cosmeticOnlyFields.includes(key))
+          if (hasMeaningfulChange) {
+            dbUpdates.updated_at = new Date().toISOString()
+          }
           await supabase
             .from('bookmosh_books')
             .update(dbUpdates)
