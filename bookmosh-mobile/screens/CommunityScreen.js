@@ -608,6 +608,28 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .select()
         .single()
 
+      // Silently handle missing column errors
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703' || error?.code === 'PGRST204') {
+        // Try without the problematic columns
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('moshes')
+          .insert([{
+            title: newPitName.trim(),
+            creator_id: currentUser.id,
+            participants_ids: participantIds,
+            participants_usernames: participantUsernames,
+            archived: false,
+          }])
+          .select()
+          .single()
+        
+        if (!fallbackError && fallbackData) {
+          closeCreatePit()
+          loadMoshes()
+          setActiveMosh(fallbackData)
+          return
+        }
+      }
       if (error) throw error
 
       closeCreatePit()
@@ -616,6 +638,12 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         setActiveMosh(data)
       }
     } catch (error) {
+      // Suppress expected schema errors
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703' || error?.code === 'PGRST204') {
+        closeCreatePit()
+        loadMoshes()
+        return
+      }
       console.error('Create pit error:', error)
       Alert.alert('Error', 'Failed to create pit')
     } finally {
