@@ -1039,6 +1039,8 @@ function App() {
   const [discoveryDisplayCount, setDiscoveryDisplayCount] = useState(6)
   const [searchDebounce, setSearchDebounce] = useState(null)
   const [selectedBook, setSelectedBook] = useState(null)
+  const [modalDescription, setModalDescription] = useState('')
+  const [modalDescriptionLoading, setModalDescriptionLoading] = useState(false)
   const [publicMoshesForBook, setPublicMoshesForBook] = useState([])
   const [publicMoshesForBookLoading, setPublicMoshesForBookLoading] = useState(false)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState(null)
