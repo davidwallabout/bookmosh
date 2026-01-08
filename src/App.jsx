@@ -6409,22 +6409,29 @@ function App() {
                 {/* Status */}
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={modalStatus}
-                      onChange={(e) => setModalStatus(e.target.value)}
-                      className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
-                    >
-                      {statusOptions.map((status) => (
-                        <option key={status} value={status} className="bg-[#0b1225]">
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {statusOptions.map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => {
+                          setModalStatus(status)
+                          updateBook(selectedBook.title, { status })
+                          setSelectedBook({ ...selectedBook, status })
+                        }}
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${
+                          modalStatus === status
+                            ? 'border-blue-500/60 bg-blue-500/20 text-blue-400'
+                            : 'border-white/20 text-white/60 hover:border-white/40'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    ))}
                     <button
                       type="button"
                       onClick={() => toggleBookOwned(selectedBook.title)}
-                      className={`rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                      className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${
                         (selectedBook.tags ?? []).includes('Owned')
                           ? 'border-[#ee6bfe]/60 bg-[#ee6bfe]/20 text-[#ee6bfe]'
                           : 'border-white/20 text-white/60 hover:border-[#ee6bfe]/40 hover:text-[#ee6bfe]'
