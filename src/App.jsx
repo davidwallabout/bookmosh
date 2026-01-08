@@ -1116,6 +1116,8 @@ function App() {
   const [feedItems, setFeedItems] = useState([])
   const [feedDisplayCount, setFeedDisplayCount] = useState(10)
   const [feedLikes, setFeedLikes] = useState({})
+  const [bookActivityFeed, setBookActivityFeed] = useState([])
+  const [bookActivityLoading, setBookActivityLoading] = useState(false)
   const [likeNotifications, setLikeNotifications] = useState([])
   const [activeMoshes, setActiveMoshes] = useState([])
   const [unreadByMoshId, setUnreadByMoshId] = useState({})
