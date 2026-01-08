@@ -235,20 +235,32 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
   const loadMoshes = async () => {
     if (!currentUser?.id) return
 
-    console.log('[LOAD MOSHES] Loading for user:', currentUser.id)
-
     try {
-      const { data, error } = await supabase
+      const { data: byParticipantsIds, error: byParticipantsIdsError } = await supabase
         .from('moshes')
         .select('*')
         .contains('participants_ids', [currentUser.id])
         .eq('archived', false)
         .order('created_at', { ascending: false })
 
-      console.log('[LOAD MOSHES] Result:', { count: data?.length, error })
+      if (!byParticipantsIdsError) {
+        setMoshes(byParticipantsIds || [])
+        return
+      }
 
-      if (error) throw error
-      setMoshes(data || [])
+      const schemaErrCodes = new Set(['PGRST204', 'PGRST205', '42P01', '42703'])
+      if (!schemaErrCodes.has(byParticipantsIdsError.code)) throw byParticipantsIdsError
+
+      const { data: byCreatorId, error: byCreatorIdError } = await supabase
+        .from('moshes')
+        .select('*')
+        .eq('creator_id', currentUser.id)
+        .eq('archived', false)
+        .order('created_at', { ascending: false })
+
+      if (byCreatorIdError) throw byCreatorIdError
+
+      setMoshes(byCreatorId || [])
     } catch (error) {
       console.error('[LOAD MOSHES] Error:', error)
     }
@@ -598,43 +610,58 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      console.log('[CREATE PIT] Inserting with:', {
-        title: newPitName.trim(),
-        creator_id: currentUser.id,
-        participants_ids: participantIds,
-        participants_usernames: participantUsernames,
-      })
+      const title = newPitName.trim()
+      const schemaErrCodes = new Set(['PGRST204', 'PGRST205', '42P01', '42703'])
 
-      // Insert pit - NO .select() to avoid PGRST204
-      const { error } = await supabase
-        .from('moshes')
-        .insert({
-          title: newPitName.trim(),
+      const insertAttempts = [
+        {
+          title,
           creator_id: currentUser.id,
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
-        })
+        },
+        {
+          title,
+          creator_id: currentUser.id,
+          participants_usernames: participantUsernames,
+          archived: false,
+        },
+        {
+          title,
+          creator_id: currentUser.id,
+          participants_ids: participantIds,
+          archived: false,
+        },
+        {
+          title,
+          creator_id: currentUser.id,
+          archived: false,
+        },
+      ]
 
-      console.log('[CREATE PIT] Insert complete, error:', error)
+      let lastError = null
+      let inserted = false
 
-      // Only fail on real errors, not PGRST204
-      if (error && error.code !== 'PGRST204') {
-        console.error('[CREATE PIT] Real error:', error)
-        Alert.alert('Error', 'Failed to create pit: ' + (error.message || error.code))
+      for (const payload of insertAttempts) {
+        const { error } = await supabase.from('moshes').insert(payload)
+        if (!error) {
+          inserted = true
+          break
+        }
+
+        lastError = error
+        if (!schemaErrCodes.has(error.code)) break
+      }
+
+      if (!inserted) {
+        Alert.alert('Error', 'Failed to create pit: ' + (lastError?.message || lastError?.code || 'Unknown error'))
         return
       }
 
       closeCreatePit()
       await loadMoshes()
     } catch (error) {
-      console.error('[CREATE PIT] Catch error:', error)
-      // Ignore PGRST204 in catch too
-      if (error?.code === 'PGRST204') {
-        closeCreatePit()
-        await loadMoshes()
-        return
-      }
       Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
     } finally {
       setCreatingPit(false)
