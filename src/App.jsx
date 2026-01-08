@@ -6271,6 +6271,170 @@ function App() {
 
             <div className="mx-auto w-full max-w-3xl px-4 py-6">
               <div className="space-y-4">
+                {/* Cover */}
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Cover</label>
+                  <div className="flex items-center gap-3">
+                    <div className="h-24 w-16 overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
+                      {selectedBook.cover ? (
+                        <img src={selectedBook.cover} alt={selectedBook.title} className="h-full w-full object-cover" />
+                      ) : selectedBook.isbn ? (
+                        <img
+                          src={openLibraryIsbnCoverUrl(selectedBook.isbn, 'M')}
+                          alt={selectedBook.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { e.target.style.display = 'none' }}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-white/40">No cover</div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showEditionPicker) loadEditionsForSelectedBook()
+                          setShowEditionPicker(!showEditionPicker)
+                          setShowCoverPicker(false)
+                        }}
+                        className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Change Edition
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!showCoverPicker) loadEditionCoversForSelectedBook()
+                          setShowCoverPicker(!showCoverPicker)
+                          setShowEditionPicker(false)
+                        }}
+                        className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                      >
+                        Choose Cover
+                      </button>
+                      {(showEditionPicker || showCoverPicker) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEditionPicker(false)
+                            setShowCoverPicker(false)
+                            setEditionPickerEditions([])
+                            setCoverPickerCovers([])
+                          }}
+                          className="rounded-2xl border border-white/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/60"
+                        >
+                          Done
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {showEditionPicker && (
+                    <div className="mt-4">
+                      {editionPickerLoading ? (
+                        <p className="text-sm text-white/60">Loading editions…</p>
+                      ) : editionPickerEditions.length > 0 ? (
+                        <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5">
+                          <div className="divide-y divide-white/10">
+                            {editionPickerEditions.map((e) => (
+                              <button
+                                key={`${e.source}:${e.isbn}`}
+                                type="button"
+                                onClick={() => {
+                                  const nextCover = e.coverUrl || selectedBook.cover || null
+                                  const nextTitle = e.title || selectedBook.title
+                                  updateBook(selectedBook.title, {
+                                    title: nextTitle,
+                                    isbn: e.isbn,
+                                    cover: nextCover,
+                                    olKey: selectedBook.olKey ?? null,
+                                  })
+                                  setSelectedBook({ ...selectedBook, title: nextTitle, isbn: e.isbn, cover: nextCover, olKey: selectedBook.olKey ?? null })
+                                  setShowEditionPicker(false)
+                                  setEditionPickerEditions([])
+                                }}
+                                className="flex w-full items-center gap-3 p-3 text-left transition hover:bg-white/5"
+                              >
+                                <div className="h-16 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                                  {e.coverUrl ? (
+                                    <img src={e.coverUrl} alt="" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[8px] text-white/30">No cover</div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-white line-clamp-1">{e.title}</p>
+                                  <p className="text-xs text-white/50">{e.publisher || 'Unknown publisher'} · {e.publishDate || 'Unknown date'}</p>
+                                  <p className="text-[10px] text-white/30">ISBN: {e.isbn}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/60">No editions found</p>
+                      )}
+                    </div>
+                  )}
+
+                  {showCoverPicker && (
+                    <div className="mt-4">
+                      {coverPickerLoading ? (
+                        <p className="text-sm text-white/60">Loading covers…</p>
+                      ) : coverPickerCovers.length > 0 ? (
+                        <div className="grid grid-cols-6 gap-2 max-h-64 overflow-auto">
+                          {coverPickerCovers.map((c) => (
+                            <button
+                              key={c.key}
+                              type="button"
+                              onClick={() => {
+                                updateBook(selectedBook.title, { cover: c.urlM, isbn: c.isbn ?? selectedBook.isbn, olKey: selectedBook.olKey ?? null })
+                                setSelectedBook({ ...selectedBook, cover: c.urlM, isbn: c.isbn ?? selectedBook.isbn, olKey: selectedBook.olKey ?? null })
+                                setShowCoverPicker(false)
+                                setCoverPickerCovers([])
+                              }}
+                              className="aspect-[2/3] overflow-hidden rounded-lg border border-white/10 transition hover:border-white/40"
+                            >
+                              <img src={c.urlS} alt="" className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white/60">No covers found</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Status</label>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={modalStatus}
+                      onChange={(e) => setModalStatus(e.target.value)}
+                      className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-white/40 focus:outline-none"
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status} className="bg-[#0b1225]">
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => toggleBookOwned(selectedBook.title)}
+                      className={`rounded-2xl border px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                        (selectedBook.tags ?? []).includes('Owned')
+                          ? 'border-[#ee6bfe]/60 bg-[#ee6bfe]/20 text-[#ee6bfe]'
+                          : 'border-white/20 text-white/60 hover:border-[#ee6bfe]/40 hover:text-[#ee6bfe]'
+                      }`}
+                    >
+                      {(selectedBook.tags ?? []).includes('Owned') ? '✓ Owned' : 'Owned'}
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs uppercase tracking-[0.3em] text-white/50 mb-2">Activity</label>
                   {bookActivityLoading ? (
