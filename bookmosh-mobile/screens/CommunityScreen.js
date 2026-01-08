@@ -605,8 +605,8 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         participants_usernames: participantUsernames,
       })
 
-      // Insert pit
-      const { data, error, status, statusText } = await supabase
+      // Insert pit - NO .select() to avoid PGRST204
+      const { error } = await supabase
         .from('moshes')
         .insert({
           title: newPitName.trim(),
@@ -615,23 +615,26 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
           participants_usernames: participantUsernames,
           archived: false,
         })
-        .select()
 
-      console.log('[CREATE PIT] Response:', { data, error, status, statusText })
+      console.log('[CREATE PIT] Insert complete, error:', error)
 
-      if (error) {
-        console.error('[CREATE PIT] Error:', error)
-        // Don't throw for PGRST204 - just means RLS didn't return the row
-        if (error.code !== 'PGRST204') {
-          Alert.alert('Error', 'Failed to create pit: ' + (error.message || error.code))
-          return
-        }
+      // Only fail on real errors, not PGRST204
+      if (error && error.code !== 'PGRST204') {
+        console.error('[CREATE PIT] Real error:', error)
+        Alert.alert('Error', 'Failed to create pit: ' + (error.message || error.code))
+        return
       }
 
       closeCreatePit()
       await loadMoshes()
     } catch (error) {
       console.error('[CREATE PIT] Catch error:', error)
+      // Ignore PGRST204 in catch too
+      if (error?.code === 'PGRST204') {
+        closeCreatePit()
+        await loadMoshes()
+        return
+      }
       Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
     } finally {
       setCreatingPit(false)
