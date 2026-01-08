@@ -5905,7 +5905,7 @@ function App() {
 
   if (isBookPage) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
+      <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white overflow-x-hidden">
         {selectedBook ? (
           <div className="min-h-screen bg-[#0b1225]/95 overflow-auto pt-[env(safe-area-inset-top)]">
             <div className="sticky top-0 z-10 border-b border-white/10 bg-[#0b1225]/95 backdrop-blur">
@@ -6135,7 +6135,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white">
+    <div className="min-h-screen bg-gradient-to-b from-midnight via-[#050916] to-black text-white overflow-x-hidden">
       {/* Sticky Header - appears on scroll */}
       {currentUser && !selectedFriend && isScrolled && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-[#0b1225]/98 to-[#050914]/95 backdrop-blur-lg border-b border-white/10">
@@ -8560,8 +8560,8 @@ function App() {
                 {recommendationsLoading ? (
                   <p className="text-sm text-white/60">Loading recommendations…</p>
                 ) : recommendations.length > 0 ? (
-                  <div className="-mx-2 overflow-x-auto">
-                    <div className="flex gap-3 px-2 pb-2">
+                  <div className="overflow-x-auto pb-2">
+                    <div className="flex gap-3">
                       {recommendations.map((rec) => {
                         const isSent = Boolean(currentUser?.id && rec.sender_id === currentUser.id)
                         const headline = isSent
