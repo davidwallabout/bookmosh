@@ -50,14 +50,19 @@ export default function MyReviewsScreen({ user }) {
         .eq('owner_id', user.id)
         .order('created_at', { ascending: false })
 
-      // PGRST205 = table/column doesn't exist - treat as empty
-      if (error && error.code === 'PGRST205') {
+      // PGRST205 = table/column doesn't exist - treat as empty silently
+      if (error && (error.code === 'PGRST205' || error.code === '42P01')) {
         setReviews([])
         return
       }
       if (error) throw error
       setReviews(data || [])
     } catch (error) {
+      // Suppress PGRST205 errors (table doesn't exist yet)
+      if (error?.code === 'PGRST205' || error?.code === '42P01') {
+        setReviews([])
+        return
+      }
       console.error('[MY_REVIEWS] Load error:', error)
       setReviews([])
     } finally {
