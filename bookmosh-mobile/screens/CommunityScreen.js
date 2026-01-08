@@ -18,7 +18,7 @@ import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
 
-export default function CommunityScreen({ user }) {
+export default function CommunityScreen({ user, friendRequestCount = 0, unreadPitCount = 0, unreadRecsCount = 0 }) {
   const navigation = useNavigation()
   const route = useRoute()
   const isFocused = useIsFocused()
@@ -1117,25 +1117,46 @@ export default function CommunityScreen({ user }) {
           style={[styles.tab, activeTab === 'friends' && styles.tabActive]}
           onPress={() => setActiveTab('friends')}
         >
-          <Text style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}>
-            Friends
-          </Text>
+          <View style={styles.tabContent}>
+            <Text style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}>
+              Friends
+            </Text>
+            {friendRequestCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{friendRequestCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'pits' && styles.tabActive]}
           onPress={() => setActiveTab('pits')}
         >
-          <Text style={[styles.tabText, activeTab === 'pits' && styles.tabTextActive]}>
-            Pits
-          </Text>
+          <View style={styles.tabContent}>
+            <Text style={[styles.tabText, activeTab === 'pits' && styles.tabTextActive]}>
+              Pits
+            </Text>
+            {unreadPitCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{unreadPitCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'recommendations' && styles.tabActive]}
           onPress={() => setActiveTab('recommendations')}
         >
-          <Text style={[styles.tabText, activeTab === 'recommendations' && styles.tabTextActive]}>
-            Recs
-          </Text>
+          <View style={styles.tabContent}>
+            <Text style={[styles.tabText, activeTab === 'recommendations' && styles.tabTextActive]}>
+              Recs
+            </Text>
+            {unreadRecsCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{unreadRecsCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -1618,6 +1639,25 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#fff',
+  },
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tabBadge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  tabBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   pitsContainer: {
     padding: 15,

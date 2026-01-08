@@ -141,7 +141,7 @@ const TabIcon = ({ name, color, size }) => (
   <SvgXml xml={PIXEL_ICONS[name](color)} width={size} height={size} />
 )
 
-function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
+function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadRecsCount }) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -199,21 +199,30 @@ function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
       />
       <Tab.Screen
         name="Community"
-        children={() => <CommunityScreen user={user} />}
+        children={() => <CommunityScreen user={user} friendRequestCount={friendRequestCount} unreadPitCount={unreadPitCount} unreadRecsCount={unreadRecsCount} />}
         options={{
           tabBarLabel: 'Community',
           tabBarIcon: ({ color, size }) => <TabIcon name="community" color={color} size={size} />,
+          tabBarBadge: communityBadgeCount > 0 ? communityBadgeCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#ef4444',
+            color: '#fff',
+            fontSize: 10,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+          },
         }}
       />
     </Tab.Navigator>
   )
 }
 
-function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
+function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadRecsCount }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs">
-        {() => <MainTabs user={user} onSignOut={onSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} />}
+        {() => <MainTabs user={user} onSignOut={onSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} communityBadgeCount={communityBadgeCount} friendRequestCount={friendRequestCount} unreadPitCount={unreadPitCount} unreadRecsCount={unreadRecsCount} />}
       </Stack.Screen>
       <Stack.Screen name="ProfileScreen">
         {() => <ProfileScreen user={user} onSignOut={onSignOut} />}
@@ -404,6 +413,10 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [feedBadgeCount, setFeedBadgeCount] = useState(0)
+  const [communityBadgeCount, setCommunityBadgeCount] = useState(0)
+  const [friendRequestCount, setFriendRequestCount] = useState(0)
+  const [unreadPitCount, setUnreadPitCount] = useState(0)
+  const [unreadRecsCount, setUnreadRecsCount] = useState(0)
 
   useEffect(() => {
     const loadApp = async () => {
@@ -482,6 +495,81 @@ export default function App() {
     return () => clearInterval(interval)
   }, [session?.user])
 
+  // Check for community updates (friend requests, pit messages, recommendations)
+  useEffect(() => {
+    if (!session?.user) return
+
+    const checkCommunityActivity = async () => {
+      try {
+        // Get current user data
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, username')
+          .eq('id', session.user.id)
+          .single()
+
+        if (!userData) return
+
+        // Count pending friend requests
+        const { data: friendRequests } = await supabase
+          .from('friendships')
+          .select('id')
+          .eq('friend_id', userData.id)
+          .eq('status', 'pending')
+
+        const friendReqCount = friendRequests?.length || 0
+        setFriendRequestCount(friendReqCount)
+
+        // Count unread pit messages
+        const lastPitViewedKey = `pits_last_viewed_${session.user.id}`
+        const lastPitViewed = await AsyncStorage.getItem(lastPitViewedKey) || new Date(0).toISOString()
+
+        const { data: userPits } = await supabase
+          .from('moshes')
+          .select('id')
+          .contains('participants_ids', [userData.id])
+          .eq('archived', false)
+
+        const pitIds = userPits?.map(p => p.id) || []
+        let pitMsgCount = 0
+        if (pitIds.length > 0) {
+          const { data: newMessages } = await supabase
+            .from('mosh_messages')
+            .select('id')
+            .in('mosh_id', pitIds)
+            .neq('sender_id', userData.id)
+            .gte('created_at', lastPitViewed)
+
+          pitMsgCount = newMessages?.length || 0
+        }
+        setUnreadPitCount(pitMsgCount)
+
+        // Count unread recommendations
+        const lastRecsViewedKey = `recs_last_viewed_${session.user.id}`
+        const lastRecsViewed = await AsyncStorage.getItem(lastRecsViewedKey) || new Date(0).toISOString()
+
+        const { data: newRecs } = await supabase
+          .from('recommendations')
+          .select('id')
+          .eq('recipient_id', userData.id)
+          .gte('created_at', lastRecsViewed)
+
+        const recsCount = newRecs?.length || 0
+        setUnreadRecsCount(recsCount)
+
+        // Total community badge
+        setCommunityBadgeCount(friendReqCount + pitMsgCount + recsCount)
+      } catch (error) {
+        console.error('[BADGE] Failed to check community activity:', error)
+      }
+    }
+
+    checkCommunityActivity()
+    const interval = setInterval(checkCommunityActivity, 60000) // Check every minute
+
+    return () => clearInterval(interval)
+  }, [session?.user])
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
   }
@@ -494,7 +582,16 @@ export default function App() {
     <NavigationContainer>
       <StatusBar style="light" />
       {session && session.user ? (
-        <MainStack user={session.user} onSignOut={handleSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} />
+        <MainStack 
+          user={session.user} 
+          onSignOut={handleSignOut} 
+          feedBadgeCount={feedBadgeCount} 
+          setFeedBadgeCount={setFeedBadgeCount}
+          communityBadgeCount={communityBadgeCount}
+          friendRequestCount={friendRequestCount}
+          unreadPitCount={unreadPitCount}
+          unreadRecsCount={unreadRecsCount}
+        />
       ) : (
         <AuthScreen onAuthSuccess={() => {}} />
       )}
