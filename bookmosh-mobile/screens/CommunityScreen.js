@@ -541,9 +541,32 @@ export default function CommunityScreen({ user }) {
     }
   }
 
-  const addNewPitMember = (user) => {
-    if (newPitMembers.some((m) => m.id === user.id)) return
-    setNewPitMembers([...newPitMembers, user])
+  const addNewPitMember = async (userOrUsername) => {
+    // If passed a username string, look up the user ID
+    if (typeof userOrUsername === 'string' || !userOrUsername.id || userOrUsername.id === userOrUsername.username) {
+      const username = typeof userOrUsername === 'string' ? userOrUsername : userOrUsername.username
+      if (newPitMembers.some((m) => m.username === username)) return
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, username')
+          .eq('username', username)
+          .single()
+        
+        if (error || !data) {
+          console.error('Failed to find user:', username, error)
+          return
+        }
+        
+        setNewPitMembers((prev) => [...prev, { id: data.id, username: data.username }])
+      } catch (err) {
+        console.error('Add member error:', err)
+      }
+    } else {
+      if (newPitMembers.some((m) => m.id === userOrUsername.id)) return
+      setNewPitMembers((prev) => [...prev, userOrUsername])
+    }
     setNewPitMemberQuery('')
     setNewPitMemberResults([])
   }
@@ -1257,7 +1280,7 @@ export default function CommunityScreen({ user }) {
                     <TouchableOpacity
                       key={friendUsername}
                       style={styles.createPitResultItem}
-                      onPress={() => addNewPitMember({ username: friendUsername, id: friendUsername })}
+                      onPress={() => addNewPitMember(friendUsername)}
                     >
                       <Text style={styles.createPitResultText}>@{friendUsername}</Text>
                       <Text style={styles.createPitResultAdd}>+ Add</Text>
