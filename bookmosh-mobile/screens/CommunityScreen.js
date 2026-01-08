@@ -594,13 +594,12 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
+      // Insert with minimal required fields
       const { data, error } = await supabase
         .from('moshes')
         .insert([{
           title: newPitName.trim(),
           creator_id: currentUser.id,
-          creator_username: currentUser.username,
-          participants: participantIds,
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
@@ -608,44 +607,19 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .select()
         .single()
 
-      // Silently handle missing column errors
-      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703' || error?.code === 'PGRST204') {
-        // Try without the problematic columns
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('moshes')
-          .insert([{
-            title: newPitName.trim(),
-            creator_id: currentUser.id,
-            participants_ids: participantIds,
-            participants_usernames: participantUsernames,
-            archived: false,
-          }])
-          .select()
-          .single()
-        
-        if (!fallbackError && fallbackData) {
-          closeCreatePit()
-          loadMoshes()
-          setActiveMosh(fallbackData)
-          return
-        }
+      if (error) {
+        console.error('Create pit insert error:', error)
+        throw error
       }
-      if (error) throw error
 
       closeCreatePit()
-      loadMoshes()
+      await loadMoshes()
       if (data) {
         setActiveMosh(data)
       }
     } catch (error) {
-      // Suppress expected schema errors
-      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703' || error?.code === 'PGRST204') {
-        closeCreatePit()
-        loadMoshes()
-        return
-      }
       console.error('Create pit error:', error)
-      Alert.alert('Error', 'Failed to create pit')
+      Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
     } finally {
       setCreatingPit(false)
     }
