@@ -1264,9 +1264,7 @@ export default function BookDetailScreen({ user }) {
               },
             })
             if (emailError) {
-              console.error(`[RECOMMENDATIONS] Email failed for ${username}:`, emailError)
-            } else {
-              console.log(`[RECOMMENDATIONS] Email sent to ${username} (${email})`)
+              // Silently ignore email errors - recommendation was still sent
             }
           } catch (emailError) {
             console.error(`[RECOMMENDATIONS] Email exception for ${username}:`, emailError)
