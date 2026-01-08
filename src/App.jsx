@@ -5600,7 +5600,7 @@ function App() {
     setEditionPickerEditions([])
 
     if (isBookPage) {
-      navigate('/', { replace: true })
+      navigate(-1)
     }
   }
 
