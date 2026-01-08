@@ -3592,19 +3592,16 @@ function App() {
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      const { data, error } = await supabase
+      // Insert without .select().single() to avoid PGRST204 error
+      const { error } = await supabase
         .from('moshes')
         .insert([{
           title: newPitName.trim(),
           creator_id: currentUser.id,
-          creator_username: currentUser.username,
-          participants: participantIds,
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
         }])
-        .select()
-        .single()
 
       if (error) throw error
 
@@ -3614,9 +3611,6 @@ function App() {
       setNewPitMemberQuery('')
       setNewPitMemberResults([])
       await fetchActiveMoshes()
-      if (data) {
-        await openMosh(data)
-      }
     } catch (error) {
       console.error('Create pit error:', error)
     } finally {

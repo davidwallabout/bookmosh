@@ -594,8 +594,8 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      // Insert with minimal required fields
-      const { data, error } = await supabase
+      // Insert without .single() to avoid PGRST204 if RLS doesn't return the row
+      const { error } = await supabase
         .from('moshes')
         .insert([{
           title: newPitName.trim(),
@@ -604,8 +604,6 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
           participants_usernames: participantUsernames,
           archived: false,
         }])
-        .select()
-        .single()
 
       if (error) {
         console.error('Create pit insert error:', error)
@@ -614,9 +612,6 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
 
       closeCreatePit()
       await loadMoshes()
-      if (data) {
-        setActiveMosh(data)
-      }
     } catch (error) {
       console.error('Create pit error:', error)
       Alert.alert('Error', 'Failed to create pit: ' + (error?.message || 'Unknown error'))
