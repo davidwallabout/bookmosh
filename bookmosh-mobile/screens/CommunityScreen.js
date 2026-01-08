@@ -44,6 +44,16 @@ export default function CommunityScreen({ user }) {
   const [showAddMember, setShowAddMember] = useState(false)
   const [addMemberQuery, setAddMemberQuery] = useState('')
   const [addMemberResults, setAddMemberResults] = useState([])
+  const [showCreatePit, setShowCreatePit] = useState(false)
+  const [newPitName, setNewPitName] = useState('')
+  const [newPitMembers, setNewPitMembers] = useState([])
+  const [newPitMemberQuery, setNewPitMemberQuery] = useState('')
+  const [newPitMemberResults, setNewPitMemberResults] = useState([])
+  const [creatingPit, setCreatingPit] = useState(false)
+  const [showShareBook, setShowShareBook] = useState(false)
+  const [shareBookQuery, setShareBookQuery] = useState('')
+  const [shareBookResults, setShareBookResults] = useState([])
+  const [shareBookSearching, setShareBookSearching] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -490,6 +500,171 @@ export default function CommunityScreen({ user }) {
     navigation.navigate('FriendProfileScreen', { friendUsername: friend.username })
   }
 
+  // Create new pit functions
+  const openCreatePit = () => {
+    setShowCreatePit(true)
+    setNewPitName('')
+    setNewPitMembers([])
+    setNewPitMemberQuery('')
+    setNewPitMemberResults([])
+  }
+
+  const closeCreatePit = () => {
+    setShowCreatePit(false)
+    setNewPitName('')
+    setNewPitMembers([])
+    setNewPitMemberQuery('')
+    setNewPitMemberResults([])
+  }
+
+  const searchNewPitMembers = async () => {
+    if (!newPitMemberQuery.trim() || !currentUser) return
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, avatar_icon, avatar_url')
+        .ilike('username', `%${newPitMemberQuery.trim()}%`)
+        .neq('id', currentUser.id)
+        .limit(10)
+
+      if (error) throw error
+      // Filter out already added members
+      const filtered = (data || []).filter(
+        (u) => !newPitMembers.some((m) => m.id === u.id)
+      )
+      setNewPitMemberResults(filtered)
+    } catch (error) {
+      console.error('Search members error:', error)
+    }
+  }
+
+  const addNewPitMember = (user) => {
+    if (newPitMembers.some((m) => m.id === user.id)) return
+    setNewPitMembers([...newPitMembers, user])
+    setNewPitMemberQuery('')
+    setNewPitMemberResults([])
+  }
+
+  const removeNewPitMember = (userId) => {
+    setNewPitMembers(newPitMembers.filter((m) => m.id !== userId))
+  }
+
+  const createNewPit = async () => {
+    if (!newPitName.trim()) {
+      Alert.alert('Error', 'Please enter a pit name')
+      return
+    }
+    if (newPitMembers.length === 0) {
+      Alert.alert('Error', 'Please add at least one member')
+      return
+    }
+
+    setCreatingPit(true)
+    try {
+      const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
+      const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
+
+      const { data, error } = await supabase
+        .from('moshes')
+        .insert([{
+          title: newPitName.trim(),
+          creator_id: currentUser.id,
+          creator_username: currentUser.username,
+          participants: participantIds,
+          participants_ids: participantIds,
+          participants_usernames: participantUsernames,
+          archived: false,
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      closeCreatePit()
+      loadMoshes()
+      if (data) {
+        setActiveMosh(data)
+      }
+    } catch (error) {
+      console.error('Create pit error:', error)
+      Alert.alert('Error', 'Failed to create pit')
+    } finally {
+      setCreatingPit(false)
+    }
+  }
+
+  // Share book in pit functions
+  const openShareBook = () => {
+    setShowShareBook(true)
+    setShareBookQuery('')
+    setShareBookResults([])
+  }
+
+  const closeShareBook = () => {
+    setShowShareBook(false)
+    setShareBookQuery('')
+    setShareBookResults([])
+  }
+
+  const searchBooksToShare = async () => {
+    if (!shareBookQuery.trim() || !currentUser) return
+
+    setShareBookSearching(true)
+    try {
+      // Search user's library
+      const { data: userData } = await supabase
+        .from('users')
+        .select('username')
+        .eq('id', currentUser.id)
+        .single()
+
+      if (userData?.username) {
+        const { data, error } = await supabase
+          .from('bookmosh_books')
+          .select('id, title, author, cover')
+          .eq('owner', userData.username)
+          .ilike('title', `%${shareBookQuery.trim()}%`)
+          .limit(10)
+
+        if (error) throw error
+        setShareBookResults(data || [])
+      }
+    } catch (error) {
+      console.error('Search books error:', error)
+    } finally {
+      setShareBookSearching(false)
+    }
+  }
+
+  const shareBookInPit = async (book) => {
+    if (!activeMosh?.id || !currentUser || !book) return
+
+    try {
+      // Send a message with book info
+      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}`
+      
+      const { error } = await supabase.from('mosh_messages').insert([{
+        mosh_id: activeMosh.id,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        body: bookMessage,
+        book_share: {
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          book_id: book.id,
+        },
+      }])
+
+      if (error) throw error
+      closeShareBook()
+    } catch (error) {
+      console.error('Share book error:', error)
+      Alert.alert('Error', 'Failed to share book')
+    }
+  }
+
   const sendEmailInvite = async () => {
     if (!inviteEmail.trim()) {
       Alert.alert('Error', 'Please enter an email address')
@@ -573,12 +748,9 @@ export default function CommunityScreen({ user }) {
   const renderMoshItem = ({ item }) => (
     <TouchableOpacity style={styles.moshItem} onPress={() => openMosh(item)}>
       <Text style={styles.moshTitle}>{item.mosh_title || item.title}</Text>
-      <Text style={styles.moshBook}>
-        {item.book_title} by {item.book_author}
-      </Text>
       <View style={styles.moshMeta}>
         <Text style={styles.moshMetaText}>
-          {item.participants_usernames?.length || 0} participants
+          {item.participants_usernames?.length || 0} members
         </Text>
       </View>
     </TouchableOpacity>
@@ -617,10 +789,13 @@ export default function CommunityScreen({ user }) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.chatHeaderInfo} onPress={openPitSettings}>
             <Text style={styles.chatTitle}>{activeMosh.title}</Text>
-            <Text style={styles.chatBook}>
-              {activeMosh.book_title} by {activeMosh.book_author}
+            <Text style={styles.chatMemberCount}>
+              {activeMosh.participants_usernames?.length || 0} members
             </Text>
             <Text style={styles.chatSettingsHint}>Tap to manage pit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.shareBookBtn} onPress={openShareBook}>
+            <Text style={styles.shareBookBtnText}>📚</Text>
           </TouchableOpacity>
         </View>
 
@@ -748,6 +923,59 @@ export default function CommunityScreen({ user }) {
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Share Book Modal */}
+        {showShareBook && (
+          <View style={styles.shareBookModal}>
+            <View style={styles.shareBookHeader}>
+              <Text style={styles.shareBookTitle}>Share a Book</Text>
+              <TouchableOpacity onPress={closeShareBook}>
+                <Text style={styles.shareBookClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.shareBookSearchRow}>
+              <TextInput
+                style={styles.shareBookInput}
+                value={shareBookQuery}
+                onChangeText={setShareBookQuery}
+                placeholder="Search your library..."
+                placeholderTextColor="#666"
+                onSubmitEditing={searchBooksToShare}
+              />
+              <TouchableOpacity style={styles.shareBookSearchBtn} onPress={searchBooksToShare}>
+                <Text style={styles.shareBookSearchBtnText}>Search</Text>
+              </TouchableOpacity>
+            </View>
+            {shareBookSearching ? (
+              <ActivityIndicator size="small" color="#3b82f6" style={{ marginTop: 12 }} />
+            ) : (
+              <ScrollView style={styles.shareBookResults}>
+                {shareBookResults.map((book) => (
+                  <TouchableOpacity
+                    key={book.id}
+                    style={styles.shareBookItem}
+                    onPress={() => shareBookInPit(book)}
+                  >
+                    {book.cover ? (
+                      <Image source={{ uri: book.cover }} style={styles.shareBookCover} />
+                    ) : (
+                      <View style={styles.shareBookCoverPlaceholder}>
+                        <Text>📚</Text>
+                      </View>
+                    )}
+                    <View style={styles.shareBookInfo}>
+                      <Text style={styles.shareBookItemTitle} numberOfLines={1}>{book.title}</Text>
+                      <Text style={styles.shareBookItemAuthor} numberOfLines={1}>{book.author}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {shareBookResults.length === 0 && shareBookQuery.trim() && !shareBookSearching && (
+                  <Text style={styles.shareBookEmpty}>No books found. Try a different search.</Text>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
     )
   }
@@ -898,15 +1126,100 @@ export default function CommunityScreen({ user }) {
           </View>
         </ScrollView>
       ) : activeTab === 'pits' ? (
-        <FlatList
-          data={moshes}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderMoshItem}
-          contentContainerStyle={styles.pitsContainer}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No pit chats yet</Text>
-          }
-        />
+        <View style={{ flex: 1 }}>
+          <View style={styles.pitsHeader}>
+            <Text style={styles.sectionTitle}>Your Pits</Text>
+            <TouchableOpacity style={styles.createPitBtn} onPress={openCreatePit}>
+              <Text style={styles.createPitBtnText}>+ New Pit</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={moshes}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderMoshItem}
+            contentContainerStyle={styles.pitsContainer}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No pits yet. Create one to start chatting!</Text>
+            }
+          />
+
+          {/* Create Pit Modal */}
+          {showCreatePit && (
+            <View style={styles.createPitModal}>
+              <View style={styles.createPitHeader}>
+                <Text style={styles.createPitTitle}>Create New Pit</Text>
+                <TouchableOpacity onPress={closeCreatePit}>
+                  <Text style={styles.createPitClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.createPitLabel}>Pit Name</Text>
+              <TextInput
+                style={styles.createPitInput}
+                value={newPitName}
+                onChangeText={setNewPitName}
+                placeholder="Enter pit name..."
+                placeholderTextColor="#666"
+              />
+
+              <Text style={styles.createPitLabel}>Add Members</Text>
+              <View style={styles.createPitSearchRow}>
+                <TextInput
+                  style={styles.createPitSearchInput}
+                  value={newPitMemberQuery}
+                  onChangeText={setNewPitMemberQuery}
+                  placeholder="Search username..."
+                  placeholderTextColor="#666"
+                  onSubmitEditing={searchNewPitMembers}
+                />
+                <TouchableOpacity style={styles.createPitSearchBtn} onPress={searchNewPitMembers}>
+                  <Text style={styles.createPitSearchBtnText}>Search</Text>
+                </TouchableOpacity>
+              </View>
+
+              {newPitMemberResults.length > 0 && (
+                <View style={styles.createPitResults}>
+                  {newPitMemberResults.map((u) => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={styles.createPitResultItem}
+                      onPress={() => addNewPitMember(u)}
+                    >
+                      <Text style={styles.createPitResultText}>@{u.username}</Text>
+                      <Text style={styles.createPitResultAdd}>+ Add</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {newPitMembers.length > 0 && (
+                <View style={styles.createPitMembers}>
+                  <Text style={styles.createPitMembersLabel}>Members to add:</Text>
+                  {newPitMembers.map((m) => (
+                    <View key={m.id} style={styles.createPitMemberItem}>
+                      <Text style={styles.createPitMemberName}>@{m.username}</Text>
+                      <TouchableOpacity onPress={() => removeNewPitMember(m.id)}>
+                        <Text style={styles.createPitMemberRemove}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.createPitSubmitBtn, creatingPit && styles.createPitSubmitBtnDisabled]}
+                onPress={createNewPit}
+                disabled={creatingPit}
+              >
+                {creatingPit ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.createPitSubmitBtnText}>Create Pit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.recsContainer}>
           <View style={styles.recsHeaderRow}>
@@ -1538,6 +1851,267 @@ const styles = StyleSheet.create({
   memberRemove: {
     color: '#ef4444',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  chatMemberCount: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  shareBookBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    padding: 10,
+    marginLeft: 'auto',
+  },
+  shareBookBtnText: {
+    fontSize: 20,
+  },
+  shareBookModal: {
+    position: 'absolute',
+    bottom: 60,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(11, 18, 37, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+    maxHeight: 350,
+  },
+  shareBookHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  shareBookTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  shareBookClose: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  shareBookSearchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  shareBookInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 10,
+    color: '#fff',
+    fontSize: 14,
+  },
+  shareBookSearchBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  shareBookSearchBtnText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  shareBookResults: {
+    maxHeight: 200,
+  },
+  shareBookItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+  },
+  shareBookCover: {
+    width: 40,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  shareBookCoverPlaceholder: {
+    width: 40,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareBookInfo: {
+    flex: 1,
+  },
+  shareBookItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  shareBookItemAuthor: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  shareBookEmpty: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  pitsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  createPitBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  createPitBtnText: {
+    color: '#3b82f6',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  createPitModal: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(11, 18, 37, 0.98)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+    maxHeight: 500,
+  },
+  createPitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  createPitTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  createPitClose: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  createPitLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  createPitInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 15,
+  },
+  createPitSearchRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  createPitSearchInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 10,
+    color: '#fff',
+    fontSize: 14,
+  },
+  createPitSearchBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  createPitSearchBtnText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  createPitResults: {
+    marginTop: 8,
+  },
+  createPitResultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 6,
+  },
+  createPitResultText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  createPitResultAdd: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  createPitMembers: {
+    marginTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  createPitMembersLabel: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: 8,
+  },
+  createPitMemberItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  createPitMemberName: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  createPitMemberRemove: {
+    color: '#ef4444',
+    fontSize: 14,
+    padding: 4,
+  },
+  createPitSubmitBtn: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  createPitSubmitBtnDisabled: {
+    opacity: 0.6,
+  },
+  createPitSubmitBtnText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '600',
   },
 })
