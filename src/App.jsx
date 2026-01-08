@@ -1263,6 +1263,7 @@ function App() {
   const modalStarsRef = useRef(null)
   const pendingModalRatingRef = useRef(0)
   const modalRatingRafRef = useRef(null)
+  const isbndbCoverLookupRef = useRef(new Set())
   const [friendsRatings, setFriendsRatings] = useState([])
   const [communityAvgRating, setCommunityAvgRating] = useState(null)
   const [showAddToPitDropdown, setShowAddToPitDropdown] = useState(false)
