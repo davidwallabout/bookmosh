@@ -6440,6 +6440,19 @@ function App() {
                     >
                       {(selectedBook.tags ?? []).includes('Owned') ? '✓ Owned' : 'Owned'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecommendBookData(selectedBook)
+                        setRecommendNote('')
+                        setRecommendRecipients([])
+                        setRecommendFriendSearch('')
+                        setShowRecommendModal(true)
+                      }}
+                      className="rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition border-green-500/30 text-green-400 hover:border-green-500/60 hover:bg-green-500/10"
+                    >
+                      Recommend
+                    </button>
                   </div>
                 </div>
 
