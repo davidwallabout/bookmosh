@@ -176,6 +176,15 @@ export default function BookDetailScreen({ user }) {
         .eq('friend_id', currentUser.id)
         .eq('status', 'accepted')
 
+      // Silently handle table/column not existing
+      if (err1?.code === 'PGRST205' || err1?.code === '42P01' || err1?.code === '42703') {
+        setFriendsRatings([])
+        return
+      }
+      if (err2?.code === 'PGRST205' || err2?.code === '42P01' || err2?.code === '42703') {
+        setFriendsRatings([])
+        return
+      }
       if (err1) throw err1
       if (err2) throw err2
 
@@ -213,9 +222,19 @@ export default function BookDetailScreen({ user }) {
         .eq('title', book.title)
         .gt('rating', 0)
 
+      // Silently handle missing columns
+      if (ratingsError?.code === 'PGRST205' || ratingsError?.code === '42P01' || ratingsError?.code === '42703') {
+        setFriendsRatings([])
+        return
+      }
       if (ratingsError) throw ratingsError
       setFriendsRatings(ratings || [])
     } catch (error) {
+      // Suppress expected errors silently
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703') {
+        setFriendsRatings([])
+        return
+      }
       console.error('Load friends ratings error:', error)
       setFriendsRatings([])
     }

@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
 
@@ -67,9 +68,13 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       loadFriendRequests()
       if (activeTab === 'pits') {
         loadMoshes()
+        // Mark pits as viewed
+        AsyncStorage.setItem(`pits_last_viewed_${user?.id}`, new Date().toISOString())
       }
       if (activeTab === 'recommendations') {
         loadRecommendations()
+        // Mark recommendations as viewed
+        AsyncStorage.setItem(`recs_last_viewed_${user?.id}`, new Date().toISOString())
       }
     }
   }, [currentUser, activeTab])
@@ -698,20 +703,32 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .from('mosh_messages')
         .select('*')
         .eq('mosh_id', activeMosh.id)
-        .not('book_share', 'is', null)
         .order('created_at', { ascending: false })
 
+      // Silently handle missing column errors
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703') {
+        setSharedBooks([])
+        setShowSharedBooks(true)
+        return
+      }
       if (error) throw error
 
-      // Extract unique books from messages
+      // Extract unique books from messages that have book_share
       const books = (data || [])
+        .filter((msg) => msg.book_share)
         .map((msg) => msg.book_share)
-        .filter(Boolean)
       setSharedBooks(books)
       setShowSharedBooks(true)
     } catch (error) {
+      // Suppress expected errors silently
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703') {
+        setSharedBooks([])
+        setShowSharedBooks(true)
+        return
+      }
       console.error('Load shared books error:', error)
       setSharedBooks([])
+      setShowSharedBooks(true)
     }
   }
 
@@ -849,7 +866,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
           </TouchableOpacity>
           <View style={styles.chatHeaderActions}>
             <TouchableOpacity style={styles.chatHeaderActionBtn} onPress={loadSharedBooks}>
-              <Text style={styles.chatHeaderActionIcon}>📖</Text>
+              <Text style={styles.chatHeaderActionIcon}>Books</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chatHeaderActionBtn} onPress={openShareBook}>
               <Text style={styles.chatHeaderActionIcon}>+</Text>
@@ -2010,9 +2027,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chatHeaderActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2020,8 +2037,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   chatHeaderActionIcon: {
-    fontSize: 16,
+    fontSize: 11,
+    fontWeight: '600',
     color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   shareBookModal: {
     position: 'absolute',
