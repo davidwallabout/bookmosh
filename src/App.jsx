@@ -1132,6 +1132,8 @@ function App() {
   const [showShareBookInPit, setShowShareBookInPit] = useState(false)
   const [shareBookInPitQuery, setShareBookInPitQuery] = useState('')
   const [shareBookInPitResults, setShareBookInPitResults] = useState([])
+  const [showSharedBooksInPit, setShowSharedBooksInPit] = useState(false)
+  const [sharedBooksInPit, setSharedBooksInPit] = useState([])
   const [activeMoshMessages, setActiveMoshMessages] = useState([])
   const [moshMessageReactions, setMoshMessageReactions] = useState({})
   const [isMoshCoverPickerOpen, setIsMoshCoverPickerOpen] = useState(false)
@@ -3643,6 +3645,31 @@ function App() {
     } catch (error) {
       console.error('Share book error:', error)
     }
+  }
+
+  // View all shared books in pit
+  const loadSharedBooksInPit = async () => {
+    if (!activeMosh?.id) return
+    try {
+      const { data, error } = await supabase
+        .from('mosh_messages')
+        .select('*')
+        .eq('mosh_id', activeMosh.id)
+        .not('book_share', 'is', null)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      const books = (data || []).map((msg) => msg.book_share).filter(Boolean)
+      setSharedBooksInPit(books)
+      setShowSharedBooksInPit(true)
+    } catch (error) {
+      console.error('Load shared books error:', error)
+      setSharedBooksInPit([])
+    }
+  }
+
+  const closeSharedBooksInPit = () => {
+    setShowSharedBooksInPit(false)
+    setSharedBooksInPit([])
   }
 
   const backToMoshes = () => {
@@ -9242,19 +9269,28 @@ function App() {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {activeMosh?.id && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof window === 'undefined') return
-                            const url = window.location.href
-                            if (navigator?.clipboard?.writeText) {
-                              navigator.clipboard.writeText(url)
-                            }
-                          }}
-                          className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
-                        >
-                          Copy link
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={loadSharedBooksInPit}
+                            className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                          >
+                            📖 Books
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof window === 'undefined') return
+                              const url = window.location.href
+                              if (navigator?.clipboard?.writeText) {
+                                navigator.clipboard.writeText(url)
+                              }
+                            }}
+                            className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
+                          >
+                            Copy link
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
@@ -9267,6 +9303,54 @@ function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Shared Books Modal */}
+              {showSharedBooksInPit && (
+                <div className="absolute inset-0 z-20 bg-[#0b1225]/98 overflow-auto">
+                  <div className="mx-auto w-full max-w-2xl px-4 py-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-xl font-semibold text-white">Shared Books</h3>
+                      <button
+                        type="button"
+                        onClick={closeSharedBooksInPit}
+                        className="text-white/50 hover:text-white text-xl"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {sharedBooksInPit.length > 0 ? (
+                      <div className="space-y-3">
+                        {sharedBooksInPit.map((book, idx) => (
+                          <button
+                            key={`${book.book_id || book.title}-${idx}`}
+                            type="button"
+                            onClick={() => {
+                              closeSharedBooksInPit()
+                              closeMoshPanel()
+                              if (book.book_id) {
+                                openModal(book)
+                              }
+                            }}
+                            className="w-full flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/30"
+                          >
+                            {book.cover ? (
+                              <img src={book.cover} alt={book.title} className="w-12 h-18 rounded-lg object-cover" />
+                            ) : (
+                              <div className="w-12 h-18 rounded-lg bg-white/10 flex items-center justify-center text-xl">📚</div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold line-clamp-2">{book.title}</p>
+                              <p className="text-white/60 text-sm">{book.author}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-white/50 text-center py-12">No books have been shared in this pit yet.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {!activeMosh ? (
                 <div className="mx-auto w-full max-w-5xl px-4 py-6 overflow-auto h-[calc(100vh-80px)]">

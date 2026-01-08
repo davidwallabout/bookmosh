@@ -54,6 +54,8 @@ export default function CommunityScreen({ user }) {
   const [shareBookQuery, setShareBookQuery] = useState('')
   const [shareBookResults, setShareBookResults] = useState([])
   const [shareBookSearching, setShareBookSearching] = useState(false)
+  const [showSharedBooks, setShowSharedBooks] = useState(false)
+  const [sharedBooks, setSharedBooks] = useState([])
 
   useEffect(() => {
     loadCurrentUser()
@@ -665,6 +667,37 @@ export default function CommunityScreen({ user }) {
     }
   }
 
+  // View all shared books in pit
+  const loadSharedBooks = async () => {
+    if (!activeMosh?.id) return
+
+    try {
+      const { data, error } = await supabase
+        .from('mosh_messages')
+        .select('*')
+        .eq('mosh_id', activeMosh.id)
+        .not('book_share', 'is', null)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Extract unique books from messages
+      const books = (data || [])
+        .map((msg) => msg.book_share)
+        .filter(Boolean)
+      setSharedBooks(books)
+      setShowSharedBooks(true)
+    } catch (error) {
+      console.error('Load shared books error:', error)
+      setSharedBooks([])
+    }
+  }
+
+  const closeSharedBooks = () => {
+    setShowSharedBooks(false)
+    setSharedBooks([])
+  }
+
   const sendEmailInvite = async () => {
     if (!inviteEmail.trim()) {
       Alert.alert('Error', 'Please enter an email address')
@@ -794,10 +827,55 @@ export default function CommunityScreen({ user }) {
             </Text>
             <Text style={styles.chatSettingsHint}>Tap to manage pit</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.viewSharedBooksBtn} onPress={loadSharedBooks}>
+            <Text style={styles.viewSharedBooksBtnText}>📖</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.shareBookBtn} onPress={openShareBook}>
-            <Text style={styles.shareBookBtnText}>📚</Text>
+            <Text style={styles.shareBookBtnText}>📚+</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Shared Books Modal */}
+        {showSharedBooks && (
+          <View style={styles.sharedBooksModal}>
+            <View style={styles.sharedBooksHeader}>
+              <Text style={styles.sharedBooksTitle}>Shared Books</Text>
+              <TouchableOpacity onPress={closeSharedBooks}>
+                <Text style={styles.sharedBooksClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.sharedBooksList}>
+              {sharedBooks.length > 0 ? (
+                sharedBooks.map((book, idx) => (
+                  <TouchableOpacity
+                    key={`${book.book_id || book.title}-${idx}`}
+                    style={styles.sharedBookItem}
+                    onPress={() => {
+                      closeSharedBooks()
+                      if (book.book_id) {
+                        navigation.navigate('BookDetailScreen', { bookId: book.book_id })
+                      }
+                    }}
+                  >
+                    {book.cover ? (
+                      <Image source={{ uri: book.cover }} style={styles.sharedBookCover} />
+                    ) : (
+                      <View style={styles.sharedBookCoverPlaceholder}>
+                        <Text>📚</Text>
+                      </View>
+                    )}
+                    <View style={styles.sharedBookInfo}>
+                      <Text style={styles.sharedBookTitle} numberOfLines={2}>{book.title}</Text>
+                      <Text style={styles.sharedBookAuthor} numberOfLines={1}>{book.author}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.sharedBooksEmpty}>No books have been shared in this pit yet.</Text>
+              )}
+            </ScrollView>
+          </View>
+        )}
 
         {showPitSettings && (
           <View style={styles.pitSettingsPanel}>
@@ -2113,5 +2191,85 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  viewSharedBooksBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    padding: 10,
+  },
+  viewSharedBooksBtnText: {
+    fontSize: 18,
+  },
+  sharedBooksModal: {
+    position: 'absolute',
+    top: 120,
+    left: 0,
+    right: 0,
+    bottom: 60,
+    backgroundColor: 'rgba(11, 18, 37, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 16,
+  },
+  sharedBooksHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sharedBooksTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  sharedBooksClose: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  sharedBooksList: {
+    flex: 1,
+  },
+  sharedBookItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  sharedBookCover: {
+    width: 50,
+    height: 75,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sharedBookCoverPlaceholder: {
+    width: 50,
+    height: 75,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sharedBookInfo: {
+    flex: 1,
+  },
+  sharedBookTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  sharedBookAuthor: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  sharedBooksEmpty: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 40,
   },
 })
