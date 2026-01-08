@@ -3663,18 +3663,13 @@ function App() {
   const shareBookInPit = async (book) => {
     if (!activeMosh?.id || !currentUser || !book) return
     try {
-      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}`
+      const coverPart = book.cover ? `|||COVER:${book.cover}|||` : ''
+      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}${coverPart}`
       const { error } = await supabase.from('mosh_messages').insert([{
         mosh_id: activeMosh.id,
         sender_id: currentUser.id,
         sender_username: currentUser.username,
         body: bookMessage,
-        book_share: {
-          title: book.title,
-          author: book.author,
-          cover: book.cover,
-          book_id: book.id,
-        },
       }])
       if (error) throw error
       setShowShareBookInPit(false)
@@ -9874,7 +9869,17 @@ function App() {
                   <div className="grid gap-4 lg:grid-cols-[2fr_1fr] h-full overflow-hidden">
                     <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4 flex flex-col min-h-0 overflow-hidden">
                       <div className="flex-1 min-h-0 space-y-3 overflow-auto pr-2">
-                        {activeMoshMessages.map((msg) => (
+                        {activeMoshMessages.map((msg) => {
+                          // Parse book share messages
+                          const bookShareMatch = (msg.body || '').match(/📚 Shared a book: "(.+)" by (.+?)(\|\|\|COVER:(.+?)\|\|\|)?$/)
+                          const isBookShare = Boolean(bookShareMatch)
+                          const bookShareData = isBookShare ? {
+                            title: bookShareMatch[1],
+                            author: bookShareMatch[2],
+                            cover: bookShareMatch[4] || null,
+                          } : null
+
+                          return (
                           <div key={msg.id} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                             <div className="flex items-start justify-between gap-3">
                               <button
@@ -9888,7 +9893,65 @@ function App() {
                                 {formatMoshTimestamp(msg.created_at)}
                               </span>
                             </div>
-                            <p className="text-sm text-white">{msg.body}</p>
+                            
+                            {isBookShare && bookShareData ? (
+                              <div className="mt-2">
+                                <div className="flex gap-3 mb-3">
+                                  {bookShareData.cover ? (
+                                    <img src={bookShareData.cover} alt="" className="w-12 h-18 rounded-lg object-cover flex-shrink-0" />
+                                  ) : (
+                                    <div className="w-12 h-18 rounded-lg bg-white/10 flex items-center justify-center text-lg flex-shrink-0">📚</div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-white line-clamp-2">{bookShareData.title}</p>
+                                    <p className="text-xs text-white/60">{bookShareData.author}</p>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                  {['Reading', 'to-read', 'Read', 'Owned'].map((status) => (
+                                    <button
+                                      key={status}
+                                      type="button"
+                                      onClick={async () => {
+                                        const tags = status === 'Owned' ? ['to-read', 'Owned'] : [status]
+                                        const finalStatus = status === 'Owned' ? 'to-read' : status
+                                        try {
+                                          const { error } = await supabase.from('bookmosh_books').insert({
+                                            owner: currentUser.username,
+                                            owner_id: currentUser.id,
+                                            title: bookShareData.title,
+                                            author: bookShareData.author,
+                                            cover: bookShareData.cover,
+                                            status: finalStatus,
+                                            tags,
+                                            updated_at: new Date().toISOString(),
+                                          })
+                                          if (error?.code === '23505') {
+                                            showSuccessMessage(`"${bookShareData.title}" is already in your library`)
+                                          } else if (error) {
+                                            throw error
+                                          } else {
+                                            showSuccessMessage(`Added "${bookShareData.title}" as ${status}`)
+                                            await loadTracker()
+                                          }
+                                        } catch (err) {
+                                          console.error('Add book from pit error:', err)
+                                        }
+                                      }}
+                                      className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${
+                                        status === 'Owned'
+                                          ? 'border-[#ee6bfe]/30 text-[#ee6bfe] hover:bg-[#ee6bfe]/10'
+                                          : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
+                                      }`}
+                                    >
+                                      {status === 'to-read' ? 'To Read' : status}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white">{msg.body}</p>
+                            )}
 
                             <div className="mt-2 flex items-center gap-2">
                               {(() => {
@@ -9928,7 +9991,7 @@ function App() {
                               })()}
                             </div>
                           </div>
-                        ))}
+                        )})}
                         {activeMoshMessages.length === 0 && (
                           <p className="text-sm text-white/60">No messages yet.</p>
                         )}
