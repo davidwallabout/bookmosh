@@ -5908,7 +5908,7 @@ function App() {
     setEditionPickerEditions([])
 
     if (isBookPage) {
-      navigate(-1)
+      navigate('/')
     }
   }
 
@@ -6262,7 +6262,7 @@ function App() {
                       onClick={closeModal}
                       className="rounded-full border border-white/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white"
                     >
-                      Back
+                      Close
                     </button>
                   </div>
                 </div>
