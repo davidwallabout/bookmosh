@@ -203,7 +203,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       ])
 
       if (error) throw error
-      Alert.alert('Success', 'Friend request sent!')
+      // Friend request sent - no alert needed, UI updates
     } catch (error) {
       Alert.alert('Error', error.message)
     }
@@ -221,7 +221,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
 
       await loadCurrentUser()
       await loadFriendRequests()
-      Alert.alert('Success', 'Friend request accepted!')
+      // Friend accepted - no alert needed, UI updates
     } catch (error) {
       Alert.alert('Error', error.message)
     }
@@ -444,7 +444,6 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       setAddMemberQuery('')
       setAddMemberResults([])
       setShowAddMember(false)
-      Alert.alert('Success', `Added @${userToAdd.username} to the pit`)
       loadMoshes()
     } catch (error) {
       console.error('Add member error:', error)
@@ -747,11 +746,9 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       })
 
       if (error) throw error
-      Alert.alert('Success', `Invitation sent to ${inviteEmail}!`)
       setInviteEmail('')
     } catch (error) {
       console.error('Send invite error:', error)
-      Alert.alert('Success', `Invitation sent to ${inviteEmail}!`)
       setInviteEmail('')
     } finally {
       setInviteSending(false)

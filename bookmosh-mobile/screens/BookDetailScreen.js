@@ -300,7 +300,6 @@ export default function BookDetailScreen({ user }) {
       }])
 
       if (error) throw error
-      Alert.alert('Success', `Book shared to "${pit.title}"!`)
       closeAddToPitModal()
     } catch (error) {
       console.error('Add book to pit error:', error)
