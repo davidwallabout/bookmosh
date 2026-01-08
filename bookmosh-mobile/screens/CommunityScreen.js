@@ -12,6 +12,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native'
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
@@ -57,6 +58,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
   const [shareBookSearching, setShareBookSearching] = useState(false)
   const [showSharedBooks, setShowSharedBooks] = useState(false)
   const [sharedBooks, setSharedBooks] = useState([])
+  const [sharedBookLibraryIndex, setSharedBookLibraryIndex] = useState({})
 
   useEffect(() => {
     loadCurrentUser()
@@ -104,6 +106,66 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       loadMessages()
       subscribeToMessages()
     }
+  }, [activeMosh?.id])
+
+  useEffect(() => {
+    if (!currentUser?.username) return
+    if (!activeMosh?.id) return
+    if (!Array.isArray(messages) || messages.length === 0) return
+
+    const bookRegex = /📚 Shared a book: "(.+)" by (.+?)(\|\|\|COVER:(.+?)\|\|\|)?$/
+    const unique = new Map()
+    for (const m of messages) {
+      const body = String(m?.body || '')
+      const match = body.match(bookRegex)
+      if (!match) continue
+      const title = match[1]
+      const author = match[2]
+      const key = `${title}|${author}`
+      if (!unique.has(key)) unique.set(key, { title, author })
+    }
+    if (unique.size === 0) return
+
+    let canceled = false
+    ;(async () => {
+      try {
+        const titles = Array.from(unique.values()).map((b) => b.title)
+        const { data, error } = await supabase
+          .from('bookmosh_books')
+          .select('title, author, status, tags')
+          .eq('owner', currentUser.username)
+          .in('title', titles)
+          .limit(100)
+
+        if (error) return
+        if (canceled) return
+
+        const next = {}
+        for (const row of data || []) {
+          const key = `${row.title}|${row.author}`
+          next[key] = {
+            status: row.status || null,
+            tags: Array.isArray(row.tags) ? row.tags : [],
+          }
+        }
+
+        setSharedBookLibraryIndex((prev) => ({ ...prev, ...next }))
+      } catch {}
+    })()
+
+    return () => {
+      canceled = true
+    }
+  }, [currentUser?.username, activeMosh?.id, messages])
+
+  useEffect(() => {
+    if (!activeMosh) return
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true })
+      }, 100)
+    })
+    return () => keyboardDidShow.remove()
   }, [activeMosh?.id])
 
   const loadCurrentUser = async () => {
@@ -251,16 +313,17 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const schemaErrCodes = new Set(['PGRST204', 'PGRST205', '42P01', '42703'])
       if (!schemaErrCodes.has(byParticipantsIdsError.code)) throw byParticipantsIdsError
 
-      const { data: byCreatorId, error: byCreatorIdError } = await supabase
+      // Fallback: query by participants_usernames instead
+      const { data: byUsername, error: byUsernameError } = await supabase
         .from('moshes')
         .select('*')
-        .eq('creator_id', currentUser.id)
+        .contains('participants_usernames', [currentUser.username])
         .eq('archived', false)
         .order('created_at', { ascending: false })
 
-      if (byCreatorIdError) throw byCreatorIdError
+      if (byUsernameError) throw byUsernameError
 
-      setMoshes(byCreatorId || [])
+      setMoshes(byUsername || [])
     } catch (error) {
       console.error('[LOAD MOSHES] Error:', error)
     }
@@ -366,6 +429,8 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       ])
 
       if (error) throw error
+      // Reload messages after sending
+      await loadMessages()
     } catch (error) {
       console.error('Send message error:', error)
     }
@@ -386,7 +451,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
   }
 
   const openPitSettings = () => {
-    setPitNameDraft(activeMosh?.title || activeMosh?.mosh_title || '')
+    setPitNameDraft(activeMosh?.mosh_title || activeMosh?.title || '')
     setShowPitSettings(true)
   }
 
@@ -396,11 +461,11 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
     try {
       const { error } = await supabase
         .from('moshes')
-        .update({ title: pitNameDraft.trim(), updated_at: new Date().toISOString() })
+        .update({ mosh_title: pitNameDraft.trim(), updated_at: new Date().toISOString() })
         .eq('id', activeMosh.id)
 
       if (error) throw error
-      setActiveMosh({ ...activeMosh, title: pitNameDraft.trim() })
+      setActiveMosh({ ...activeMosh, mosh_title: pitNameDraft.trim(), title: pitNameDraft.trim() })
       setEditingPitName(false)
       loadMoshes()
     } catch (error) {
@@ -610,32 +675,32 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       const participantIds = [currentUser.id, ...newPitMembers.map((m) => m.id)]
       const participantUsernames = [currentUser.username, ...newPitMembers.map((m) => m.username)]
 
-      const title = newPitName.trim()
+      const moshTitle = newPitName.trim()
       const schemaErrCodes = new Set(['PGRST204', 'PGRST205', '42P01', '42703'])
 
       const insertAttempts = [
         {
-          title,
-          creator_id: currentUser.id,
+          mosh_title: moshTitle,
+          book_title: '',
           participants_ids: participantIds,
           participants_usernames: participantUsernames,
           archived: false,
         },
         {
-          title,
-          creator_id: currentUser.id,
+          mosh_title: moshTitle,
+          book_title: '',
           participants_usernames: participantUsernames,
           archived: false,
         },
         {
-          title,
-          creator_id: currentUser.id,
+          mosh_title: moshTitle,
+          book_title: '',
           participants_ids: participantIds,
           archived: false,
         },
         {
-          title,
-          creator_id: currentUser.id,
+          mosh_title: moshTitle,
+          book_title: '',
           archived: false,
         },
       ]
@@ -715,24 +780,24 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
     if (!activeMosh?.id || !currentUser || !book) return
 
     try {
-      // Send a message with book info
-      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}`
+      // Include cover URL in message body so we can extract it later
+      const coverPart = book.cover ? `|||COVER:${book.cover}|||` : ''
+      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}${coverPart}`
       
       const { error } = await supabase.from('mosh_messages').insert([{
         mosh_id: activeMosh.id,
         sender_id: currentUser.id,
         sender_username: currentUser.username,
         body: bookMessage,
-        book_share: {
-          title: book.title,
-          author: book.author,
-          cover: book.cover,
-          book_id: book.id,
-        },
       }])
 
       if (error) throw error
+      
+      // Add to local sharedBooks immediately so cover shows
+      setSharedBooks(prev => [...prev, { title: book.title, author: book.author, cover: book.cover }])
+      
       closeShareBook()
+      loadMessages()
     } catch (error) {
       console.error('Share book error:', error)
       Alert.alert('Error', 'Failed to share book')
@@ -750,27 +815,51 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .eq('mosh_id', activeMosh.id)
         .order('created_at', { ascending: false })
 
-      // Silently handle missing column errors
-      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703') {
-        setSharedBooks([])
-        setShowSharedBooks(true)
-        return
-      }
       if (error) throw error
 
-      // Extract unique books from messages that have book_share
-      const books = (data || [])
-        .filter((msg) => msg.book_share)
-        .map((msg) => msg.book_share)
-      setSharedBooks(books)
+      // Extract books from messages by parsing the body
+      const bookRegex = /📚 Shared a book: "(.+)" by (.+)$/
+      const booksFromMessages = (data || [])
+        .filter((msg) => bookRegex.test(msg.body || ''))
+        .map((msg) => {
+          const match = (msg.body || '').match(bookRegex)
+          return match ? { title: match[1], author: match[2] } : null
+        })
+        .filter(Boolean)
+
+      // Get unique books
+      const uniqueBooks = []
+      const seen = new Set()
+      for (const book of booksFromMessages) {
+        const key = `${book.title}|${book.author}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          uniqueBooks.push(book)
+        }
+      }
+
+      // Try to get covers from bookmosh_books for these titles
+      if (uniqueBooks.length > 0) {
+        const titles = uniqueBooks.map(b => b.title)
+        const { data: booksData } = await supabase
+          .from('bookmosh_books')
+          .select('title, author, cover')
+          .in('title', titles)
+          .limit(50)
+
+        const coverMap = {}
+        for (const b of (booksData || [])) {
+          coverMap[b.title] = b.cover
+        }
+
+        for (const book of uniqueBooks) {
+          book.cover = coverMap[book.title] || null
+        }
+      }
+
+      setSharedBooks(uniqueBooks)
       setShowSharedBooks(true)
     } catch (error) {
-      // Suppress expected errors silently
-      if (error?.code === 'PGRST205' || error?.code === '42P01' || error?.code === '42703') {
-        setSharedBooks([])
-        setShowSharedBooks(true)
-        return
-      }
       console.error('Load shared books error:', error)
       setSharedBooks([])
       setShowSharedBooks(true)
@@ -871,22 +960,239 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
     </TouchableOpacity>
   )
 
+  const [addingBookFromPit, setAddingBookFromPit] = useState(null)
+  const [reactionMenuMessage, setReactionMenuMessage] = useState(null)
+
+  const toggleReaction = async (messageId, emoji) => {
+    if (!currentUser || !messageId) return
+    setReactionMenuMessage(null)
+    
+    try {
+      // Check if user already reacted with this emoji
+      const { data: existing } = await supabase
+        .from('mosh_message_reactions')
+        .select('id')
+        .eq('message_id', messageId)
+        .eq('user_id', currentUser.id)
+        .eq('emoji', emoji)
+        .limit(1)
+
+      if (existing && existing.length > 0) {
+        // Remove reaction
+        await supabase
+          .from('mosh_message_reactions')
+          .delete()
+          .eq('id', existing[0].id)
+      } else {
+        // Add reaction
+        await supabase
+          .from('mosh_message_reactions')
+          .insert({
+            message_id: messageId,
+            user_id: currentUser.id,
+            username: currentUser.username,
+            emoji,
+          })
+      }
+      
+      // Reload messages to show updated reactions
+      loadMessages()
+    } catch (error) {
+      // Table might not exist - silently ignore
+      console.log('Reaction toggle (table may not exist):', error?.code)
+    }
+  }
+
+  const addBookFromPitMessage = async (bookInfo, status, isOwned = false, preserveOwned = false) => {
+    if (!currentUser || !bookInfo) return
+    try {
+      const nextTags = isOwned ? [status, 'Owned'] : [status]
+      const tags = preserveOwned && !isOwned ? Array.from(new Set([...nextTags, 'Owned'])) : nextTags
+      const { error } = await supabase.from('bookmosh_books').insert({
+        owner: currentUser.username,
+        title: bookInfo.title,
+        author: bookInfo.author,
+        cover: bookInfo.cover || null,
+        status,
+        tags,
+        updated_at: new Date().toISOString(),
+      })
+      if (error) {
+        // Book exists -> update instead (so pills update your tags/status)
+        if (error.code === '23505') {
+          const { error: updateError } = await supabase
+            .from('bookmosh_books')
+            .update({
+              status,
+              tags,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('owner', currentUser.username)
+            .eq('title', bookInfo.title)
+            .eq('author', bookInfo.author)
+          if (updateError) throw updateError
+
+          setSharedBookLibraryIndex((prev) => ({
+            ...prev,
+            [`${bookInfo.title}|${bookInfo.author}`]: { status, tags },
+          }))
+          return
+        }
+        if (error.code === 'PGRST204' || error.message?.includes('schema cache')) {
+          // Schema cache issue - ignore and continue
+          console.log('Schema cache issue, continuing:', error.message)
+          return
+        }
+        throw error
+      }
+
+      setSharedBookLibraryIndex((prev) => ({
+        ...prev,
+        [`${bookInfo.title}|${bookInfo.author}`]: { status, tags },
+      }))
+      const ownedText = isOwned ? ' (Owned)' : ''
+      Alert.alert('Added!', `"${bookInfo.title}" added as ${status}${ownedText}`)
+    } catch (error) {
+      console.error('Add book from pit error:', error)
+      // Don't show alert for schema issues
+      if (!error.message?.includes('schema cache')) {
+        Alert.alert('Error', error.message || 'Failed to add book to library')
+      }
+    }
+  }
+
+  const parseBookShare = (messageBody) => {
+    // Extract cover URL if present
+    const coverMatch = messageBody.match(/\|\|\|COVER:(.+?)\|\|\|/)
+    const cover = coverMatch ? coverMatch[1] : null
+    
+    // Remove cover part for title/author parsing
+    const cleanBody = messageBody.replace(/\|\|\|COVER:.+?\|\|\|/, '')
+    
+    const match = cleanBody.match(/📚 Shared a book: "(.+)" by (.+)$/)
+    if (match) {
+      return { title: match[1], author: match[2], cover }
+    }
+    return null
+  }
+
   const renderMessage = ({ item }) => {
     const isMe = item.sender_id === currentUser?.id
     const messageBody = item.body || ''
 
     if (!messageBody) return null
 
+    const bookShare = parseBookShare(messageBody)
+
+    if (bookShare) {
+      // Use cover from parsed message first, fallback to sharedBooks lookup
+      const fallbackBook = sharedBooks.find(b => b.title === bookShare.title)
+      const coverUrl = bookShare.cover || fallbackBook?.cover || null
+
+      const bookData = { ...bookShare, cover: coverUrl }
+      const libraryKey = `${bookShare.title}|${bookShare.author}`
+      const libraryRow = sharedBookLibraryIndex[libraryKey] || null
+      const selectedStatus = libraryRow?.status || null
+      const selectedTags = Array.isArray(libraryRow?.tags) ? libraryRow.tags : []
+      const ownedSelected = selectedTags.includes('Owned')
+      
+      return (
+        <View style={[styles.messageContainer, isMe && styles.messageContainerMe]}>
+          {!isMe && <Text style={styles.messageUsername}>@{item.sender_username}</Text>}
+          <View style={styles.bookShareBubbleWide}>
+            <View style={styles.bookShareContent}>
+              <TouchableOpacity
+                onPress={() => {
+                  // Navigate directly to book details - user can add from there
+                  navigation.navigate('BookDetailScreen', { 
+                    bookTitle: bookShare.title,
+                    bookAuthor: bookShare.author,
+                    bookCover: coverUrl,
+                  })
+                }}
+              >
+                {coverUrl ? (
+                  <Image source={{ uri: coverUrl, cache: 'force-cache' }} style={styles.bookShareCoverLarge} />
+                ) : (
+                  <View style={styles.bookShareCoverPlaceholderLarge}>
+                    <Text style={styles.bookSharePlaceholderText}>📚</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={styles.bookShareInfo}>
+                <Text style={styles.bookShareTitle} numberOfLines={2}>{bookShare.title}</Text>
+                <Text style={styles.bookShareAuthor} numberOfLines={1}>{bookShare.author}</Text>
+              </View>
+            </View>
+            <View style={styles.bookShareActions}>
+              <View style={styles.bookShareQuadrant}>
+                <TouchableOpacity
+                  style={[styles.bookShareQuadrantBtn, selectedStatus === 'Reading' && styles.bookShareQuadrantBtnActive]}
+                  onPress={() => addBookFromPitMessage(bookData, 'Reading', false, ownedSelected)}
+                >
+                  <Text style={styles.bookShareQuadrantText}>Reading</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bookShareQuadrantBtn, selectedStatus === 'to-read' && styles.bookShareQuadrantBtnActive]}
+                  onPress={() => addBookFromPitMessage(bookData, 'to-read', false, ownedSelected)}
+                >
+                  <Text style={styles.bookShareQuadrantText}>To Read</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.bookShareQuadrant}>
+                <TouchableOpacity
+                  style={[styles.bookShareQuadrantBtn, selectedStatus === 'Read' && styles.bookShareQuadrantBtnActive]}
+                  onPress={() => addBookFromPitMessage(bookData, 'Read', false, ownedSelected)}
+                >
+                  <Text style={styles.bookShareQuadrantText}>Read</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bookShareQuadrantBtn, styles.bookShareOwnedBtn, ownedSelected && styles.bookShareOwnedBtnActive]}
+                  onPress={() => addBookFromPitMessage(bookData, 'to-read', true)}
+                >
+                  <Text style={styles.bookShareOwnedText}>Owned</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )
+    }
+
     return (
       <View
         style={[styles.messageContainer, isMe && styles.messageContainerMe]}
       >
         {!isMe && <Text style={styles.messageUsername}>@{item.sender_username}</Text>}
-        <View style={[styles.messageBubble, isMe && styles.messageBubbleMe]}>
+        <TouchableOpacity
+          style={[styles.messageBubble, isMe && styles.messageBubbleMe]}
+          activeOpacity={0.8}
+          onLongPress={() => setReactionMenuMessage(item)}
+        >
           <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
             {messageBody}
           </Text>
-        </View>
+          {item.reactions && item.reactions.length > 0 && (
+            <View style={styles.reactionsRow}>
+              {item.reactions.map((r, idx) => (
+                <Text key={idx} style={styles.reactionEmoji}>{r.emoji}</Text>
+              ))}
+            </View>
+          )}
+        </TouchableOpacity>
+        {reactionMenuMessage?.id === item.id && (
+          <View style={styles.reactionMenu}>
+            <TouchableOpacity onPress={() => toggleReaction(item.id, '👍')} style={styles.reactionBtn}>
+              <Text style={styles.reactionBtnText}>👍</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => toggleReaction(item.id, '👎')} style={styles.reactionBtn}>
+              <Text style={styles.reactionBtnText}>👎</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setReactionMenuMessage(null)} style={styles.reactionCloseBtn}>
+              <Text style={styles.reactionCloseBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     )
   }
@@ -896,18 +1202,17 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.chatHeader}>
           <TouchableOpacity onPress={closeMosh}>
             <Text style={styles.backButton}>← Back</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.chatHeaderInfo} onPress={openPitSettings}>
-            <Text style={styles.chatTitle}>{activeMosh.title}</Text>
+            <Text style={styles.chatTitle} numberOfLines={1}>{activeMosh.mosh_title || activeMosh.title || 'Pit'}</Text>
             <Text style={styles.chatMemberCount}>
-              {activeMosh.participants_usernames?.length || 0} members
+              {activeMosh.participants_usernames?.length || 0} members · Tap to manage
             </Text>
-            <Text style={styles.chatSettingsHint}>Tap to manage pit</Text>
           </TouchableOpacity>
           <View style={styles.chatHeaderActions}>
             <TouchableOpacity style={styles.chatHeaderActionBtn} onPress={loadSharedBooks}>
@@ -992,7 +1297,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
                 </View>
               ) : (
                 <TouchableOpacity onPress={() => setEditingPitName(true)}>
-                  <Text style={styles.pitNameValue}>{activeMosh.title} ✎</Text>
+                  <Text style={styles.pitNameValue}>{activeMosh.mosh_title || activeMosh.title} ✎</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1754,23 +2059,28 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 15,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 12,
   },
   backButton: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#3b82f6',
-    marginBottom: 10,
+    fontWeight: '600',
   },
   chatHeaderInfo: {
-    gap: 4,
+    flex: 1,
+    gap: 2,
   },
   chatTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#fff',
   },
   chatBook: {
@@ -1779,6 +2089,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 15,
+    paddingBottom: 20,
   },
   messageContainer: {
     marginBottom: 12,
@@ -1812,6 +2123,170 @@ const styles = StyleSheet.create({
   },
   messageTextMe: {
     color: '#fff',
+  },
+  bookShareBubble: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 12,
+    maxWidth: '85%',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  bookShareBubbleWide: {
+    backgroundColor: 'rgba(59, 130, 246, 0.18)',
+    borderRadius: 16,
+    padding: 14,
+    width: '80%',
+    borderWidth: 1,
+    borderColor: 'rgba(11, 27, 58, 0.7)',
+  },
+  bookShareLabel: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  bookShareContent: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bookShareCover: {
+    width: 50,
+    height: 75,
+    borderRadius: 6,
+  },
+  bookShareCoverLarge: {
+    width: 70,
+    height: 105,
+    borderRadius: 8,
+  },
+  bookShareCoverPlaceholder: {
+    width: 50,
+    height: 75,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookShareCoverPlaceholderLarge: {
+    width: 70,
+    height: 105,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookSharePlaceholderText: {
+    fontSize: 20,
+  },
+  bookShareInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  bookShareTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  bookShareAuthor: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  bookShareViewDetails: {
+    fontSize: 11,
+    color: '#3b82f6',
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  bookShareActions: {
+    marginTop: 12,
+    gap: 6,
+  },
+  bookShareQuadrant: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  bookShareQuadrantBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(11, 27, 58, 0.35)',
+    alignItems: 'center',
+  },
+  bookShareQuadrantBtnActive: {
+    backgroundColor: 'rgba(238, 107, 254, 0.22)',
+    borderColor: 'rgba(238, 107, 254, 0.55)',
+  },
+  bookShareQuadrantText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+  bookShareOwnedBtn: {
+    backgroundColor: 'rgba(238, 107, 254, 0.18)',
+    borderColor: 'rgba(238, 107, 254, 0.45)',
+  },
+  bookShareOwnedBtnActive: {
+    backgroundColor: 'rgba(238, 107, 254, 0.28)',
+    borderColor: 'rgba(238, 107, 254, 0.65)',
+  },
+  bookShareOwnedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+  bookShareDetailsBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+  },
+  bookShareDetailsBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  reactionsRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+    gap: 4,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+  },
+  reactionMenu: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(30, 40, 60, 0.95)',
+    borderRadius: 20,
+    padding: 6,
+    marginTop: 6,
+    gap: 4,
+    alignSelf: 'flex-start',
+  },
+  reactionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  reactionBtnText: {
+    fontSize: 18,
+  },
+  reactionCloseBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  reactionCloseBtnText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -2069,35 +2544,33 @@ const styles = StyleSheet.create({
   chatHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   chatHeaderActionBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
   },
   chatHeaderActionIcon: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#fff',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3b82f6',
   },
   shareBookModal: {
     position: 'absolute',
-    bottom: 60,
+    top: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(11, 18, 37, 0.98)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 16,
-    maxHeight: 350,
+    bottom: 0,
+    backgroundColor: 'rgba(2, 6, 23, 0.98)',
+    padding: 20,
+    paddingTop: 60,
+    zIndex: 100,
   },
   shareBookHeader: {
     flexDirection: 'row',
@@ -2356,14 +2829,14 @@ const styles = StyleSheet.create({
   },
   sharedBooksModal: {
     position: 'absolute',
-    top: 120,
+    top: 0,
     left: 0,
     right: 0,
-    bottom: 60,
-    backgroundColor: 'rgba(11, 18, 37, 0.98)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 16,
+    bottom: 0,
+    backgroundColor: 'rgba(2, 6, 23, 0.98)',
+    padding: 20,
+    paddingTop: 60,
+    zIndex: 100,
   },
   sharedBooksHeader: {
     flexDirection: 'row',

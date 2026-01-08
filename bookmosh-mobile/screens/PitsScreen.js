@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Keyboard,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
@@ -40,6 +41,16 @@ export default function PitsScreen({ user }) {
       loadMessages()
       subscribeToMessages()
     }
+  }, [activeMosh?.id])
+
+  useEffect(() => {
+    if (!activeMosh) return
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true })
+      }, 100)
+    })
+    return () => keyboardDidShow.remove()
   }, [activeMosh?.id])
 
   const loadCurrentUser = async () => {
@@ -203,7 +214,7 @@ export default function PitsScreen({ user }) {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.chatHeader}>
           <TouchableOpacity onPress={closeMosh}>
@@ -387,6 +398,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 15,
+    paddingBottom: 20,
   },
   messageContainer: {
     marginBottom: 12,

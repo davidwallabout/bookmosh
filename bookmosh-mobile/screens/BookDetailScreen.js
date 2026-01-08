@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   ScrollView,
   Image,
@@ -12,6 +13,9 @@ import {
   Modal,
   Animated,
   PanResponder,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
@@ -49,6 +53,10 @@ export default function BookDetailScreen({ user }) {
   const route = useRoute()
   const bookId = route.params?.bookId
   const searchBook = route.params?.book
+  // Support params from pit book share navigation
+  const pitBookTitle = route.params?.bookTitle
+  const pitBookAuthor = route.params?.bookAuthor
+  const pitBookCover = route.params?.bookCover
 
   const [book, setBook] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -424,10 +432,20 @@ export default function BookDetailScreen({ user }) {
         year: searchBook.year,
       })
       setLoading(false)
+    } else if (pitBookTitle) {
+      // Book shared from pit chat - set up for viewing/adding
+      setTitle(pitBookTitle || '')
+      setAuthor(pitBookAuthor || '')
+      setBook({
+        title: pitBookTitle,
+        author: pitBookAuthor,
+        cover: pitBookCover,
+      })
+      setLoading(false)
     } else {
       setLoading(false)
     }
-  }, [bookId, searchBook])
+  }, [bookId, searchBook, pitBookTitle, pitBookAuthor, pitBookCover])
 
   const openReviewThread = async (eventItem) => {
     if (!currentUser?.id || !eventItem?.owner_username || !eventItem?.book_title) return
@@ -862,7 +880,10 @@ export default function BookDetailScreen({ user }) {
     setSaving(true)
     try {
       const nowIso = new Date().toISOString()
-      const payload = { ...dbUpdates, updated_at: nowIso }
+      // Only update updated_at for meaningful changes (not cosmetic like cover/edition)
+      const cosmeticOnlyFields = ['cover', 'isbn', 'title', 'author', 'olKey']
+      const hasMeaningfulChange = Object.keys(dbUpdates).some(key => !cosmeticOnlyFields.includes(key))
+      const payload = hasMeaningfulChange ? { ...dbUpdates, updated_at: nowIso } : { ...dbUpdates }
 
       let { error } = await supabase
         .from('bookmosh_books')
@@ -1178,6 +1199,7 @@ export default function BookDetailScreen({ user }) {
   }
 
   const sendRecommendations = async () => {
+    Keyboard.dismiss()
     if (!currentUser?.id || !currentUser?.username) return
     const recipients = Array.isArray(selectedRecommendationRecipients)
       ? selectedRecommendationRecipients
@@ -1311,7 +1333,7 @@ export default function BookDetailScreen({ user }) {
             onPress={searchEditions}
             activeOpacity={0.8}
           >
-            <Image source={{ uri: book.cover }} style={styles.cover} />
+            <Image source={{ uri: book.cover, cache: 'force-cache' }} style={styles.cover} />
             <View style={styles.coverOverlay}>
               <Text style={styles.coverOverlayText}>Tap to change edition</Text>
             </View>
@@ -1872,79 +1894,99 @@ export default function BookDetailScreen({ user }) {
         animationType="fade"
         onRequestClose={() => setShowRecommendationModal(false)}
       >
-        <View style={styles.recommendationModalOverlay}>
-          <View style={styles.recommendationModalCard}>
-            <Text style={styles.recommendationModalTitle}>Recommend to Friends</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.recommendationModalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ width: '100%' }}
+            >
+              <View style={styles.recommendationModalCard}>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingBottom: 12 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.recommendationModalTitle}>Recommend to Friends</Text>
 
-            <Text style={styles.recommendationModalSubtitle}>
-              {title ? title : 'This book'}
-            </Text>
+                  <Text style={styles.recommendationModalSubtitle}>
+                    {title ? title : 'This book'}
+                  </Text>
 
-            <TextInput
-              style={styles.friendSearchInput}
-              value={friendSearchQuery}
-              onChangeText={setFriendSearchQuery}
-              placeholder="Search friends..."
-              placeholderTextColor="#666"
-            />
+                  <TextInput
+                    style={styles.friendSearchInput}
+                    value={friendSearchQuery}
+                    onChangeText={setFriendSearchQuery}
+                    placeholder="Search friends..."
+                    placeholderTextColor="#666"
+                    returnKeyType="done"
+                  />
 
-            <ScrollView style={styles.recommendationRecipients}>
-              {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
-                .filter((u) => !friendSearchQuery.trim() || u.toLowerCase().includes(friendSearchQuery.toLowerCase()))
-                .map((u) => {
-                const selected = selectedRecommendationRecipients.includes(u)
-                return (
-                  <TouchableOpacity
-                    key={u}
-                    style={[styles.recipientRow, selected && styles.recipientRowSelected]}
-                    onPress={() => toggleRecipient(u)}
+                  <ScrollView
+                    style={styles.recommendationRecipients}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <View style={[styles.recipientCheckbox, selected && styles.recipientCheckboxSelected]}>
-                      {selected ? <Text style={styles.recipientCheckmark}>✓</Text> : null}
-                    </View>
-                    <Text style={styles.recipientUsername}>@{u}</Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </ScrollView>
+                    {(Array.isArray(currentUser?.friends) ? currentUser.friends : [])
+                      .filter((u) => !friendSearchQuery.trim() || u.toLowerCase().includes(friendSearchQuery.toLowerCase()))
+                      .map((u) => {
+                      const selected = selectedRecommendationRecipients.includes(u)
+                      return (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.recipientRow, selected && styles.recipientRowSelected]}
+                          onPress={() => toggleRecipient(u)}
+                        >
+                          <View style={[styles.recipientCheckbox, selected && styles.recipientCheckboxSelected]}>
+                            {selected ? <Text style={styles.recipientCheckmark}>✓</Text> : null}
+                          </View>
+                          <Text style={styles.recipientUsername}>@{u}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </ScrollView>
 
-            <TextInput
-              style={styles.recommendationNoteInput}
-              value={recommendationNote}
-              onChangeText={setRecommendationNote}
-              placeholder="Write a note (optional)"
-              placeholderTextColor="#666"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
+                  <TextInput
+                    style={styles.recommendationNoteInput}
+                    value={recommendationNote}
+                    onChangeText={setRecommendationNote}
+                    placeholder="Write a note (optional)"
+                    placeholderTextColor="#666"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
 
-            <View style={styles.recommendationModalButtons}>
-              <TouchableOpacity
-                style={styles.recommendationCancelButton}
-                onPress={() => setShowRecommendationModal(false)}
-                disabled={sendingRecommendation}
-              >
-                <Text style={styles.recommendationCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.recommendationSendButton,
-                  (sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()) &&
-                    styles.recommendationSendButtonDisabled,
-                ]}
-                onPress={sendRecommendations}
-                disabled={sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()}
-              >
-                {sendingRecommendation ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.recommendationSendButtonText}>Send</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                  <View style={styles.recommendationModalButtons}>
+                    <TouchableOpacity
+                      style={styles.recommendationCancelButton}
+                      onPress={() => {
+                        Keyboard.dismiss()
+                        setShowRecommendationModal(false)
+                      }}
+                      disabled={sendingRecommendation}
+                    >
+                      <Text style={styles.recommendationCancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.recommendationSendButton,
+                        (sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()) &&
+                          styles.recommendationSendButtonDisabled,
+                      ]}
+                      onPress={sendRecommendations}
+                      disabled={sendingRecommendation || selectedRecommendationRecipients.length === 0 || !title.trim()}
+                    >
+                      {sendingRecommendation ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.recommendationSendButtonText}>Send</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       <Modal
@@ -2873,5 +2915,91 @@ const styles = StyleSheet.create({
   addToPitLoadingText: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.6)',
+  },
+  editionsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'flex-end',
+  },
+  editionsModalCard: {
+    backgroundColor: '#0b1225',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomWidth: 0,
+  },
+  editionsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  editionsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  editionsModalClose: {
+    fontSize: 20,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  editionsLoader: {
+    marginVertical: 40,
+  },
+  editionsList: {
+    maxHeight: 500,
+  },
+  editionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  editionCover: {
+    width: 50,
+    height: 75,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  editionCoverPlaceholder: {
+    width: 50,
+    height: 75,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editionInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  editionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  editionAuthor: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginBottom: 2,
+  },
+  editionYear: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  editionsEmptyText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    paddingVertical: 30,
   },
 })
