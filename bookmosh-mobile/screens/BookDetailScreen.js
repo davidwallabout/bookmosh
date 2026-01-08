@@ -91,6 +91,8 @@ export default function BookDetailScreen({ user }) {
   const [showEditionsModal, setShowEditionsModal] = useState(false)
   const [editions, setEditions] = useState([])
   const [loadingEditions, setLoadingEditions] = useState(false)
+  const [friendsRatings, setFriendsRatings] = useState([])
+  const [communityAvgRating, setCommunityAvgRating] = useState(null)
 
   const [buttonFeedback, setButtonFeedback] = useState({}) // { buttonKey: 'check' | 'x' }
   const feedbackOpacity = useRef(new Animated.Value(0)).current
@@ -149,6 +151,86 @@ export default function BookDetailScreen({ user }) {
       book_title: title.trim(),
       event_type: 'review_created',
     })
+  }
+
+  // Load friends' ratings for this book
+  const loadFriendsRatings = async () => {
+    if (!currentUser?.id || !book) return
+
+    try {
+      // Get friends list
+      const { data: friendships, error: friendsError } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+        .eq('status', 'accepted')
+
+      if (friendsError) throw friendsError
+
+      const friendIds = (friendships || []).map((f) =>
+        f.user_id === currentUser.id ? f.friend_id : f.user_id
+      )
+
+      if (friendIds.length === 0) {
+        setFriendsRatings([])
+        return
+      }
+
+      // Get friends' usernames
+      const { data: friendUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('id', friendIds)
+
+      if (usersError) throw usersError
+
+      const friendUsernames = (friendUsers || []).map((u) => u.username)
+
+      if (friendUsernames.length === 0) {
+        setFriendsRatings([])
+        return
+      }
+
+      // Get friends' ratings for this book (by title + author match)
+      const { data: ratings, error: ratingsError } = await supabase
+        .from('bookmosh_books')
+        .select('owner, rating')
+        .in('owner', friendUsernames)
+        .eq('title', book.title)
+        .gt('rating', 0)
+
+      if (ratingsError) throw ratingsError
+      setFriendsRatings(ratings || [])
+    } catch (error) {
+      console.error('Load friends ratings error:', error)
+      setFriendsRatings([])
+    }
+  }
+
+  // Load community average rating
+  const loadCommunityAvgRating = async () => {
+    if (!book) return
+
+    try {
+      const { data, error } = await supabase
+        .from('bookmosh_books')
+        .select('rating')
+        .eq('title', book.title)
+        .gt('rating', 0)
+
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        const sum = data.reduce((acc, row) => acc + (row.rating || 0), 0)
+        const avg = sum / data.length
+        setCommunityAvgRating({ avg: Math.round(avg * 10) / 10, count: data.length })
+      } else {
+        setCommunityAvgRating(null)
+      }
+    } catch (error) {
+      console.error('Load community avg rating error:', error)
+      setCommunityAvgRating(null)
+    }
   }
 
   const saveReviewDraft = async ({ silent = false } = {}) => {
@@ -553,6 +635,8 @@ export default function BookDetailScreen({ user }) {
   useEffect(() => {
     if (!currentUser || !book?.title) return
     loadBookActivity(book.title)
+    loadFriendsRatings()
+    loadCommunityAvgRating()
   }, [currentUser?.id, book?.title])
 
   useEffect(() => {
@@ -1248,7 +1332,7 @@ export default function BookDetailScreen({ user }) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.label}>Rating ({rating}/5)</Text>
+          <Text style={styles.label}>Your Rating ({rating}/5)</Text>
           <View style={styles.ratingContainer}>
             <TouchableOpacity
               onPress={() => handleRatingChange(0)}
@@ -1275,6 +1359,53 @@ export default function BookDetailScreen({ user }) {
               })}
             </View>
           </View>
+
+          {/* Community Average Rating */}
+          {communityAvgRating && (
+            <View style={styles.communityRatingRow}>
+              <Text style={styles.communityRatingLabel}>Community Avg:</Text>
+              <View style={styles.communityRatingStars}>
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const isFull = communityAvgRating.avg >= star
+                  const isHalf = !isFull && communityAvgRating.avg >= star - 0.5
+                  return (
+                    <View key={star} style={styles.miniStarWrapper}>
+                      <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} size={16} />
+                    </View>
+                  )
+                })}
+              </View>
+              <Text style={styles.communityRatingValue}>
+                {communityAvgRating.avg} ({communityAvgRating.count} {communityAvgRating.count === 1 ? 'rating' : 'ratings'})
+              </Text>
+            </View>
+          )}
+
+          {/* Friends' Ratings */}
+          {friendsRatings.length > 0 && (
+            <View style={styles.friendsRatingsSection}>
+              <Text style={styles.friendsRatingsLabel}>Friends' Ratings:</Text>
+              <View style={styles.friendsRatingsList}>
+                {friendsRatings.map((fr, idx) => (
+                  <View key={`${fr.owner}-${idx}`} style={styles.friendRatingItem}>
+                    <Text style={styles.friendRatingUsername}>@{fr.owner}</Text>
+                    <View style={styles.friendRatingStars}>
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isFull = fr.rating >= star
+                        const isHalf = !isFull && fr.rating >= star - 0.5
+                        return (
+                          <View key={star} style={styles.miniStarWrapper}>
+                            <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} size={14} />
+                          </View>
+                        )
+                      })}
+                    </View>
+                    <Text style={styles.friendRatingValue}>{fr.rating}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -2416,5 +2547,57 @@ const styles = StyleSheet.create({
   spoilerLabel: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.7)',
+  },
+  communityRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+  },
+  communityRatingLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  communityRatingStars: {
+    flexDirection: 'row',
+  },
+  communityRatingValue: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  miniStarWrapper: {
+    marginRight: 1,
+  },
+  friendsRatingsSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  friendsRatingsLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: 8,
+  },
+  friendsRatingsList: {
+    gap: 6,
+  },
+  friendRatingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  friendRatingUsername: {
+    fontSize: 13,
+    color: '#3b82f6',
+    minWidth: 80,
+  },
+  friendRatingStars: {
+    flexDirection: 'row',
+  },
+  friendRatingValue: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginLeft: 4,
   },
 })

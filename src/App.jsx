@@ -1255,6 +1255,8 @@ function App() {
   const modalStarsRef = useRef(null)
   const pendingModalRatingRef = useRef(0)
   const modalRatingRafRef = useRef(null)
+  const [friendsRatings, setFriendsRatings] = useState([])
+  const [communityAvgRating, setCommunityAvgRating] = useState(null)
 
   const calculateRatingFromClientX = (clientX, rect) => {
     if (!rect?.width) return 0
@@ -5387,6 +5389,10 @@ function App() {
     
     // Fetch book activity feed
     fetchBookActivity(normalized.title)
+    
+    // Load friends' ratings and community average
+    loadFriendsRatingsForBook(normalized.title)
+    loadCommunityAvgRatingForBook(normalized.title)
 
     if (options.skipNavigate) return
 
@@ -5700,6 +5706,66 @@ function App() {
 
   const commitModalRating = () => {
     if (selectedBook) updateBook(selectedBook.title, { rating: pendingModalRatingRef.current })
+  }
+
+  // Load friends' ratings for selected book
+  const loadFriendsRatingsForBook = async (bookTitle) => {
+    if (!currentUser?.id || !bookTitle) return
+    try {
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
+        .eq('status', 'accepted')
+
+      const friendIds = (friendships || []).map((f) =>
+        f.user_id === currentUser.id ? f.friend_id : f.user_id
+      )
+      if (friendIds.length === 0) { setFriendsRatings([]); return }
+
+      const { data: friendUsers } = await supabase
+        .from('users')
+        .select('id, username')
+        .in('id', friendIds)
+
+      const friendUsernames = (friendUsers || []).map((u) => u.username)
+      if (friendUsernames.length === 0) { setFriendsRatings([]); return }
+
+      const { data: ratings } = await supabase
+        .from('bookmosh_books')
+        .select('owner, rating')
+        .in('owner', friendUsernames)
+        .eq('title', bookTitle)
+        .gt('rating', 0)
+
+      setFriendsRatings(ratings || [])
+    } catch (error) {
+      console.error('Load friends ratings error:', error)
+      setFriendsRatings([])
+    }
+  }
+
+  // Load community average rating for selected book
+  const loadCommunityAvgRatingForBook = async (bookTitle) => {
+    if (!bookTitle) return
+    try {
+      const { data } = await supabase
+        .from('bookmosh_books')
+        .select('rating')
+        .eq('title', bookTitle)
+        .gt('rating', 0)
+
+      if (data && data.length > 0) {
+        const sum = data.reduce((acc, row) => acc + (row.rating || 0), 0)
+        const avg = sum / data.length
+        setCommunityAvgRating({ avg: Math.round(avg * 10) / 10, count: data.length })
+      } else {
+        setCommunityAvgRating(null)
+      }
+    } catch (error) {
+      console.error('Load community avg rating error:', error)
+      setCommunityAvgRating(null)
+    }
   }
 
   const handleDeleteBook = async (title) => {
@@ -6277,6 +6343,53 @@ function App() {
                       })}
                     </div>
                   </div>
+
+                  {/* Community Average Rating */}
+                  {communityAvgRating && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-white/50">Community Avg:</span>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const isFull = communityAvgRating.avg >= star
+                          const isHalf = !isFull && communityAvgRating.avg >= star - 0.5
+                          return (
+                            <div key={star} className="w-4 h-4">
+                              <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} className="w-4 h-4" />
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <span className="text-xs text-white/60">
+                        {communityAvgRating.avg} ({communityAvgRating.count} {communityAvgRating.count === 1 ? 'rating' : 'ratings'})
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Friends' Ratings */}
+                  {friendsRatings.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                      <p className="text-xs text-white/50 mb-2">Friends' Ratings:</p>
+                      <div className="space-y-1">
+                        {friendsRatings.map((fr, idx) => (
+                          <div key={`${fr.owner}-${idx}`} className="flex items-center gap-2">
+                            <span className="text-xs text-blue-400 min-w-[70px]">@{fr.owner}</span>
+                            <div className="flex gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => {
+                                const isFull = fr.rating >= star
+                                const isHalf = !isFull && fr.rating >= star - 0.5
+                                return (
+                                  <div key={star} className="w-3 h-3">
+                                    <StarSvg fraction={isFull ? 1 : isHalf ? 0.5 : 0} className="w-3 h-3" />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            <span className="text-xs text-white/50">{fr.rating}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
