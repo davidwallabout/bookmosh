@@ -544,17 +544,31 @@ export default function App() {
         }
         setUnreadPitCount(pitMsgCount)
 
-        // Count unread recommendations
+        // Count unread recommendations (received only, not sent)
         const lastRecsViewedKey = `recs_last_viewed_${session.user.id}`
         const lastRecsViewed = await AsyncStorage.getItem(lastRecsViewedKey) || new Date(0).toISOString()
 
-        const { data: newRecs } = await supabase
+        // Try by recipient_id first, fallback to recipient_username
+        let recsCount = 0
+        const { data: newRecs, error: recsError } = await supabase
           .from('recommendations')
           .select('id')
           .eq('recipient_id', userData.id)
+          .neq('sender_id', userData.id)
           .gte('created_at', lastRecsViewed)
 
-        const recsCount = newRecs?.length || 0
+        if (!recsError) {
+          recsCount = newRecs?.length || 0
+        } else {
+          // Fallback: try by username if recipient_id column doesn't exist
+          const { data: recsByUsername } = await supabase
+            .from('recommendations')
+            .select('id')
+            .eq('recipient_username', userData.username)
+            .neq('sender_username', userData.username)
+            .gte('created_at', lastRecsViewed)
+          recsCount = recsByUsername?.length || 0
+        }
         setUnreadRecsCount(recsCount)
 
         // Total community badge
