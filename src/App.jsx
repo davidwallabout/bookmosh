@@ -8145,7 +8145,7 @@ function App() {
               </div>
             </section>
 
-            <section id="lists" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="lists" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg overflow-hidden">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Lists</p>
@@ -8161,7 +8161,7 @@ function App() {
 
               {listsMessage && <p className="mt-3 text-sm text-rose-200">{listsMessage}</p>}
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr]">
+              <div className="mt-5 grid gap-4 lg:grid-cols-[2fr_1fr] overflow-hidden">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/10 bg-[#050914]/60 p-4">
                     <p className="text-xs uppercase tracking-[0.3em] text-white/50">Create a list</p>
@@ -8527,7 +8527,7 @@ function App() {
               </div>
             </section>
 
-            <section id="recommendations" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg">
+            <section id="recommendations" className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-lg overflow-hidden">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.4em] text-white/50">Recommendations</p>
@@ -8578,7 +8578,7 @@ function App() {
                               setRecommendationCommentDraft('')
                               loadRecommendationComments(rec.id)
                             }}
-                            className="flex-shrink-0 w-56 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
+                            className="flex-shrink-0 w-[200px] sm:w-56 rounded-2xl border border-white/10 bg-[#050914]/60 p-4 text-left transition hover:border-white/30 hover:bg-white/5"
                           >
                             <p className="text-[10px] uppercase tracking-[0.3em] text-white/50 mb-3">{headline}</p>
                             <div className="flex gap-4">
