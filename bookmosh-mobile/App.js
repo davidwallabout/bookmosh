@@ -205,15 +205,6 @@ function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount }) {
           tabBarIcon: ({ color, size }) => <TabIcon name="community" color={color} size={size} />,
         }}
       />
-
-      <Tab.Screen
-        name="Profile"
-        children={() => <ProfileScreen user={user} onSignOut={onSignOut} />}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => <TabIcon name="profile" color={color} size={size} />,
-        }}
-      />
     </Tab.Navigator>
   )
 }

@@ -25,6 +25,10 @@ export default function HomeScreen({ user }) {
   const [ownedBooks, setOwnedBooks] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [lists, setLists] = useState([])
+  const [listItemCounts, setListItemCounts] = useState({})
+  const [recommendations, setRecommendations] = useState([])
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false)
 
   useEffect(() => {
     loadCurrentUser()
@@ -36,6 +40,13 @@ export default function HomeScreen({ user }) {
       loadBooks()
     }
   }, [isFocused])
+
+  useEffect(() => {
+    if (currentUser) {
+      loadLists()
+      loadRecommendations()
+    }
+  }, [currentUser?.id])
 
   const loadCurrentUser = async () => {
     try {
@@ -98,6 +109,69 @@ export default function HomeScreen({ user }) {
     }
   }
 
+  const loadLists = async () => {
+    if (!currentUser) return
+
+    try {
+      const { data, error } = await supabase
+        .from('lists')
+        .select('*')
+        .eq('owner_id', currentUser.id)
+        .order('updated_at', { ascending: false })
+
+      if (error) throw error
+      const nextLists = data || []
+      setLists(nextLists)
+
+      const listIds = nextLists.map((l) => l.id).filter(Boolean)
+      if (listIds.length > 0) {
+        const { data: items, error: itemsErr } = await supabase
+          .from('list_items')
+          .select('list_id')
+          .in('list_id', listIds)
+          .limit(2000)
+
+        if (itemsErr) {
+          setListItemCounts({})
+        } else {
+          const counts = {}
+          for (const it of items || []) {
+            const k = it.list_id
+            if (!k) continue
+            counts[k] = (counts[k] || 0) + 1
+          }
+          setListItemCounts(counts)
+        }
+      } else {
+        setListItemCounts({})
+      }
+    } catch (error) {
+      console.error('Load lists error:', error)
+    }
+  }
+
+  const loadRecommendations = async () => {
+    if (!currentUser) return
+
+    setRecommendationsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('recommendations')
+        .select('*')
+        .or(`sender_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) throw error
+      setRecommendations(data || [])
+    } catch (error) {
+      console.error('[RECOMMENDATIONS] Load error:', error)
+      setRecommendations([])
+    } finally {
+      setRecommendationsLoading(false)
+    }
+  }
+
   const deleteBook = async (bookId) => {
     Alert.alert(
       'Delete Book',
@@ -134,7 +208,7 @@ export default function HomeScreen({ user }) {
           resizeMode="contain"
         />
         <TouchableOpacity
-          onPress={() => navigation.navigate('Profile')}
+          onPress={() => navigation.navigate('ProfileScreen')}
           style={styles.avatarButton}
         >
           {currentUser?.avatar_url ? (
@@ -161,7 +235,7 @@ export default function HomeScreen({ user }) {
             refreshing={refreshing}
             onRefresh={async () => {
               setRefreshing(true)
-              await Promise.all([loadBooks()])
+              await Promise.all([loadBooks(), loadLists(), loadRecommendations()])
               setRefreshing(false)
             }}
             tintColor="#3b82f6"
@@ -346,6 +420,103 @@ export default function HomeScreen({ user }) {
             </ScrollView>
           </View>
         )}
+
+        {/* My Lists Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>MY LISTS</Text>
+            <View style={styles.listsHeaderActions}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ListsScreen')}
+                style={styles.viewAllButton}
+              >
+                <Text style={styles.viewAllText}>View All →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ListsScreen', { openCreate: true })}
+                style={styles.addListButton}
+              >
+                <Text style={styles.addListButtonText}>＋</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {lists.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {lists.map((list) => (
+                <TouchableOpacity
+                  key={list.id}
+                  style={styles.listCard}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('ListDetailScreen', { listId: list.id })}
+                >
+                  <View style={styles.listCardContent}>
+                    <Text style={styles.listCardTitle} numberOfLines={2}>
+                      {list.title}
+                    </Text>
+                    <Text style={styles.listCardCount}>
+                      {(listItemCounts[list.id] || 0)} books
+                    </Text>
+                    {list.description && (
+                      <Text style={styles.listCardDescription} numberOfLines={2}>
+                        {list.description}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyListText}>No lists yet. Tap ＋ to create one.</Text>
+          )}
+        </View>
+
+        {/* Recommendations Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>RECOMMENDATIONS</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('RecommendationsScreen')}
+              style={styles.viewAllButton}
+            >
+              <Text style={styles.viewAllText}>View All →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recommendationsLoading ? (
+            <ActivityIndicator size="small" color="#3b82f6" style={{ marginLeft: 20 }} />
+          ) : recommendations.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {recommendations.slice(0, 10).map((rec) => {
+                const isSent = currentUser?.id && rec.sender_id === currentUser.id
+                const headline = isSent
+                  ? `To @${rec.recipient_username}`
+                  : `From @${rec.sender_username}`
+
+                return (
+                  <TouchableOpacity
+                    key={rec.id}
+                    style={styles.recCard}
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('RecommendationsScreen', { selectedRecommendation: rec })}
+                  >
+                    {rec.book_cover ? (
+                      <Image source={{ uri: rec.book_cover }} style={styles.recCover} />
+                    ) : (
+                      <View style={styles.recCoverPlaceholder}>
+                        <Text style={styles.recCoverPlaceholderText}>📚</Text>
+                      </View>
+                    )}
+                    <Text style={styles.recTitle} numberOfLines={2}>{rec.book_title}</Text>
+                    <Text style={styles.recMeta} numberOfLines={1}>{headline}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyListText}>No recommendations yet.</Text>
+          )}
+        </View>
 
         {books.length === 0 && (
           <Text style={styles.emptyText}>No books yet. Add one above!</Text>
@@ -692,5 +863,46 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.5)',
     marginTop: 2,
+  },
+  emptyListText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    paddingHorizontal: 20,
+  },
+  recCard: {
+    width: 120,
+    marginRight: 12,
+    marginLeft: 20,
+  },
+  recCover: {
+    width: 120,
+    height: 170,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: 8,
+  },
+  recCoverPlaceholder: {
+    width: 120,
+    height: 170,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recCoverPlaceholderText: {
+    fontSize: 32,
+  },
+  recTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  recMeta: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 })
