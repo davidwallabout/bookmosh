@@ -1257,6 +1257,9 @@ function App() {
   const modalRatingRafRef = useRef(null)
   const [friendsRatings, setFriendsRatings] = useState([])
   const [communityAvgRating, setCommunityAvgRating] = useState(null)
+  const [showAddToPitDropdown, setShowAddToPitDropdown] = useState(false)
+  const [userPitsForModal, setUserPitsForModal] = useState([])
+  const [loadingPitsForModal, setLoadingPitsForModal] = useState(false)
 
   const calculateRatingFromClientX = (clientX, rect) => {
     if (!rect?.width) return 0
@@ -5768,6 +5771,50 @@ function App() {
     }
   }
 
+  // Load user's pits for "Add to Pit" feature in modal
+  const loadUserPitsForModal = async () => {
+    if (!currentUser?.id) return
+    setLoadingPitsForModal(true)
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .select('*')
+        .contains('participants_ids', [currentUser.id])
+        .eq('archived', false)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setUserPitsForModal(data || [])
+    } catch (error) {
+      console.error('Load pits error:', error)
+      setUserPitsForModal([])
+    } finally {
+      setLoadingPitsForModal(false)
+    }
+  }
+
+  const addBookToPitFromModal = async (pit) => {
+    if (!pit?.id || !currentUser || !selectedBook) return
+    try {
+      const bookMessage = `📚 Shared a book: "${selectedBook.title}" by ${selectedBook.author}`
+      const { error } = await supabase.from('mosh_messages').insert([{
+        mosh_id: pit.id,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        body: bookMessage,
+        book_share: {
+          title: selectedBook.title,
+          author: selectedBook.author,
+          cover: selectedBook.cover,
+          book_id: selectedBook.id,
+        },
+      }])
+      if (error) throw error
+      setShowAddToPitDropdown(false)
+    } catch (error) {
+      console.error('Add book to pit error:', error)
+    }
+  }
+
   const handleDeleteBook = async (title) => {
     if (!currentUser) return
     
@@ -6390,6 +6437,44 @@ function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Add to Pit */}
+                  <div className="mt-4 pt-4 border-t border-white/10 relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!showAddToPitDropdown) loadUserPitsForModal()
+                        setShowAddToPitDropdown(!showAddToPitDropdown)
+                      }}
+                      className="w-full rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-400 transition hover:bg-blue-500/20"
+                    >
+                      Add to Pit
+                    </button>
+                    {showAddToPitDropdown && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#0b1225] border border-white/10 rounded-xl shadow-lg max-h-60 overflow-y-auto z-10">
+                        {loadingPitsForModal ? (
+                          <p className="text-xs text-white/50 p-4 text-center">Loading pits...</p>
+                        ) : userPitsForModal.length > 0 ? (
+                          userPitsForModal.map((pit) => (
+                            <button
+                              key={pit.id}
+                              type="button"
+                              onClick={() => addBookToPitFromModal(pit)}
+                              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition border-b border-white/5 last:border-b-0"
+                            >
+                              <div>
+                                <p className="text-sm text-white font-medium">{pit.title || 'Unnamed Pit'}</p>
+                                <p className="text-xs text-white/50">{pit.participants_usernames?.length || 0} members</p>
+                              </div>
+                              <span className="text-blue-400">→</span>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="text-xs text-white/50 p-4 text-center">No pits yet. Create one in Pits.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -93,6 +93,10 @@ export default function BookDetailScreen({ user }) {
   const [loadingEditions, setLoadingEditions] = useState(false)
   const [friendsRatings, setFriendsRatings] = useState([])
   const [communityAvgRating, setCommunityAvgRating] = useState(null)
+  const [showAddToPitModal, setShowAddToPitModal] = useState(false)
+  const [userPits, setUserPits] = useState([])
+  const [loadingPits, setLoadingPits] = useState(false)
+  const [addingToPit, setAddingToPit] = useState(false)
 
   const [buttonFeedback, setButtonFeedback] = useState({}) // { buttonKey: 'check' | 'x' }
   const feedbackOpacity = useRef(new Animated.Value(0)).current
@@ -230,6 +234,69 @@ export default function BookDetailScreen({ user }) {
     } catch (error) {
       console.error('Load community avg rating error:', error)
       setCommunityAvgRating(null)
+    }
+  }
+
+  // Load user's pits for "Add to Pit" feature
+  const loadUserPits = async () => {
+    if (!currentUser?.id) return
+
+    setLoadingPits(true)
+    try {
+      const { data, error } = await supabase
+        .from('moshes')
+        .select('*')
+        .contains('participants_ids', [currentUser.id])
+        .eq('archived', false)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setUserPits(data || [])
+    } catch (error) {
+      console.error('Load pits error:', error)
+      setUserPits([])
+    } finally {
+      setLoadingPits(false)
+    }
+  }
+
+  const openAddToPitModal = () => {
+    loadUserPits()
+    setShowAddToPitModal(true)
+  }
+
+  const closeAddToPitModal = () => {
+    setShowAddToPitModal(false)
+  }
+
+  const addBookToPit = async (pit) => {
+    if (!pit?.id || !currentUser || !book) return
+
+    setAddingToPit(true)
+    try {
+      const bookMessage = `📚 Shared a book: "${book.title}" by ${book.author}`
+      
+      const { error } = await supabase.from('mosh_messages').insert([{
+        mosh_id: pit.id,
+        sender_id: currentUser.id,
+        sender_username: currentUser.username,
+        body: bookMessage,
+        book_share: {
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          book_id: bookId,
+        },
+      }])
+
+      if (error) throw error
+      Alert.alert('Success', `Book shared to "${pit.title}"!`)
+      closeAddToPitModal()
+    } catch (error) {
+      console.error('Add book to pit error:', error)
+      Alert.alert('Error', 'Failed to share book to pit')
+    } finally {
+      setAddingToPit(false)
     }
   }
 
@@ -1706,7 +1773,71 @@ export default function BookDetailScreen({ user }) {
           <Text style={styles.recommendButtonText}>Make Recommendation</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.addToPitButton}
+          onPress={openAddToPitModal}
+        >
+          <Text style={styles.addToPitButtonText}>Add to Pit</Text>
+        </TouchableOpacity>
+
       </ScrollView>
+
+      {/* Add to Pit Modal */}
+      <Modal
+        visible={showAddToPitModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeAddToPitModal}
+      >
+        <View style={styles.addToPitModalOverlay}>
+          <View style={styles.addToPitModalCard}>
+            <View style={styles.addToPitModalHeader}>
+              <Text style={styles.addToPitModalTitle}>Share to Pit</Text>
+              <TouchableOpacity onPress={closeAddToPitModal}>
+                <Text style={styles.addToPitModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.addToPitModalSubtitle}>
+              Share "{title || 'this book'}" to a pit
+            </Text>
+
+            {loadingPits ? (
+              <ActivityIndicator size="small" color="#3b82f6" style={{ marginVertical: 20 }} />
+            ) : userPits.length > 0 ? (
+              <ScrollView style={styles.addToPitList}>
+                {userPits.map((pit) => (
+                  <TouchableOpacity
+                    key={pit.id}
+                    style={styles.addToPitItem}
+                    onPress={() => addBookToPit(pit)}
+                    disabled={addingToPit}
+                  >
+                    <View style={styles.addToPitItemInfo}>
+                      <Text style={styles.addToPitItemTitle}>{pit.title || 'Unnamed Pit'}</Text>
+                      <Text style={styles.addToPitItemMembers}>
+                        {pit.participants_usernames?.length || 0} members
+                      </Text>
+                    </View>
+                    <Text style={styles.addToPitItemArrow}>→</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.addToPitEmpty}>
+                No pits yet. Create a pit in the Community tab first.
+              </Text>
+            )}
+
+            {addingToPit && (
+              <View style={styles.addToPitLoading}>
+                <ActivityIndicator size="small" color="#3b82f6" />
+                <Text style={styles.addToPitLoadingText}>Sharing...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showRecommendationModal}
@@ -2599,5 +2730,101 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.5)',
     marginLeft: 4,
+  },
+  addToPitButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  addToPitButtonText: {
+    color: '#3b82f6',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  addToPitModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  addToPitModalCard: {
+    backgroundColor: '#0b1225',
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '70%',
+  },
+  addToPitModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addToPitModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  addToPitModalClose: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.5)',
+    padding: 4,
+  },
+  addToPitModalSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginBottom: 16,
+  },
+  addToPitList: {
+    maxHeight: 300,
+  },
+  addToPitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+  },
+  addToPitItemInfo: {
+    flex: 1,
+  },
+  addToPitItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  addToPitItemMembers: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginTop: 2,
+  },
+  addToPitItemArrow: {
+    fontSize: 18,
+    color: '#3b82f6',
+    marginLeft: 12,
+  },
+  addToPitEmpty: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    paddingVertical: 30,
+  },
+  addToPitLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  addToPitLoadingText: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
 })
