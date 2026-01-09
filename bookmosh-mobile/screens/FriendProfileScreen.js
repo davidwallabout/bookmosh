@@ -12,6 +12,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function FriendProfileScreen({ user }) {
   const navigation = useNavigation()
@@ -176,10 +177,10 @@ export default function FriendProfileScreen({ user }) {
                     activeOpacity={matchingBook ? 0.7 : 1}
                   >
                     {bookCover && isCoverUrl(bookCover) ? (
-                      <Image source={{ uri: bookCover }} style={styles.topBookCover} />
+                      <Image source={{ uri: bookCover, cache: 'force-cache' }} style={styles.topBookCover} />
                     ) : (
                       <View style={styles.topBookPlaceholder}>
-                        <Text style={styles.topBookPlaceholderText}>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -201,10 +202,10 @@ export default function FriendProfileScreen({ user }) {
                   activeOpacity={0.7}
                 >
                   {book.cover ? (
-                    <Image source={{ uri: book.cover }} style={styles.bookCover} />
+                    <Image source={{ uri: book.cover, cache: 'force-cache' }} style={styles.bookCover} />
                   ) : (
                     <View style={styles.bookCoverPlaceholder}>
-                      <Text style={styles.placeholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <Text style={styles.bookCardTitle} numberOfLines={2}>

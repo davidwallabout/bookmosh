@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function ReadByYearScreen({ user }) {
   const navigation = useNavigation()
@@ -139,10 +140,10 @@ export default function ReadByYearScreen({ user }) {
       activeOpacity={0.7}
     >
       {item.cover ? (
-        <Image source={{ uri: item.cover }} style={styles.bookCover} />
+        <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
       ) : (
         <View style={styles.bookCoverPlaceholder}>
-          <Text style={styles.placeholderText}>📚</Text>
+          <PixelBookEmoji size={18} />
         </View>
       )}
       <View style={styles.bookInfo}>

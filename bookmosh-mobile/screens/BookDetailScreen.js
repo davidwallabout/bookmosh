@@ -21,6 +21,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
 
 import Svg, { ClipPath, Defs, Path, Rect } from 'react-native-svg'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 const statusOptions = ['Reading', 'To Read', 'Read']
 
@@ -1344,7 +1345,7 @@ export default function BookDetailScreen({ user }) {
             onPress={searchEditions}
             activeOpacity={0.8}
           >
-            <Text style={styles.coverPlaceholderText}>📚</Text>
+            <PixelBookEmoji size={24} />
             <Text style={styles.coverPlaceholderSubtext}>Tap to select edition</Text>
           </TouchableOpacity>
         )}
@@ -2019,7 +2020,7 @@ export default function BookDetailScreen({ user }) {
                         <Image source={{ uri: edition.cover }} style={styles.editionCover} />
                       ) : (
                         <View style={styles.editionCoverPlaceholder}>
-                          <Text>📚</Text>
+                          <PixelBookEmoji size={18} />
                         </View>
                       )}
                       <View style={styles.editionInfo}>

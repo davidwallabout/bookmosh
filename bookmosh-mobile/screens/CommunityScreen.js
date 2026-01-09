@@ -19,8 +19,9 @@ import { SvgXml } from 'react-native-svg'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
-export default function CommunityScreen({ user, friendRequestCount = 0, unreadPitCount = 0, unreadRecsCount = 0 }) {
+export default function CommunityScreen({ user, friendRequestCount = 0, unreadPitCount = 0, unreadPitById = {}, unreadRecsCount = 0, onPitViewed }) {
   const navigation = useNavigation()
   const route = useRoute()
   const isFocused = useIsFocused()
@@ -452,8 +453,13 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
 
   const openMosh = (mosh) => {
     setActiveMosh(mosh)
-    // Mark pit messages as read by updating the last viewed timestamp
-    AsyncStorage.setItem(`pits_last_viewed_${user?.id}`, new Date().toISOString())
+    // Mark this pit as read immediately (per-pit)
+    if (mosh?.id) {
+      AsyncStorage.setItem(`pit_last_viewed_${user?.id}_${mosh.id}`, new Date().toISOString())
+      if (typeof onPitViewed === 'function') {
+        onPitViewed(mosh.id)
+      }
+    }
   }
 
   const closeMosh = () => {
@@ -965,16 +971,26 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
     </View>
   )
 
-  const renderMoshItem = ({ item }) => (
-    <TouchableOpacity style={styles.moshItem} onPress={() => openMosh(item)}>
-      <Text style={styles.moshTitle}>{item.mosh_title || item.title}</Text>
-      <View style={styles.moshMeta}>
-        <Text style={styles.moshMetaText}>
-          {item.participants_usernames?.length || 0} members
-        </Text>
-      </View>
-    </TouchableOpacity>
-  )
+  const renderMoshItem = ({ item }) => {
+    const unread = Number(unreadPitById?.[item?.id] || 0)
+    return (
+      <TouchableOpacity style={styles.moshItem} onPress={() => openMosh(item)}>
+        <View style={styles.moshRowTop}>
+          <Text style={styles.moshTitle}>{item.mosh_title || item.title}</Text>
+          {unread > 0 && (
+            <View style={styles.moshBadge}>
+              <Text style={styles.moshBadgeText}>{unread}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.moshMeta}>
+          <Text style={styles.moshMetaText}>
+            {item.participants_usernames?.length || 0} members
+          </Text>
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   const [addingBookFromPit, setAddingBookFromPit] = useState(null)
   const [reactionMenuMessage, setReactionMenuMessage] = useState(null)
@@ -1131,7 +1147,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
                   <Image source={{ uri: coverUrl, cache: 'force-cache' }} style={styles.bookShareCoverLarge} />
                 ) : (
                   <View style={styles.bookShareCoverPlaceholderLarge}>
-                    <Text style={styles.bookSharePlaceholderText}>📚</Text>
+                    <PixelBookEmoji size={24} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -1266,7 +1282,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
                       <Image source={{ uri: book.cover }} style={styles.sharedBookCover} />
                     ) : (
                       <View style={styles.sharedBookCoverPlaceholder}>
-                        <Text>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                     <View style={styles.sharedBookInfo}>
@@ -1443,7 +1459,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
                       <Image source={{ uri: book.cover }} style={styles.shareBookCover} />
                     ) : (
                       <View style={styles.shareBookCoverPlaceholder}>
-                        <Text>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                     <View style={styles.shareBookInfo}>
@@ -1755,7 +1771,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
                       <Image source={{ uri: rec.book_cover }} style={styles.recCover} />
                     ) : (
                       <View style={styles.recCoverPlaceholder}>
-                        <Text style={styles.recCoverPlaceholderText}>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                     <Text style={styles.recTitle} numberOfLines={2}>{rec.book_title}</Text>
@@ -2052,21 +2068,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  moshTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 6,
-    letterSpacing: 0.3,
-  },
-  moshBook: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginBottom: 8,
+  moshRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   moshMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  moshBadge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  moshBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   moshMetaText: {
     fontSize: 11,

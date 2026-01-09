@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,9 +9,12 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Animated,
+  Alert,
 } from 'react-native'
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function RecommendationsScreen({ user }) {
   const navigation = useNavigation()
@@ -98,6 +101,34 @@ export default function RecommendationsScreen({ user }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const deleteRecommendation = async (recId) => {
+    if (!recId) return
+    Alert.alert(
+      'Delete Recommendation',
+      'Are you sure you want to delete this recommendation?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('recommendations')
+                .delete()
+                .eq('id', recId)
+              if (error) throw error
+              setRecommendations((prev) => prev.filter((r) => r.id !== recId))
+            } catch (error) {
+              console.error('[RECOMMENDATIONS] Delete error:', error)
+              Alert.alert('Error', 'Failed to delete recommendation')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const openRecommendation = (rec) => {
@@ -238,38 +269,47 @@ export default function RecommendationsScreen({ user }) {
               : `@${rec.sender_username} recommended to you`
 
             return (
-              <TouchableOpacity
-                key={rec.id}
-                style={styles.card}
-                activeOpacity={0.8}
-                onPress={() => openRecommendation(rec)}
-              >
-                <Text style={styles.headline}>{headline}</Text>
-                <View style={styles.row}>
-                  {rec.book_cover ? (
-                    <Image source={{ uri: rec.book_cover }} style={styles.cover} />
-                  ) : (
-                    <View style={styles.coverPlaceholder}>
-                      <Text style={styles.coverPlaceholderText}>📚</Text>
+              <View key={rec.id} style={styles.swipeContainer}>
+                <TouchableOpacity
+                  style={styles.deleteBackground}
+                  onPress={() => deleteRecommendation(rec.id)}
+                >
+                  <Text style={styles.deleteBackgroundText}>Delete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.card}
+                  activeOpacity={0.8}
+                  onPress={() => openRecommendation(rec)}
+                  onLongPress={() => deleteRecommendation(rec.id)}
+                >
+                  <Text style={styles.headline}>{headline}</Text>
+                  <View style={styles.row}>
+                    {rec.book_cover ? (
+                      <Image source={{ uri: rec.book_cover, cache: 'force-cache' }} style={styles.cover} />
+                    ) : (
+                      <View style={styles.coverPlaceholder}>
+                        <PixelBookEmoji size={18} />
+                      </View>
+                    )}
+                    <View style={styles.info}>
+                      <Text style={styles.title} numberOfLines={2}>
+                        {rec.book_title}
+                      </Text>
+                      {rec.book_author ? (
+                        <Text style={styles.author} numberOfLines={1}>
+                          {rec.book_author}
+                        </Text>
+                      ) : null}
+                      {rec.note ? (
+                        <Text style={styles.note} numberOfLines={2}>
+                          {rec.note}
+                        </Text>
+                      ) : null}
                     </View>
-                  )}
-                  <View style={styles.info}>
-                    <Text style={styles.title} numberOfLines={2}>
-                      {rec.book_title}
-                    </Text>
-                    {rec.book_author ? (
-                      <Text style={styles.author} numberOfLines={1}>
-                        {rec.book_author}
-                      </Text>
-                    ) : null}
-                    {rec.note ? (
-                      <Text style={styles.note} numberOfLines={2}>
-                        {rec.note}
-                      </Text>
-                    ) : null}
                   </View>
-                </View>
-              </TouchableOpacity>
+                  <Text style={styles.swipeHint}>Long press to delete</Text>
+                </TouchableOpacity>
+              </View>
             )
           })}
         </ScrollView>
@@ -302,7 +342,7 @@ export default function RecommendationsScreen({ user }) {
                     <Image source={{ uri: activeRecommendation.book_cover }} style={styles.modalCover} />
                   ) : (
                     <View style={styles.coverPlaceholder}>
-                      <Text style={styles.coverPlaceholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <View style={styles.info}>
@@ -771,5 +811,33 @@ const styles = StyleSheet.create({
   },
   postButtonDisabled: {
     opacity: 0.5,
+  },
+  swipeContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  deleteBackground: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#ef4444',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteBackgroundText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  swipeHint: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.3)',
+    textAlign: 'right',
+    marginTop: 8,
   },
 })

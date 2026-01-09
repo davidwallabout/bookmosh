@@ -141,7 +141,7 @@ const TabIcon = ({ name, color, size }) => (
   <SvgXml xml={PIXEL_ICONS[name](color)} width={size} height={size} />
 )
 
-function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadRecsCount }) {
+function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadPitById, unreadRecsCount, onPitViewed }) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -199,7 +199,16 @@ function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communit
       />
       <Tab.Screen
         name="Community"
-        children={() => <CommunityScreen user={user} friendRequestCount={friendRequestCount} unreadPitCount={unreadPitCount} unreadRecsCount={unreadRecsCount} />}
+        children={() => (
+          <CommunityScreen
+            user={user}
+            friendRequestCount={friendRequestCount}
+            unreadPitCount={unreadPitCount}
+            unreadPitById={unreadPitById}
+            onPitViewed={onPitViewed}
+            unreadRecsCount={unreadRecsCount}
+          />
+        )}
         options={{
           tabBarLabel: 'Community',
           tabBarIcon: ({ color, size }) => <TabIcon name="community" color={color} size={size} />,
@@ -218,11 +227,24 @@ function MainTabs({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communit
   )
 }
 
-function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadRecsCount }) {
+function MainStack({ user, onSignOut, feedBadgeCount, setFeedBadgeCount, communityBadgeCount, friendRequestCount, unreadPitCount, unreadPitById, unreadRecsCount, onPitViewed }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs">
-        {() => <MainTabs user={user} onSignOut={onSignOut} feedBadgeCount={feedBadgeCount} setFeedBadgeCount={setFeedBadgeCount} communityBadgeCount={communityBadgeCount} friendRequestCount={friendRequestCount} unreadPitCount={unreadPitCount} unreadRecsCount={unreadRecsCount} />}
+        {() => (
+          <MainTabs
+            user={user}
+            onSignOut={onSignOut}
+            feedBadgeCount={feedBadgeCount}
+            setFeedBadgeCount={setFeedBadgeCount}
+            communityBadgeCount={communityBadgeCount}
+            friendRequestCount={friendRequestCount}
+            unreadPitCount={unreadPitCount}
+            unreadPitById={unreadPitById}
+            unreadRecsCount={unreadRecsCount}
+            onPitViewed={onPitViewed}
+          />
+        )}
       </Stack.Screen>
       <Stack.Screen name="ProfileScreen">
         {() => <ProfileScreen user={user} onSignOut={onSignOut} />}
@@ -416,7 +438,26 @@ export default function App() {
   const [communityBadgeCount, setCommunityBadgeCount] = useState(0)
   const [friendRequestCount, setFriendRequestCount] = useState(0)
   const [unreadPitCount, setUnreadPitCount] = useState(0)
+  const [unreadPitById, setUnreadPitById] = useState({})
   const [unreadRecsCount, setUnreadRecsCount] = useState(0)
+
+  const markPitViewed = async (pitId) => {
+    if (!session?.user?.id || !pitId) return
+    try {
+      const key = `pit_last_viewed_${session.user.id}_${pitId}`
+      await AsyncStorage.setItem(key, new Date().toISOString())
+      setUnreadPitById((prev) => {
+        const next = { ...(prev || {}) }
+        next[pitId] = 0
+        const total = Object.values(next).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        setUnreadPitCount(total)
+        setCommunityBadgeCount((friendRequestCount || 0) + (unreadRecsCount || 0) + total)
+        return next
+      })
+    } catch (error) {
+      console.warn('[BADGE] Failed to mark pit viewed:', error)
+    }
+  }
 
   useEffect(() => {
     const loadApp = async () => {
@@ -520,10 +561,7 @@ export default function App() {
         const friendReqCount = friendRequests?.length || 0
         setFriendRequestCount(friendReqCount)
 
-        // Count unread pit messages
-        const lastPitViewedKey = `pits_last_viewed_${session.user.id}`
-        const lastPitViewed = await AsyncStorage.getItem(lastPitViewedKey) || new Date(0).toISOString()
-
+        // Count unread pit messages (per pit)
         const { data: userPits } = await supabase
           .from('moshes')
           .select('id')
@@ -531,18 +569,54 @@ export default function App() {
           .eq('archived', false)
 
         const pitIds = userPits?.map(p => p.id) || []
-        let pitMsgCount = 0
+
+        const perPitLastViewed = {}
+        let minLastViewed = new Date(0).toISOString()
         if (pitIds.length > 0) {
-          const { data: newMessages } = await supabase
+          const values = await Promise.all(
+            pitIds.map(async (pid) => {
+              const key = `pit_last_viewed_${session.user.id}_${pid}`
+              const existing = await AsyncStorage.getItem(key)
+              // If we have no stored value yet, treat existing messages as already read
+              // (prevents huge "stuck" badges on first run)
+              const ts = existing || new Date().toISOString()
+              if (!existing) {
+                await AsyncStorage.setItem(key, ts)
+              }
+              perPitLastViewed[pid] = ts
+              return ts
+            })
+          )
+          minLastViewed = values.reduce((min, v) => (new Date(v) < new Date(min) ? v : min), values[0] || minLastViewed)
+        }
+
+        const pitCounts = {}
+        let pitMsgTotal = 0
+        if (pitIds.length > 0) {
+          const { data: recentMessages } = await supabase
             .from('mosh_messages')
-            .select('id')
+            .select('id, mosh_id, created_at, sender_id')
             .in('mosh_id', pitIds)
             .neq('sender_id', userData.id)
-            .gte('created_at', lastPitViewed)
+            .gte('created_at', minLastViewed)
 
-          pitMsgCount = newMessages?.length || 0
+          for (const pid of pitIds) {
+            pitCounts[pid] = 0
+          }
+
+          for (const m of recentMessages || []) {
+            const pid = m.mosh_id
+            const lastViewed = perPitLastViewed[pid] || new Date(0).toISOString()
+            if (new Date(m.created_at) >= new Date(lastViewed)) {
+              pitCounts[pid] = (pitCounts[pid] || 0) + 1
+            }
+          }
+
+          pitMsgTotal = Object.values(pitCounts).reduce((sum, v) => sum + (Number(v) || 0), 0)
         }
-        setUnreadPitCount(pitMsgCount)
+
+        setUnreadPitById(pitCounts)
+        setUnreadPitCount(pitMsgTotal)
 
         // Count unread recommendations (received only, not sent)
         const lastRecsViewedKey = `recs_last_viewed_${session.user.id}`
@@ -572,7 +646,7 @@ export default function App() {
         setUnreadRecsCount(recsCount)
 
         // Total community badge
-        setCommunityBadgeCount(friendReqCount + pitMsgCount + recsCount)
+        setCommunityBadgeCount(friendReqCount + pitMsgTotal + recsCount)
       } catch (error) {
         console.error('[BADGE] Failed to check community activity:', error)
       }
@@ -604,7 +678,9 @@ export default function App() {
           communityBadgeCount={communityBadgeCount}
           friendRequestCount={friendRequestCount}
           unreadPitCount={unreadPitCount}
+          unreadPitById={unreadPitById}
           unreadRecsCount={unreadRecsCount}
+          onPitViewed={markPitViewed}
         />
       ) : (
         <AuthScreen onAuthSuccess={() => {}} />

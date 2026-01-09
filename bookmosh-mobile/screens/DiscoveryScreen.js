@@ -16,6 +16,7 @@ import {
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 import { PROFILE_ICONS } from '../constants/avatars'
 
 const PIXEL_DISCOVERY_ICON = (color) => `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -405,10 +406,10 @@ export default function DiscoveryScreen({ user }) {
         activeOpacity={0.7}
       >
         {item.cover ? (
-          <Image source={{ uri: item.cover }} style={styles.bookCover} />
+          <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
         ) : (
           <View style={styles.bookCoverPlaceholder}>
-            <Text style={styles.placeholderText}>📚</Text>
+            <PixelBookEmoji size={18} />
           </View>
         )}
         <View style={styles.bookInfo}>
@@ -627,7 +628,7 @@ export default function DiscoveryScreen({ user }) {
                       <Image source={{ uri: detailBook.cover }} style={styles.detailCover} />
                     ) : (
                       <View style={styles.detailCoverPlaceholder}>
-                        <Text style={styles.detailPlaceholderText}>📚</Text>
+                        <PixelBookEmoji size={24} />
                       </View>
                     )}
                     <View style={styles.detailInfo}>

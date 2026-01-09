@@ -12,8 +12,10 @@ import {
 } from 'react-native'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { SvgXml } from 'react-native-svg'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS } from '../constants/avatars'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function HomeScreen({ user }) {
   const navigation = useNavigation()
@@ -28,8 +30,50 @@ export default function HomeScreen({ user }) {
   const [lists, setLists] = useState([])
   const [listItemCounts, setListItemCounts] = useState({})
 
+  const libraryCacheKey = `library_cache_${user?.id}`
+
+  const applyDerivedSections = (allBooks) => {
+    const next = Array.isArray(allBooks) ? allBooks : []
+    setBooks(next)
+    setReadingBooks(next.filter((b) => b.status === 'Reading'))
+    setToReadBooks(next.filter((b) => b.status === 'To Read' || b.status === 'to-read'))
+    setReadBooks(
+      next
+        .filter((b) => b.status === 'Read')
+        .sort((a, b) => {
+          const aKey = new Date(a.read_at ?? a.updated_at ?? 0).getTime()
+          const bKey = new Date(b.read_at ?? b.updated_at ?? 0).getTime()
+          return bKey - aKey
+        }),
+    )
+    setOwnedBooks(next.filter((b) => Array.isArray(b.tags) && b.tags.includes('Owned')))
+  }
+
+  const loadCachedLibrary = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(libraryCacheKey)
+      if (!raw) return false
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return false
+      applyDerivedSections(parsed)
+      return true
+    } catch (error) {
+      console.warn('[OFFLINE] Failed to load cached library:', error)
+      return false
+    }
+  }
+
+  const saveCachedLibrary = async (allBooks) => {
+    try {
+      await AsyncStorage.setItem(libraryCacheKey, JSON.stringify(Array.isArray(allBooks) ? allBooks : []))
+    } catch (error) {
+      console.warn('[OFFLINE] Failed to save cached library:', error)
+    }
+  }
+
   useEffect(() => {
     loadCurrentUser()
+    loadCachedLibrary()
     loadBooks()
   }, [])
 
@@ -87,22 +131,12 @@ export default function HomeScreen({ user }) {
 
       if (error) throw error
       const allBooks = data || []
-      setBooks(allBooks)
-      
-      setReadingBooks(allBooks.filter(b => b.status === 'Reading'))
-      setToReadBooks(allBooks.filter(b => b.status === 'To Read' || b.status === 'to-read'))
-      setReadBooks(
-        allBooks
-          .filter((b) => b.status === 'Read')
-          .sort((a, b) => {
-            const aKey = new Date(a.read_at ?? a.updated_at ?? 0).getTime()
-            const bKey = new Date(b.read_at ?? b.updated_at ?? 0).getTime()
-            return bKey - aKey
-          }),
-      )
-      setOwnedBooks(allBooks.filter(b => Array.isArray(b.tags) && b.tags.includes('Owned')))
+      applyDerivedSections(allBooks)
+      saveCachedLibrary(allBooks)
     } catch (error) {
       console.error('Load books error:', error)
+      // Offline fallback
+      await loadCachedLibrary()
     }
   }
 
@@ -238,10 +272,10 @@ export default function HomeScreen({ user }) {
                   activeOpacity={0.7}
                 >
                   {item.cover ? (
-                    <Image source={{ uri: item.cover }} style={styles.bookCover} />
+                    <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
                   ) : (
                     <View style={styles.bookCoverPlaceholder}>
-                      <Text style={styles.placeholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <Text style={styles.bookCardTitle} numberOfLines={2}>{item.title}</Text>
@@ -283,10 +317,10 @@ export default function HomeScreen({ user }) {
                   activeOpacity={0.7}
                 >
                   {item.cover ? (
-                    <Image source={{ uri: item.cover }} style={styles.bookCover} />
+                    <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
                   ) : (
                     <View style={styles.bookCoverPlaceholder}>
-                      <Text style={styles.placeholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <Text style={styles.bookCardTitle} numberOfLines={2}>{item.title}</Text>
@@ -328,10 +362,10 @@ export default function HomeScreen({ user }) {
                   activeOpacity={0.7}
                 >
                   {item.cover ? (
-                    <Image source={{ uri: item.cover }} style={styles.bookCover} />
+                    <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
                   ) : (
                     <View style={styles.bookCoverPlaceholder}>
-                      <Text style={styles.placeholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <Text style={styles.bookCardTitle} numberOfLines={2}>{item.title}</Text>
@@ -373,10 +407,10 @@ export default function HomeScreen({ user }) {
                   activeOpacity={0.7}
                 >
                   {item.cover ? (
-                    <Image source={{ uri: item.cover }} style={styles.bookCover} />
+                    <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
                   ) : (
                     <View style={styles.bookCoverPlaceholder}>
-                      <Text style={styles.placeholderText}>📚</Text>
+                      <PixelBookEmoji size={18} />
                     </View>
                   )}
                   <Text style={styles.bookCardTitle} numberOfLines={2}>{item.title}</Text>

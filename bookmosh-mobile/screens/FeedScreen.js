@@ -50,6 +50,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
   const [reviewModalVisible, setReviewModalVisible] = useState(false)
   const [reviewThreadLoading, setReviewThreadLoading] = useState(false)
   const [reviewThread, setReviewThread] = useState(null)
+  const [activeFeedEvent, setActiveFeedEvent] = useState(null)
   const [reviewLikes, setReviewLikes] = useState({ count: 0, likedByMe: false, users: [] })
   const [reviewComments, setReviewComments] = useState([])
   const [reviewCommentDraft, setReviewCommentDraft] = useState('')
@@ -214,6 +215,7 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     setReviewModalVisible(true)
     setReviewThreadLoading(true)
     setReviewThread(null)
+    setActiveFeedEvent(eventItem)
     setReviewLikes({ count: 0, likedByMe: false, users: [] })
     setReviewComments([])
     setReviewCommentDraft('')
@@ -275,7 +277,23 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       if (bookError) throw bookError
       const bookRow = Array.isArray(books) ? books[0] : null
       if (!bookRow?.id) {
-        setReviewThread(null)
+        // No review record exists yet. Still allow commenting on the feed event itself.
+        setReviewThread({
+          id: eventItem.id,
+          reviewer_username: eventItem.owner_username,
+          title: eventItem.book_title,
+          author: eventItem.book_author,
+          cover: eventItem.book_cover,
+          review: null,
+          spoiler_warning: false,
+          __reviewTable: 'feed_event',
+        })
+        const { data: commentsData } = await supabase
+          .from('feed_event_comments')
+          .select('*')
+          .eq('event_id', eventItem.id)
+          .order('created_at', { ascending: true })
+        setReviewComments(commentsData || [])
         return
       }
 
@@ -311,6 +329,8 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     const reviewId = reviewThread.id
     const current = reviewLikes || { count: 0, likedByMe: false, users: [] }
 
+    if (reviewThread.__reviewTable === 'feed_event') return
+
     const likesTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_likes' : 'review_likes'
 
     try {
@@ -344,22 +364,37 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
     const body = String(reviewCommentDraft || '').trim()
     if (!body) return
 
-    const commentsTable = reviewThread.__reviewTable === 'book_reviews' ? 'book_review_comments' : 'review_comments'
+    const commentsTable =
+      reviewThread.__reviewTable === 'book_reviews'
+        ? 'book_review_comments'
+        : reviewThread.__reviewTable === 'feed_event'
+        ? 'feed_event_comments'
+        : 'review_comments'
 
     try {
-      const { error } = await supabase.from(commentsTable).insert({
-        review_id: reviewThread.id,
-        commenter_id: currentUser.id,
-        commenter_username: currentUser.username,
-        body,
-      })
+      const payload =
+        commentsTable === 'feed_event_comments'
+          ? {
+              event_id: reviewThread.id,
+              commenter_id: currentUser.id,
+              commenter_username: currentUser.username,
+              body,
+            }
+          : {
+              review_id: reviewThread.id,
+              commenter_id: currentUser.id,
+              commenter_username: currentUser.username,
+              body,
+            }
+
+      const { error } = await supabase.from(commentsTable).insert(payload)
       if (error) throw error
       setReviewCommentDraft('')
-      const { data } = await supabase
-        .from(commentsTable)
-        .select('*')
-        .eq('review_id', reviewThread.id)
-        .order('created_at', { ascending: true })
+      const query = supabase.from(commentsTable).select('*').order('created_at', { ascending: true })
+      const { data } =
+        commentsTable === 'feed_event_comments'
+          ? await query.eq('event_id', reviewThread.id)
+          : await query.eq('review_id', reviewThread.id)
       setReviewComments(data || [])
     } catch (error) {
       console.error('[FEED] Post review comment failed:', error)
@@ -397,7 +432,15 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
       >
         <View style={styles.feedHeader}>
           <View style={styles.feedHeaderLeft}>
-            <Text style={styles.username}>@{item.owner_username}</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={(e) => {
+                e.stopPropagation()
+                navigation.navigate('FriendProfileScreen', { friendUsername: item.owner_username })
+              }}
+            >
+              <Text style={styles.username}>@{item.owner_username}</Text>
+            </TouchableOpacity>
             <Text style={styles.eventType}>{eventText}</Text>
           </View>
           <Text style={styles.timestamp}>{formatTimeAgo(item.created_at)}</Text>
@@ -405,7 +448,19 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
 
         <View style={styles.bookInfo}>
           {item.book_cover && (
-            <Image source={{ uri: item.book_cover }} style={styles.bookCover} />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={(e) => {
+                e.stopPropagation()
+                navigation.navigate('BookDetailScreen', {
+                  bookTitle: item.book_title,
+                  bookAuthor: item.book_author,
+                  bookCover: item.book_cover,
+                })
+              }}
+            >
+              <Image source={{ uri: item.book_cover }} style={styles.bookCover} />
+            </TouchableOpacity>
           )}
           <View style={styles.bookText}>
             <Text style={styles.bookTitle}>{item.book_title}</Text>
@@ -437,7 +492,15 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
               {likes.count > 0 && <Text style={styles.likeCount}>{likes.count}</Text>}
             </TouchableOpacity>
 
-            <Text style={styles.commentButtonText}>💬 Tap to comment</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={(e) => {
+                e.stopPropagation()
+                openReviewThread(item)
+              }}
+            >
+              <Text style={styles.commentButtonText}>💬 Tap to comment</Text>
+            </TouchableOpacity>
           </View>
         )}
       </TouchableOpacity>
@@ -515,7 +578,10 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
         visible={reviewModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setReviewModalVisible(false)}
+        onRequestClose={() => {
+          setReviewModalVisible(false)
+          setActiveFeedEvent(null)
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -541,12 +607,14 @@ export default function FeedScreen({ user, setFeedBadgeCount }) {
                 )}
 
                 <View style={styles.reviewMetaRow}>
-                  <TouchableOpacity style={styles.likeButton} onPress={toggleReviewLike}>
-                    <Text style={[styles.likeIcon, reviewLikes.likedByMe && styles.liked]}>
-                      {reviewLikes.likedByMe ? '❤️' : '🤍'}
-                    </Text>
-                    {reviewLikes.count > 0 && <Text style={styles.likeCount}>{reviewLikes.count}</Text>}
-                  </TouchableOpacity>
+                  {reviewThread.__reviewTable !== 'feed_event' && (
+                    <TouchableOpacity style={styles.likeButton} onPress={toggleReviewLike}>
+                      <Text style={[styles.likeIcon, reviewLikes.likedByMe && styles.liked]}>
+                        {reviewLikes.likedByMe ? '❤️' : '🤍'}
+                      </Text>
+                      {reviewLikes.count > 0 && <Text style={styles.likeCount}>{reviewLikes.count}</Text>}
+                    </TouchableOpacity>
+                  )}
                   <Text style={styles.metaText}>{reviewComments.length} comments</Text>
                 </View>
 

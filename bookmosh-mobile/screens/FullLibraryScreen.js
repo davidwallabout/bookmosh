@@ -12,12 +12,16 @@ import {
   RefreshControl,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function FullLibraryScreen({ user }) {
   const navigation = useNavigation()
   const route = useRoute()
   const initialFilter = route.params?.filter || 'all'
+
+  const libraryCacheKey = `library_cache_${user?.id}`
 
   const [books, setBooks] = useState([])
   const [filter, setFilter] = useState(initialFilter)
@@ -32,6 +36,26 @@ export default function FullLibraryScreen({ user }) {
   const prevOwnedFilterRef = useRef(ownedFilter)
   const LIMIT = 10
   const [refreshing, setRefreshing] = useState(false)
+
+  const loadCachedLibrary = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(libraryCacheKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : null
+    } catch (error) {
+      console.warn('[OFFLINE] Failed to load cached library:', error)
+      return null
+    }
+  }
+
+  const saveCachedLibrary = async (allBooks) => {
+    try {
+      await AsyncStorage.setItem(libraryCacheKey, JSON.stringify(Array.isArray(allBooks) ? allBooks : []))
+    } catch (error) {
+      console.warn('[OFFLINE] Failed to save cached library:', error)
+    }
+  }
 
   const formatTimeAgo = (dateString) => {
     if (!dateString) return ''
@@ -177,6 +201,10 @@ export default function FullLibraryScreen({ user }) {
       if (error) throw error
 
       const newBooks = data || []
+      // Save a full snapshot for offline usage when doing a full reset (covers most entry points)
+      if (reset) {
+        saveCachedLibrary(newBooks)
+      }
       
       if (reset) {
         setBooks(newBooks)
@@ -188,6 +216,15 @@ export default function FullLibraryScreen({ user }) {
       setOffset(currentOffset + newBooks.length)
     } catch (error) {
       console.error('Load books error:', error)
+
+      // Offline fallback (only when doing a reset / initial load)
+      if (reset) {
+        const cached = await loadCachedLibrary()
+        if (cached) {
+          setBooks(cached)
+          setHasMore(false)
+        }
+      }
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -233,10 +270,10 @@ export default function FullLibraryScreen({ user }) {
       activeOpacity={0.7}
     >
       {item.cover ? (
-        <Image source={{ uri: item.cover }} style={styles.bookCover} />
+        <Image source={{ uri: item.cover, cache: 'force-cache' }} style={styles.bookCover} />
       ) : (
         <View style={styles.bookCoverPlaceholder}>
-          <Text style={styles.placeholderText}>📚</Text>
+          <PixelBookEmoji size={18} />
         </View>
       )}
       <View style={styles.bookInfo}>

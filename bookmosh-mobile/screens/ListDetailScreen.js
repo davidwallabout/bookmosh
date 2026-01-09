@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { supabase } from '../lib/supabase'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function ListDetailScreen({ user }) {
   const navigation = useNavigation()
@@ -143,7 +144,7 @@ export default function ListDetailScreen({ user }) {
         <Image source={{ uri: item.book_cover }} style={styles.itemCover} />
       ) : (
         <View style={styles.itemCoverPlaceholder}>
-          <Text style={styles.placeholderText}>📚</Text>
+          <PixelBookEmoji size={18} />
         </View>
       )}
       <View style={styles.itemInfo}>

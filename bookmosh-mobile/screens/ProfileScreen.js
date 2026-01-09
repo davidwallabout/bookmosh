@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { SvgXml } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { PROFILE_ICONS, getProfileAvatarUrl } from '../constants/avatars'
+import PixelBookEmoji from '../components/PixelBookEmoji'
 
 export default function ProfileScreen({ user, onSignOut }) {
   const navigation = useNavigation()
@@ -857,7 +858,7 @@ export default function ProfileScreen({ user, onSignOut }) {
                       <Image source={{ uri: book.cover }} style={styles.bookOptionCover} />
                     ) : (
                       <View style={styles.bookOptionCoverPlaceholder}>
-                        <Text style={styles.bookOptionPlaceholderText}>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                     <View style={styles.bookOptionInfo}>
@@ -894,7 +895,7 @@ export default function ProfileScreen({ user, onSignOut }) {
                       <Image source={{ uri: book.cover }} style={styles.bookOptionCover} />
                     ) : (
                       <View style={styles.bookOptionCoverPlaceholder}>
-                        <Text style={styles.bookOptionPlaceholderText}>📚</Text>
+                        <PixelBookEmoji size={18} />
                       </View>
                     )}
                     <View style={styles.bookOptionInfo}>
