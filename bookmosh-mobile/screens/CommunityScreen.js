@@ -93,6 +93,11 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
   useEffect(() => {
     if (!isFocused) return
     if (!currentUser) return
+    // When tab is re-focused while in a pit chat, close the pit (go back to list)
+    if (activeMosh) {
+      setActiveMosh(null)
+      setMessages([])
+    }
     if (activeTab === 'recommendations') {
       loadRecommendations()
     }
@@ -218,9 +223,18 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .select('*')
         .eq('recipient_username', currentUser.username)
         .eq('status', 'pending')
+        .order('created_at', { ascending: false })
 
       if (error) throw error
-      setFriendRequests(data || [])
+      // Dedupe by requester_username - only show one request per person
+      const seen = new Set()
+      const deduped = (data || []).filter((req) => {
+        const key = req.requester_username?.toLowerCase()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      setFriendRequests(deduped)
     } catch (error) {
       console.error('Load friend requests error:', error)
     }
@@ -288,7 +302,7 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
 
       await loadCurrentUser()
       await loadFriendRequests()
-      // Friend accepted - no alert needed, UI updates
+      Alert.alert('Friend Added!', `You and @${request.requester_username} are now friends.`)
     } catch (error) {
       Alert.alert('Error', error.message)
     }
@@ -438,6 +452,8 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
 
   const openMosh = (mosh) => {
     setActiveMosh(mosh)
+    // Mark pit messages as read by updating the last viewed timestamp
+    AsyncStorage.setItem(`pits_last_viewed_${user?.id}`, new Date().toISOString())
   }
 
   const closeMosh = () => {
