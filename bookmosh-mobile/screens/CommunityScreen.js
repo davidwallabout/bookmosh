@@ -227,11 +227,19 @@ export default function CommunityScreen({ user, friendRequestCount = 0, unreadPi
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      // Dedupe by requester_username - only show one request per person
+
+      // Build a set of existing friend usernames (lowercase for comparison)
+      const existingFriends = new Set(
+        (currentUser.friends || []).map((f) => f?.toLowerCase?.() || '')
+      )
+
+      // Dedupe by requester_username and exclude users who are already friends
       const seen = new Set()
       const deduped = (data || []).filter((req) => {
         const key = req.requester_username?.toLowerCase()
         if (!key || seen.has(key)) return false
+        // Skip if already a friend
+        if (existingFriends.has(key)) return false
         seen.add(key)
         return true
       })
